@@ -59,33 +59,32 @@ Thuộc hệ sinh thái **HRM Enterprise**, kết nối trực tiếp với Core
 
 ```text
 frontend/
-├── docs/                       # Tài liệu thiết kế hệ thống
-└── frontend/                   # Mã nguồn ứng dụng Next.js
-    ├── public/                 # Static assets, logos, favicon
-    ├── src/
-    │   ├── app/                # Next.js App Router (auth, dashboard: branches, shifts, payslips...)
-    │   ├── components/         # UI Components dùng chung (Sidebar, Topbar, Modal, Form, Table...)
-    │   ├── context/            # React Context (AuthContext, TopbarContext)
-    │   ├── features/           # Module nghiệp vụ chuyên biệt:
-    │   │   ├── bank/           # Lệnh chi SOAP ngân hàng & thống kê chi trả
-    │   │   ├── branches/       # CRUD danh sách chi nhánh
-    │   │   ├── departments/    # CRUD phòng ban
-    │   │   ├── employees/      # Quản lý nhân viên, hồ sơ, cấp lại mật khẩu
-    │   │   ├── news/           # Đăng bảng tin & thông báo
-    │   │   ├── payslips/       # Quản lý bảng lương & chốt lương
-    │   │   ├── regulations/    # Sổ tay quy chế công ty
-    │   │   ├── requests/       # Duyệt đơn từ nghỉ phép, OT, tạm ứng
-    │   │   ├── shifts/         # Phân ca, ca mẫu, nguyện vọng tuần
-    │   │   ├── tasks/          # Quản lý tác vụ vận hành
-    │   │   └── wifi/           # Cấu hình BSSID / IP Wi-Fi chi nhánh
-    │   ├── hooks/              # Custom React Hooks (useCurrentUser)
-    │   ├── lib/                # API Client, utils, phân quyền
-    │   └── types/              # TypeScript Type & Interface toàn hệ thống
-    ├── .env.example            # Khai báo biến môi trường mẫu
-    ├── next.config.ts          # Cấu hình Next.js
-    ├── package.json            # Dependencies
-    ├── tsconfig.json           # Cấu hình TypeScript
-    └── postcss.config.mjs      # Cấu hình Tailwind CSS
+├── public/                 # Static assets, logos, favicon
+├── src/
+│   ├── app/                # Next.js App Router (auth, dashboard: branches, shifts, payslips...)
+│   ├── components/         # UI Components dùng chung (Sidebar, Topbar, Modal, Form, Table...)
+│   ├── context/            # React Context (AuthContext, TopbarContext)
+│   ├── features/           # Module nghiệp vụ chuyên biệt:
+│   │   ├── bank/           # Lệnh chi SOAP ngân hàng & thống kê chi trả
+│   │   ├── branches/       # CRUD danh sách chi nhánh
+│   │   ├── departments/    # CRUD phòng ban
+│   │   ├── employees/      # Quản lý nhân viên, hồ sơ, cấp lại mật khẩu
+│   │   ├── news/           # Đăng bảng tin & thông báo
+│   │   ├── payslips/       # Quản lý bảng lương & chốt lương
+│   │   ├── regulations/    # Sổ tay quy chế công ty
+│   │   ├── requests/       # Duyệt đơn từ nghỉ phép, OT, tạm ứng
+│   │   ├── shifts/         # Phân ca, ca mẫu, nguyện vọng tuần
+│   │   ├── tasks/          # Quản lý tác vụ vận hành
+│   │   └── wifi/           # Cấu hình BSSID / IP Wi-Fi chi nhánh
+│   ├── hooks/              # Custom React Hooks (useCurrentUser)
+│   ├── lib/                # API Client, utils, phân quyền
+│   └── types/              # TypeScript Type & Interface toàn hệ thống
+├── .env.example            # Khai báo biến môi trường mẫu
+├── .env.local              # Cấu hình biến môi trường cục bộ
+├── next.config.ts          # Cấu hình Next.js
+├── package.json            # Dependencies
+├── tsconfig.json           # Cấu hình TypeScript
+└── postcss.config.mjs      # Cấu hình Tailwind CSS
 ```
 
 ---
@@ -100,19 +99,18 @@ frontend/
 ### Các bước cài đặt
 
 ```bash
-# 1. Di chuyển vào thư mục frontend
-cd frontend
-
-# 2. Cài đặt các thư viện phụ thuộc
+# 1. Cài đặt các thư viện phụ thuộc
 npm install
 
-# 3. Cấu hình biến môi trường
+# 2. Cấu hình biến môi trường (Đã có sẵn file .env và .env.local)
 cp .env.example .env.local
 ```
 
 Nội dung file `.env.local`:
 ```env
+NEXT_PUBLIC_GATEWAY_URL=http://localhost:4000
 NEXT_PUBLIC_API_URL=http://localhost:4000
+PORT=3000
 ```
 
 ```bash
