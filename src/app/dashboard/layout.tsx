@@ -10,7 +10,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role } = useCurrentUser();
+  const { user, role, logout } = useCurrentUser();
   const isAdmin = role === "admin";
   const roleName = isAdmin ? "Quản trị viên (Admin)" : "Quản lý Chi nhánh (Manager)";
   const groups = buildMenuItems(role);
@@ -22,6 +22,7 @@ export default function DashboardLayout({
       userName={user.name}
       userRole={roleName}
       logoutHref="/login"
+      onLogout={logout}
     >
       {children}
     </DashboardShell>

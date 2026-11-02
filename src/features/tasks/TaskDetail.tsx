@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCamera, faCheck, faCircleExclamation, faClock, faFire, faLocationDot, faMagnifyingGlassPlus, faMobileScreen, faRotateRight, faThumbtack, faTrashCan, faUser } from "@fortawesome/free-solid-svg-icons";
+import { faCamera, faCheck, faCircleExclamation, faClock, faFire, faLocationDot, faMagnifyingGlassPlus, faRotateRight, faThumbtack, faUser } from "@fortawesome/free-solid-svg-icons";
 import type { TaskItem } from "./types";
 
 interface TaskDetailModalProps {
@@ -66,23 +66,17 @@ export default function TaskDetailModal({
         size="lg"
         footer={
           <div className="flex items-center justify-between w-full">
-            <Button variant="danger" size="sm" onClick={handleDelete}>
-              <FontAwesomeIcon icon={faTrashCan} fontSize={16} className="mr-1 inline" />
-              Xóa nhiệm vụ
+            <Button variant="danger" onClick={handleDelete} className="min-w-[80px]">
+              Xóa
             </Button>
 
             <div className="flex items-center gap-2">
-              <Button variant="white" onClick={onClose}>
+              <Button variant="white" onClick={onClose} className="min-w-[80px]">
                 Đóng
               </Button>
               {!isCompleted && (
-                <Button variant="primary" onClick={handleConfirmComplete}>
-                  <FontAwesomeIcon icon={faCheck} fontSize={16} className="mr-1 inline" />
-                  {task.requirePhoto
-                    ? photoUrl
-                      ? "Xác nhận duyệt ảnh & Hoàn thành"
-                      : "Duyệt hoàn thành đặc cách"
-                    : "Xác nhận hoàn thành"}
+                <Button variant="primary" onClick={handleConfirmComplete} className="min-w-[80px]">
+                  Duyệt
                 </Button>
               )}
             </div>
@@ -154,7 +148,9 @@ export default function TaskDetailModal({
               <span className="text-gray-500 block mb-1 font-medium">Đối tượng thực hiện:</span>
               <div className="font-semibold text-gray-800 text-sm flex items-center gap-1.5">
                 <span>{task.assignedToName}</span>
-                <span className="text-gray-400 font-normal text-xs">({task.branch})</span>
+                {task.branch ? (
+                  <span className="text-gray-400 font-normal text-xs">({task.branch})</span>
+                ) : null}
               </div>
               <div className="text-gray-500 mt-1.5 flex items-center gap-1">
                 <FontAwesomeIcon icon={faClock} fontSize={14} className={isOverdue ? "text-red-600" : "text-gray-400"} />
@@ -247,28 +243,15 @@ export default function TaskDetailModal({
                       <FontAwesomeIcon icon={faLocationDot} fontSize={14} className="text-gray-400 shrink-0" />
                       <span>
                         Chi nhánh:{" "}
-                        <strong className="text-gray-800">{task.branch}</strong>
+                        <strong className="text-gray-800">{task.branch || "—"}</strong>
                       </span>
                     </div>
                   </div>
                 </div>
               ) : (
                 /* Trường hợp 2: Nhân viên CHƯA chụp/gửi ảnh minh chứng */
-                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-5 text-center">
-                  <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-2.5">
-                    <FontAwesomeIcon icon={faClock} fontSize={24} />
-                  </div>
-                  <h5 className="text-sm font-bold text-gray-800 mb-1">
-                    Chưa có ảnh minh chứng từ nhân viên
-                  </h5>
-                  <p className="text-xs text-gray-600 max-w-md mx-auto leading-relaxed mb-3">
-                    Nhiệm vụ này bắt buộc chụp ảnh kết quả thực tế tại chi nhánh. Hiện tại nhân sự phụ trách (
-                    <strong className="text-gray-800">{task.assignedToName}</strong>) chưa nộp ảnh minh chứng qua ứng dụng di động HRM.
-                  </p>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-100 px-3 py-1 rounded-full">
-                    <FontAwesomeIcon icon={faMobileScreen} fontSize={14} />
-                    Hệ thống đang chờ nhân viên chụp & gửi ảnh từ điện thoại
-                  </span>
+                <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-800 font-medium">
+                  Chưa có ảnh minh chứng từ nhân viên
                 </div>
               )
             ) : (

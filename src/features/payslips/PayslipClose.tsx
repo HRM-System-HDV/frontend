@@ -55,11 +55,6 @@ export default function BulkClosePayslipModal({ open, onClose, defaultMonth, mon
           </Select>
         </div>
       </Field>
-      <div className="rounded-lg bg-gray-50 px-4 py-3 text-sm text-gray-500">
-        Hệ thống sẽ chuyển toàn bộ phiếu <strong>chưa chốt</strong> của kỳ {month} sang{" "}
-        <strong>đã chốt</strong> qua <span className="font-mono">PUT /api/payroll/payslips/:id/status</span>.
-        Sau khi chốt sẽ không thể chỉnh sửa thưởng/phạt.
-      </div>
     </Modal>
   );
 }

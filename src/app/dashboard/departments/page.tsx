@@ -226,7 +226,6 @@ export default function DepartmentsPage() {
       )}
 
       <PageHeader
-        title={isManager ? "Thông tin Cơ cấu Phòng ban Doanh nghiệp" : "Quản lý Phòng ban Doanh nghiệp"}
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phòng ban" }]}
         actions={
           !isManager ? (

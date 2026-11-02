@@ -19,7 +19,7 @@ export default function RegulationDetailModal({ item, onClose, onEdit }: Props) 
     <Modal
       open={!!item}
       onClose={onClose}
-      title={item ? `${item.code} - ${item.title}` : ""}
+      title={item ? item.title : ""}
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
@@ -65,11 +65,7 @@ export default function RegulationDetailModal({ item, onClose, onEdit }: Props) 
       {item && (
         <div className="space-y-5 text-slate-800">
           {/* Header info box */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-            <div>
-              <span className="text-slate-500 block">Mã văn bản:</span>
-              <span className="font-bold text-slate-800 font-mono text-sm">{item.code}</span>
-            </div>
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 grid grid-cols-2 md:grid-cols-3 gap-3 text-xs">
             <div>
               <span className="text-slate-500 block">Danh mục:</span>
               <span className="font-semibold text-slate-800">{item.category}</span>
@@ -85,16 +81,8 @@ export default function RegulationDetailModal({ item, onClose, onEdit }: Props) 
               </Badge>
             </div>
             <div>
-              <span className="text-slate-500 block">Cơ quan ban hành:</span>
-              <span className="font-semibold text-slate-800">{item.author}</span>
-            </div>
-            <div>
               <span className="text-slate-500 block">Ngày có hiệu lực:</span>
               <span className="font-semibold text-slate-800">{item.effectiveDate}</span>
-            </div>
-            <div>
-              <span className="text-slate-500 block">Phiên bản:</span>
-              <span className="font-semibold text-slate-800">v{item.version}</span>
             </div>
             <div>
               <span className="text-slate-500 block">Cập nhật lần cuối:</span>

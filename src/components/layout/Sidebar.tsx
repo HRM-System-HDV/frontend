@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronLeft, faUtensils } from "@fortawesome/free-solid-svg-icons";
+import { faChevronLeft, faUserTie } from "@fortawesome/free-solid-svg-icons";
 import { cn } from "@/lib/utils";
 
 export interface SidebarItem {
@@ -85,7 +85,7 @@ export default function Sidebar({
           title={brand}
         >
           <span className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center shrink-0">
-            <FontAwesomeIcon icon={faUtensils} fontSize={18} />
+            <FontAwesomeIcon icon={faUserTie} fontSize={18} />
           </span>
           {!collapsed && (
             <span className="font-bold text-lg text-gray-800 whitespace-nowrap truncate min-w-0">{brand}</span>
@@ -138,7 +138,11 @@ export default function Sidebar({
                     </li>
                   );
                 }
-                const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+                const currentPath = pathname?.replace(/\/$/, "") || "/";
+                const targetHref = item.href?.replace(/\/$/, "") || "/";
+                const isExact = currentPath === targetHref;
+                const isChild = targetHref !== "/" && targetHref !== "/dashboard" && currentPath.startsWith(`${targetHref}/`);
+                const active = isExact || isChild;
                 return (
                   <li key={item.href}>
                     <Link

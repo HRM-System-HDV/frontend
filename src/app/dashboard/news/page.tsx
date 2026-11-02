@@ -11,8 +11,6 @@ import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
 import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
 
-// api.ts dùng chung chưa có apiPut/apiDelete (quy tắc phân công: chỉ đọc, không sửa)
-// nên đặt helper cục bộ trong trang, giống tiền lệ các trang employees/payslips.
 async function parseEnvelope<T>(res: Response): Promise<T> {
   const text = await res.text();
   let body: unknown = null;
@@ -95,6 +93,7 @@ export default function NewsPage() {
   };
 
   const handleOpenEdit = (item: NewsItem) => {
+    setSelectedNews(null);
     setEditingItem(item);
     setModalOpen(true);
   };
@@ -122,9 +121,22 @@ export default function NewsPage() {
     }
   };
 
-  const handleDeleteNews = async (id: string) => {
+  const handleTogglePin = async (id: string) => {
     const target = newsList.find((n) => n.id === id);
-    if (!confirm(`Bạn có chắc chắn muốn xóa thông báo "${target?.title ?? ""}" không?`)) return;
+    if (!target) return;
+    try {
+      const updated = await apiPut<NewsItem>(`/api/news/${id}`, { pinned: !target.pinned });
+      setNewsList((prev) => prev.map((n) => (n.id === id ? updated : n)));
+      if (selectedNews?.id === id) setSelectedNews(updated);
+    } catch (e) {
+      alert(e instanceof GatewayError ? e.message : "Lỗi ghim thông báo.");
+    }
+  };
+
+  const handleDeleteNews = async (id: string, title?: string) => {
+    const target = newsList.find((n) => n.id === id);
+    const displayTitle = title || target?.title || "";
+    if (!confirm(`Bạn có chắc chắn muốn xóa thông báo "${displayTitle}" không?`)) return;
     try {
       await apiDelete(`/api/news/${id}`);
       setNewsList((prev) => prev.filter((n) => n.id !== id));
@@ -135,21 +147,24 @@ export default function NewsPage() {
   };
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        title="Quản lý Bảng Tin & Truyền Thông Nội Bộ"
-        breadcrumb={[{ label: "HR & Quản trị", href: "#" }, { label: "Bảng tin & Thông báo" }]}
         actions={
           <div className="flex items-center gap-2">
-            <Button onClick={handleOpenCreate}>
-              <FontAwesomeIcon icon={faPlus} fontSize={18} /> Đăng thông báo mới
+            <Button
+              variant="primary"
+              onClick={handleOpenCreate}
+              className="flex items-center gap-1.5"
+            >
+              <FontAwesomeIcon icon={faPlus} fontSize={18} />
+              Đăng thông báo mới
             </Button>
           </div>
         }
       />
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center justify-between gap-3">
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center justify-between gap-3">
           <span>{error}</span>
           <Button variant="white" onClick={fetchData} className="text-xs shrink-0">
             Thử lại
@@ -158,22 +173,29 @@ export default function NewsPage() {
       )}
 
       {loading ? (
-        <div className="flex flex-col gap-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
-              <div className="h-4 bg-gray-100 rounded w-1/4 mb-3" />
-              <div className="h-5 bg-gray-100 rounded w-2/3 mb-2" />
-              <div className="h-3 bg-gray-100 rounded w-full" />
-            </div>
-          ))}
+        <div className="bg-white border border-gray-200 rounded-2xl p-5 animate-pulse space-y-3">
+          <div className="h-4 bg-gray-100 rounded w-1/3" />
+          <div className="h-8 bg-gray-100 rounded w-full" />
+          <div className="h-8 bg-gray-100 rounded w-full" />
           <div className="text-xs text-gray-500">Đang tải bảng tin qua Gateway...</div>
         </div>
       ) : (
-        <NewsSection items={newsList} onSelect={setSelectedNews} onEdit={handleOpenEdit} onDelete={handleDeleteNews} />
+        <NewsSection
+          items={newsList}
+          onSelect={setSelectedNews}
+          onEdit={handleOpenEdit}
+          onDelete={handleDeleteNews}
+          onTogglePin={handleTogglePin}
+        />
       )}
 
       {/* Modal xem chi tiết thông báo */}
-      <NewsDetailModal item={selectedNews} onClose={() => setSelectedNews(null)} />
+      <NewsDetailModal
+        item={selectedNews}
+        onClose={() => setSelectedNews(null)}
+        onEdit={handleOpenEdit}
+        onDelete={handleDeleteNews}
+      />
 
       {/* Modal tạo/sửa thông báo */}
       <CreateNewsModal

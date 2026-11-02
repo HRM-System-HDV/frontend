@@ -409,13 +409,6 @@ export default function EmployeesPage() {
     (b) => normalizeSlug(b.slug) === normalizeSlug(branchSlug)
   )?.name;
 
-  const pageTitle = isManager
-    ? `Nhân sự ${
-        currentBranchName ||
-        (branchSlug ? `Chi nhánh ${branchSlug.toUpperCase()}` : "Chi nhánh chưa xác định")
-      }`
-    : "Danh sách Nhân sự Toàn công ty";
-
   const handleCreateEmployee = async (payload: Partial<Employee>) => {
     const targetBranch = (payload.branch || (isManager ? branchSlug : ""))
       .trim()
@@ -571,7 +564,6 @@ export default function EmployeesPage() {
       )}
 
       <PageHeader
-        title={pageTitle}
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Nhân sự" }]}
         actions={
           <div className="flex items-center gap-2">

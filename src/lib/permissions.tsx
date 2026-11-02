@@ -41,7 +41,7 @@ export function buildMenuItems(role: string): SidebarGroup[] {
         { label: "Phân ca làm việc", href: "/dashboard/shifts", icon: <FontAwesomeIcon icon={faCalendarWeek} fontSize={20} strokeWidth={1.5} /> },
         { label: "Giao việc & Nhiệm vụ", href: "/dashboard/tasks", icon: <FontAwesomeIcon icon={faClipboardList} fontSize={20} strokeWidth={1.5} /> },
         { label: "Duyệt yêu cầu chi nhánh", href: "/dashboard/requests", icon: <FontAwesomeIcon icon={faArrowRightArrowLeft} fontSize={20} strokeWidth={1.5} /> },
-        { label: "Bảng công & Lương CN", href: "/dashboard/payslips", icon: <FontAwesomeIcon icon={faCoins} fontSize={20} strokeWidth={1.5} /> },
+        { label: "Bảng công & Lương chi nhánh", href: "/dashboard/payslips", icon: <FontAwesomeIcon icon={faCoins} fontSize={20} strokeWidth={1.5} /> },
         { label: "Kết nối Ngân hàng", href: "/dashboard/bank", icon: <FontAwesomeIcon icon={faBuildingColumns} fontSize={20} strokeWidth={1.5} /> },
         { label: "Bảng tin & Thông báo", href: "/dashboard/news", icon: <FontAwesomeIcon icon={faNewspaper} fontSize={20} strokeWidth={1.5} /> },
         { label: "Nội quy & Quy định", href: "/dashboard/regulations", icon: <FontAwesomeIcon icon={faGavel} fontSize={20} strokeWidth={1.5} /> },

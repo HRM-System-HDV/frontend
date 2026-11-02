@@ -18,9 +18,10 @@ interface Props {
   partner: BankPartner | null;
   onClose: () => void;
   onSaved?: (updated: BankPartner) => void;
+  onDeleted?: (id: string) => void;
 }
 
-export default function BankConfigModal({ partner, onClose, onSaved }: Props) {
+export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }: Props) {
   const [accountName, setAccountName] = useState("");
   const [status, setStatus] = useState("hoạt động");
   const [saving, setSaving] = useState(false);
@@ -35,6 +36,29 @@ export default function BankConfigModal({ partner, onClose, onSaved }: Props) {
   }, [partner]);
 
   if (!partner) return null;
+
+  const handleDelete = async () => {
+    if (!confirm(`Bạn có chắc chắn muốn xóa liên kết tài khoản ngân hàng ${partner.name} (${partner.accountNumber})?`)) {
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts/${partner.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        throw new Error("Lỗi xóa tài khoản");
+      }
+      onDeleted?.(partner.id);
+      onClose();
+    } catch (e: any) {
+      setError(e.message || "Lỗi xóa tài khoản.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -80,11 +104,18 @@ export default function BankConfigModal({ partner, onClose, onSaved }: Props) {
       size="md"
       footer={
         <div className="flex items-center justify-between w-full">
-          <Button variant="white" onClick={onClose} disabled={saving} className="text-xs">
-            Đóng
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="white" onClick={onClose} disabled={saving} className="text-xs">
+              Đóng
+            </Button>
+            {onDeleted && (
+              <Button variant="danger" onClick={handleDelete} disabled={saving} className="text-xs">
+                Xóa tài khoản
+              </Button>
+            )}
+          </div>
           <Button onClick={handleSave} disabled={saving} className="text-xs">
-            {saving ? "Đang lưu..." : "Lưu cấu hình (PUT)"}
+            {saving ? "Đang lưu..." : "Lưu cấu hình"}
           </Button>
         </div>
       }
@@ -139,13 +170,208 @@ export default function BankConfigModal({ partner, onClose, onSaved }: Props) {
           </div>
           <div className="flex justify-between text-gray-700">
             <span>Kênh truyền dữ liệu:</span>
-            <span className="font-medium text-gray-800">PUT /api/payroll/bank-accounts/:id qua Gateway</span>
+            <span className="font-medium text-gray-800">Gateway</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-500">
             <FontAwesomeIcon icon={faBuildingColumns} fontSize={11} />
             Chi nhánh mở tài khoản: <span className="font-semibold text-gray-800">{partner.branch}</span>
           </div>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+interface CreateModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+  isFirstAccount?: boolean;
+}
+
+const COMMON_BANKS = [
+  "Vietcombank (VCB)",
+  "Techcombank (TCB)",
+  "MB Bank (MB)",
+  "BIDV",
+  "VietinBank (CTG)",
+  "ACB",
+  "VPBank",
+  "TPBank",
+  "Khác",
+];
+
+export function CreateBankAccountModal({
+  open,
+  onClose,
+  onCreated,
+  isFirstAccount = false,
+}: CreateModalProps) {
+  const [bankName, setBankName] = useState("Vietcombank (VCB)");
+  const [customBankName, setCustomBankName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [accountName, setAccountName] = useState("CÔNG TY CỔ PHẦN HRM SYSTEM");
+  const [balanceStr, setBalanceStr] = useState("500000000");
+  const [isPrimary, setIsPrimary] = useState(isFirstAccount);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) {
+      setBankName("Vietcombank (VCB)");
+      setCustomBankName("");
+      setAccountNumber("");
+      setAccountName("CÔNG TY CỔ PHẦN HRM SYSTEM");
+      setBalanceStr("500000000");
+      setIsPrimary(isFirstAccount);
+      setError(null);
+    }
+  }, [open, isFirstAccount]);
+
+  const handleSubmit = async () => {
+    const finalBank = bankName === "Khác" ? customBankName.trim() : bankName;
+    if (!finalBank) {
+      setError("Vui lòng chọn hoặc nhập tên ngân hàng.");
+      return;
+    }
+    if (!accountNumber.trim()) {
+      setError("Vui lòng nhập số tài khoản ngân hàng.");
+      return;
+    }
+    if (!accountName.trim()) {
+      setError("Vui lòng nhập tên chủ tài khoản / doanh nghiệp.");
+      return;
+    }
+    const balanceNum = Number(balanceStr);
+    if (!Number.isFinite(balanceNum) || balanceNum < 0) {
+      setError("Số dư ban đầu không hợp lệ (phải >= 0).");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bankName: finalBank,
+          accountNumber: accountNumber.trim(),
+          accountName: accountName.trim(),
+          balance: balanceNum,
+          isPrimary,
+        }),
+      });
+      const text = await res.text();
+      let body: any = null;
+      try {
+        body = text ? JSON.parse(text) : null;
+      } catch {
+        body = null;
+      }
+      if (!res.ok) {
+        throw new Error(body?.error?.message || `HTTP_${res.status}`);
+      }
+      onCreated();
+      onClose();
+    } catch (e: any) {
+      setError(e.message || "Lỗi tạo tài khoản ngân hàng");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Thêm tài khoản ngân hàng doanh nghiệp"
+      size="md"
+      footer={
+        <div className="flex items-center justify-between w-full">
+          <Button variant="white" onClick={onClose} disabled={saving} className="text-xs">
+            Hủy
+          </Button>
+          <Button onClick={handleSubmit} disabled={saving} className="text-xs">
+            {saving ? "Đang thêm..." : "Liên kết tài khoản"}
+          </Button>
+        </div>
+      }
+    >
+      <div className="space-y-3 text-xs">
+        <Field label="Ngân hàng" required>
+          <Select
+            value={bankName}
+            onChange={(e) => setBankName(e.target.value)}
+            disabled={saving}
+          >
+            {COMMON_BANKS.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        {bankName === "Khác" && (
+          <Field label="Tên ngân hàng cụ thể" required>
+            <Input
+              value={customBankName}
+              onChange={(e) => setCustomBankName(e.target.value)}
+              placeholder="Nhập tên ngân hàng..."
+              disabled={saving}
+            />
+          </Field>
+        )}
+
+        <Field label="Số tài khoản nguồn trích tiền *" required>
+          <Input
+            value={accountNumber}
+            onChange={(e) => setAccountNumber(e.target.value)}
+            placeholder="Ví dụ: 0011004123456"
+            disabled={saving}
+            className="font-mono"
+          />
+        </Field>
+
+        <Field label="Tên chủ tài khoản (Doanh nghiệp) *" required>
+          <Input
+            value={accountName}
+            onChange={(e) => setAccountName(e.target.value)}
+            placeholder="Ví dụ: CÔNG TY CỔ PHẦN HRM SYSTEM"
+            disabled={saving}
+          />
+        </Field>
+
+        <Field label="Số dư ban đầu khả dụng (VNĐ)" required>
+          <Input
+            type="number"
+            value={balanceStr}
+            onChange={(e) => setBalanceStr(e.target.value)}
+            placeholder="500000000"
+            disabled={saving}
+          />
+        </Field>
+
+        <label className="flex items-center gap-2 cursor-pointer pt-1">
+          <input
+            type="checkbox"
+            checked={isPrimary}
+            onChange={(e) => setIsPrimary(e.target.checked)}
+            disabled={saving}
+            className="w-4 h-4 accent-primary rounded"
+          />
+          <span className="font-medium text-gray-700">
+            Đặt làm tài khoản chi lương chính (mặc định)
+          </span>
+        </label>
+
+        {error && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
+            {error}
+          </div>
+        )}
       </div>
     </Modal>
   );

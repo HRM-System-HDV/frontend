@@ -146,9 +146,11 @@ export default function TaskTable({
                         <div className="font-medium text-gray-900 text-xs">
                           {task.assignedToName}
                         </div>
-                        <div className="text-[11px] text-gray-400">
-                          {task.branch}
-                        </div>
+                        {task.branch ? (
+                          <div className="text-[11px] text-gray-400">
+                            {task.branch}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </td>

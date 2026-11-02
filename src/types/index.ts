@@ -27,6 +27,7 @@ export interface Employee {
 
   // Công tác & Phân quyền
   branch: string;
+  branchSlug?: string;
   department: string;
   role: "Quản trị viên" | "Quản lý" | "Nhân sự" | "Kế toán" | "Lễ tân" | "Kỹ thuật" | string;
   systemRole: UserRole;
@@ -124,7 +125,6 @@ export interface Announcement {
   title: string;
   summary: string;
   content: string;
-  author: string;
   date: string;
   tag: string;
 }
@@ -151,7 +151,6 @@ export interface Regulation {
   scope: string; // "Toàn công ty" | "HN-1" | "HN-2" ...
   effectiveDate: string; // dd/mm/yyyy
   expiryDate?: string;
-  author: string;
   createdAt: string;
   updatedAt: string;
   version: string;

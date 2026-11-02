@@ -8,7 +8,7 @@ import { apiGet } from "@/lib/api";
 import type { Regulation, RegulationStatus, RegulationCategory, Branch } from "@/types";
 
 export interface RegulationFormInput {
-  code: string;
+  code?: string;
   title: string;
   category: RegulationCategory;
   summary: string;
@@ -16,21 +16,18 @@ export interface RegulationFormInput {
   status: RegulationStatus;
   scope: string;
   effectiveDate: string;
-  author: string;
   version: string;
   pinned: boolean;
 }
 
 interface Props {
   initial: Regulation | null;
-  defaultCode?: string;
   onClose: () => void;
   onSave: (input: RegulationFormInput) => void;
   saving?: boolean;
 }
 
-export default function RegulationFormModal({ initial, defaultCode = "", onClose, onSave, saving }: Props) {
-  const [formCode, setFormCode] = useState(initial?.code ?? defaultCode);
+export default function RegulationFormModal({ initial, onClose, onSave, saving }: Props) {
   const [formTitle, setFormTitle] = useState(initial?.title ?? "");
   const [formCategory, setFormCategory] = useState<RegulationCategory>(initial?.category ?? "Nội quy lao động");
   const [formSummary, setFormSummary] = useState(initial?.summary ?? "");
@@ -38,7 +35,6 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
   const [formStatus, setFormStatus] = useState<RegulationStatus>(initial?.status ?? "hiệu lực");
   const [formScope, setFormScope] = useState(initial?.scope ?? "Toàn công ty");
   const [formEffectiveDate, setFormEffectiveDate] = useState(initial?.effectiveDate ?? "01/09/2026");
-  const [formAuthor, setFormAuthor] = useState(initial?.author ?? "Ban Giám Đốc");
   const [formVersion, setFormVersion] = useState(initial?.version ?? "1.0");
   const [formPinned, setFormPinned] = useState(!!initial?.pinned);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -53,7 +49,7 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
       return;
     }
     onSave({
-      code: formCode,
+      ...(initial?.code ? { code: initial.code } : {}),
       title: formTitle,
       category: formCategory,
       summary: formSummary,
@@ -61,7 +57,6 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
       status: formStatus,
       scope: formScope,
       effectiveDate: formEffectiveDate,
-      author: formAuthor,
       version: formVersion,
       pinned: formPinned,
     });
@@ -85,15 +80,7 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
       }
     >
       <div className="space-y-4 text-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Field label="Mã văn bản">
-            <Input
-              value={formCode}
-              onChange={(e) => setFormCode(e.target.value)}
-              placeholder="VD: NQ-2026-006"
-            />
-          </Field>
-
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Danh mục quy định">
             <Select
               value={formCategory}
@@ -128,7 +115,7 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
           />
         </Field>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <Field label="Phạm vi áp dụng">
             <Select
               value={formScope}
@@ -148,14 +135,6 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
               value={formEffectiveDate}
               onChange={(e) => setFormEffectiveDate(e.target.value)}
               placeholder="dd/mm/yyyy"
-            />
-          </Field>
-
-          <Field label="Cơ quan / Người ban hành">
-            <Input
-              value={formAuthor}
-              onChange={(e) => setFormAuthor(e.target.value)}
-              placeholder="VD: Ban Giám Đốc"
             />
           </Field>
         </div>
@@ -189,15 +168,6 @@ export default function RegulationFormModal({ initial, defaultCode = "", onClose
             <label htmlFor="pinnedCheckbox" className="text-xs font-semibold text-slate-700 cursor-pointer">
               📌 Ghim văn bản này lên đầu danh sách
             </label>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Phiên bản:</span>
-            <input
-              type="text"
-              value={formVersion}
-              onChange={(e) => setFormVersion(e.target.value)}
-              className="w-16 px-2 py-1 text-xs border border-slate-200 rounded text-center"
-            />
           </div>
         </div>
       </div>

@@ -30,3 +30,18 @@ export interface WeeklyRegistration {
   days: Record<string, string>;
   note?: string;
 }
+
+export interface ShiftRegistrationRecord {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  role: string;
+  branch: string;
+  date: string;
+  templateName: string;
+  scheduled: string;
+  registeredAt: string;
+  status: "Đã đăng ký";
+  note?: string;
+  rawShiftId?: string;
+}
