@@ -131,6 +131,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!loading && !authenticated && pathname.startsWith("/dashboard")) {
       try {
         sessionStorage.setItem("hrm_session_expired", "1");
+        document.cookie = "hrm-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
       } catch {
         /* ignore */
       }
@@ -193,7 +194,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setUser(ANONYMOUS_USER);
     setAuthenticated(false);
-  }, []);
+    router.replace("/login");
+  }, [router]);
 
   return (
     <AuthContext.Provider

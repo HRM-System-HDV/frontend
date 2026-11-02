@@ -222,7 +222,6 @@ export default function BranchesPage() {
       )}
 
       <PageHeader
-        title={isManager ? "Thông tin Hệ thống Chi nhánh" : "Quản lý Chi nhánh Doanh nghiệp"}
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Chi nhánh" }]}
         actions={
           !isManager ? (

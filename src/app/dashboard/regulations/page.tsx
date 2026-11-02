@@ -121,7 +121,7 @@ export default function RegulationsManagementPage() {
     try {
       if (editingItem) {
         const updated = await apiPut<Regulation>(`/api/regulations/${editingItem.id}`, {
-          code: input.code.trim() || editingItem.code,
+          code: input.code?.trim() || editingItem.code,
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
@@ -129,7 +129,6 @@ export default function RegulationsManagementPage() {
           status: input.status,
           scope: input.scope,
           effectiveDate: input.effectiveDate,
-          author: input.author,
           version: input.version,
           pinned: input.pinned,
         });
@@ -137,7 +136,7 @@ export default function RegulationsManagementPage() {
         if (viewingItem?.id === editingItem.id) setViewingItem(updated);
       } else {
         const created = await apiPost<Regulation>("/api/regulations", {
-          code: input.code.trim() || `NQ-2026-${String(Date.now()).slice(-6)}`,
+          ...(input.code?.trim() ? { code: input.code.trim() } : {}),
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
@@ -145,7 +144,6 @@ export default function RegulationsManagementPage() {
           status: input.status,
           scope: input.scope,
           effectiveDate: input.effectiveDate || todayStr(),
-          author: input.author.trim() || "Ban Giám Đốc",
           version: input.version || "1.0",
           pinned: input.pinned,
           attachments: 0,
@@ -189,7 +187,6 @@ export default function RegulationsManagementPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Quản lý Nội quy & Quy định"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -237,7 +234,6 @@ export default function RegulationsManagementPage() {
       {isEditModalOpen && (
         <RegulationFormModal
           initial={editingItem}
-          defaultCode={`NQ-2026-${String(Date.now()).slice(-6)}`}
           onClose={() => {
             setIsEditModalOpen(false);
             setEditingItem(null);

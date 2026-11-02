@@ -1,8 +1,6 @@
 import type { SoapGatewayConfig } from "./types";
 
-// Cấu hình giám sát Gateway SOAP Ngân hàng — backend chưa có API quản trị
-// cho các thông số này nên tạm giữ local (xử lý sau khi có endpoint).
-export const initialSoapGatewayConfig: SoapGatewayConfig = {
+export const DEFAULT_SOAP_GATEWAY_CONFIG: SoapGatewayConfig = {
   endpointUrl: "https://hrm.company.local/soap/payroll",
   wsdlUrl: "https://hrm.company.local/soap/payroll?wsdl",
   serviceName: "PayrollDirectDisbursementService",

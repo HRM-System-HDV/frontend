@@ -7,10 +7,11 @@ import Badge from "@/components/ui/Badge";
 import StaffShiftDetailModal from "./ShiftDetail";
 import { apiGet } from "@/lib/api";
 import type { Branch } from "@/types";
-import type { ShiftTemplate, WorkShift } from "./types";
+import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
 
 export interface StaffInShift {
   id: string;
+  rawId?: string;
   name: string;
   role: string;
   branch: string;
@@ -32,12 +33,22 @@ export interface GeneralShiftItem {
 }
 
 interface Props {
+  mode?: "registration" | "schedule";
   workShifts: WorkShift[];
+  registrations?: WeeklyRegistration[];
   templates: ShiftTemplate[];
   defaultBranch?: string;
   isManager?: boolean;
   managerBranch?: string;
   onOpenAssignModal?: (templateId: string, date: string, branch: string) => void;
+  onDeleteShift?: (shiftId: string) => void;
+  onDeleteRegistration?: (regId: string) => void;
+  weekOffset?: number;
+  onWeekOffsetChange?: (offset: number) => void;
+  selectedDayIndex?: number;
+  onDayIndexChange?: (idx: number) => void;
+  selectedBranch?: string;
+  onBranchChange?: (branch: string) => void;
 }
 
 // Danh sách ca được dựng 100% từ `workShifts` (API /api/shifts).
@@ -52,18 +63,47 @@ function getMondayOfCurrentWeek(): Date {
 }
 
 export default function GeneralScheduleSection({
+  mode = "schedule",
   workShifts,
+  registrations = [],
   templates,
   defaultBranch = "all",
   isManager = false,
   managerBranch,
   onOpenAssignModal,
+  onDeleteShift,
+  onDeleteRegistration,
+  weekOffset: propsWeekOffset,
+  onWeekOffsetChange,
+  selectedDayIndex: propsDayIndex,
+  onDayIndexChange,
+  selectedBranch: propsBranch,
+  onBranchChange,
 }: Props) {
   // Offset tuần (0: Tuần này, -1: Tuần trước, 1: Tuần sau...)
-  const [weekOffset, setWeekOffset] = useState(0);
-  const [selectedDayIndex, setSelectedDayIndex] = useState(0); // 0: Thứ 2 ... 6: Chủ nhật
+  const [internalWeekOffset, setInternalWeekOffset] = useState(0);
+  const weekOffset = propsWeekOffset !== undefined ? propsWeekOffset : internalWeekOffset;
+  const setWeekOffset = (valOrFn: number | ((prev: number) => number)) => {
+    const next = typeof valOrFn === "function" ? valOrFn(weekOffset) : valOrFn;
+    if (onWeekOffsetChange) onWeekOffsetChange(next);
+    else setInternalWeekOffset(next);
+  };
+
+  const [internalDayIndex, setInternalDayIndex] = useState(0);
+  const selectedDayIndex = propsDayIndex !== undefined ? propsDayIndex : internalDayIndex;
+  const setSelectedDayIndex = (valOrFn: number | ((prev: number) => number)) => {
+    const next = typeof valOrFn === "function" ? valOrFn(selectedDayIndex) : valOrFn;
+    if (onDayIndexChange) onDayIndexChange(next);
+    else setInternalDayIndex(next);
+  };
+
   const effectiveDefaultBranch = isManager && managerBranch ? managerBranch : defaultBranch;
-  const [selectedBranch, setSelectedBranch] = useState(effectiveDefaultBranch);
+  const [internalBranch, setInternalBranch] = useState(effectiveDefaultBranch);
+  const selectedBranch = propsBranch !== undefined ? propsBranch : internalBranch;
+  const setSelectedBranch = (branch: string) => {
+    if (onBranchChange) onBranchChange(branch);
+    else setInternalBranch(branch);
+  };
   const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "not_yet">("all");
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({
     "shift_0": true,
@@ -128,8 +168,9 @@ export default function GeneralScheduleSection({
   const dayShifts: GeneralShiftItem[] = useMemo(() => {
     const shiftsOfDay = workShifts.filter((ws) => ws.date === currentDay.fullDate);
 
-    const toStaff = (ws: WorkShift, idx: number): StaffInShift => ({
-      id: `api-${ws.id}-${idx}`,
+    const toStaff = (ws: WorkShift): StaffInShift => ({
+      id: ws.id,
+      rawId: ws.id,
       name: ws.employee,
       role: ws.templateName || "Nhân viên trực ca",
       branch: ws.branch,
@@ -173,13 +214,51 @@ export default function GeneralScheduleSection({
       return "morning";
     };
 
+    const matchesTemplate = (regShiftVal: string, t: ShiftTemplate) => {
+      if (!regShiftVal || regShiftVal === "Nghỉ") return false;
+      const cleanReg = regShiftVal.trim().toLowerCase();
+      const cleanTName = t.name.trim().toLowerCase();
+      return (
+        cleanReg === cleanTName ||
+        cleanReg === t.id.toLowerCase() ||
+        cleanReg.includes(cleanTName) ||
+        cleanTName.includes(cleanReg)
+      );
+    };
+
     // Chỉ hiển thị nhóm theo khung ca mẫu; chưa có khung -> không hiện nhóm ảo nào.
     const groups = templates.map((t, ti) => {
-      const staff = shiftsOfDay
-        .filter((ws) => !ws.templateName || ws.templateName === t.name)
+      const assigned = shiftsOfDay
+        .filter((ws) => !ws.templateName || matchesTemplate(ws.templateName, t))
         .map(toStaff);
+
+      const registered = (registrations || [])
+        .filter((r) => {
+          if (
+            selectedBranch !== "all" &&
+            r.branch.toLowerCase().replace("-", "") !== selectedBranch.toLowerCase().replace("-", "")
+          ) {
+            return false;
+          }
+          return matchesTemplate(r.days[currentDay.key], t);
+        })
+        .map((r, idx): StaffInShift => ({
+          id: `reg-${r.id}-${idx}`,
+          rawId: r.id,
+          name: r.employeeName,
+          role: r.role || "Nhân sự",
+          branch: r.branch,
+          avatarLetter: (r.employeeName || "?").charAt(0).toUpperCase(),
+          phone: "",
+          checkInStatus: "not_yet",
+        }));
+
+      // Nếu ở chế độ đăng ký ca: CHỈ hiển thị nhân viên đã đăng ký ca này
+      // Nếu ở chế độ xếp ca chung: hiển thị nhân viên được phân công làm ca này
+      const currentStaffList = mode === "registration" ? registered : assigned;
+
       // Áp dụng override chấm công và loại bỏ ca đã hủy
-      const withOverrides = staff
+      const withOverrides = currentStaffList
         .filter((s) => !canceledIds.has(s.id))
         .map((s) => {
           const ov = staffOverrides[s.id];
@@ -190,7 +269,7 @@ export default function GeneralScheduleSection({
       const filteredByBranch =
         selectedBranch === "all"
           ? withOverrides
-          : withOverrides.filter((s) => s.branch.toLowerCase() === selectedBranch.toLowerCase());
+          : withOverrides.filter((s) => s.branch.toLowerCase().replace("-", "") === selectedBranch.toLowerCase().replace("-", ""));
       return {
         id: `shift_${ti}`,
         templateId: t.id,
@@ -202,7 +281,7 @@ export default function GeneralScheduleSection({
       };
     });
     return groups;
-  }, [currentDay, workShifts, templates, selectedBranch, staffOverrides, canceledIds]);
+  }, [mode, currentDay, workShifts, registrations, templates, selectedBranch, staffOverrides, canceledIds]);
 
   const toggleExpand = (shiftId: string) => {
     setExpandedShifts((prev) => ({
@@ -305,20 +384,22 @@ export default function GeneralScheduleSection({
               </div>
             )}
 
-            <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
-              <FontAwesomeIcon icon={faFilter} fontSize={14} className="text-gray-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as "all" | "checked_in" | "not_yet")
-                }
-                className="bg-transparent border-none text-xs text-gray-700 focus:outline-hidden cursor-pointer"
-              >
-                <option value="all">Tất cả trạng thái</option>
-                <option value="checked_in">Đã chấm công</option>
-                <option value="not_yet">Chưa chấm công</option>
-              </select>
-            </div>
+            {mode !== "registration" && (
+              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
+                <FontAwesomeIcon icon={faFilter} fontSize={14} className="text-gray-400" />
+                <select
+                  value={statusFilter}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as "all" | "checked_in" | "not_yet")
+                  }
+                  className="bg-transparent border-none text-xs text-gray-700 focus:outline-hidden cursor-pointer"
+                >
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="checked_in">Đã chấm công</option>
+                  <option value="not_yet">Chưa chấm công</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
@@ -396,16 +477,18 @@ export default function GeneralScheduleSection({
             )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            Lịch phân công ca làm việc chung toàn bộ nhân sự chi nhánh • Chạm vào từng ca để xem chi tiết
+            {mode === "registration"
+              ? "Danh sách nhân viên đăng ký ca làm việc • Xem nguyện vọng theo ngày và chi nhánh"
+              : "Lịch phân công ca làm việc chung toàn bộ nhân sự chi nhánh • Chạm vào từng ca để xem chi tiết"}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Badge tone="primary">
-            <FontAwesomeIcon icon={faCalendar} fontSize={13} /> {dayShifts.length} ca làm việc
+            <FontAwesomeIcon icon={faCalendar} fontSize={13} /> {dayShifts.length} {mode === "registration" ? "khung ca" : "ca làm việc"}
           </Badge>
           <Badge tone="gray">
-            <FontAwesomeIcon icon={faUsers} fontSize={13} /> {totalStaffInDay} lượt nhân sự
+            <FontAwesomeIcon icon={faUsers} fontSize={13} /> {totalStaffInDay} {mode === "registration" ? "lượt đăng ký" : "lượt nhân sự"}
           </Badge>
         </div>
       </div>
@@ -513,10 +596,10 @@ export default function GeneralScheduleSection({
                 <div className="flex items-center gap-2.5 shrink-0">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold bg-gray-100 text-gray-800 border border-gray-200">
                     <FontAwesomeIcon icon={faUsers} fontSize={14} className="text-primary" />
-                    {shift.staffList.length} nhân sự
+                    {shift.staffList.length} {mode === "registration" ? "đăng ký" : "nhân sự"}
                   </span>
 
-                  {onOpenAssignModal && shift.templateId && (
+                  {mode !== "registration" && onOpenAssignModal && shift.templateId && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -527,10 +610,10 @@ export default function GeneralScheduleSection({
                           selectedBranch === "all" ? "all" : selectedBranch
                         );
                       }}
-                      className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-50 text-primary hover:bg-primary hover:text-white transition-all cursor-pointer"
-                      title="Gán thêm nhân viên vào ca này"
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-50 text-primary hover:bg-primary hover:text-white transition-all cursor-pointer"
+                      title="Phân công nhân sự vào ca này"
                     >
-                      <FontAwesomeIcon icon={faUserPlus} fontSize={14} /> Thêm NV
+                      <FontAwesomeIcon icon={faUserPlus} fontSize={14} /> + Thêm NV
                     </button>
                   )}
 
@@ -549,7 +632,7 @@ export default function GeneralScheduleSection({
                 <div className="border-t border-gray-100 bg-gray-50/50 p-4">
                   {visibleStaff.length === 0 ? (
                     <div className="text-center py-6 text-gray-400 text-xs">
-                      Trống
+                      {mode === "registration" ? "Chưa có nhân viên đăng ký ca này" : "Trống (Chưa có nhân sự được phân công)"}
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -583,40 +666,49 @@ export default function GeneralScheduleSection({
                                   {staff.role} • Chi nhánh {staff.branch}
                                 </div>
 
-                                {/* Trạng thái Check-in - chỉ hiển thị trạng thái */}
+                                {/* Trạng thái Check-in hoặc Đã đăng ký */}
                                 <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                                  {staff.checkInStatus === "checked_in" && (() => {
-                                    const isLate = (() => {
-                                      if (!staff.checkInTime || !shift.timeRange) return false;
-                                      const startStr = shift.timeRange.split("-")[0]?.trim().split(" ")[0];
-                                      if (!startStr) return false;
-                                      const [sh, sm] = startStr.split(":").map(Number);
-                                      const [ch, cm] = staff.checkInTime.split(":").map(Number);
-                                      if ([sh, sm, ch, cm].some((n) => Number.isNaN(n))) return false;
-                                      return ch * 60 + cm - (sh * 60 + sm) > 5;
-                                    })();
-                                    return (
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isLate ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
-                                        <FontAwesomeIcon icon={faUserCheck} fontSize={12} />
-                                        {isLate ? "Trễ" : "Đúng giờ"}
-                                      </span>
-                                    );
-                                  })()}
-                                  {staff.checkInStatus === "in_progress" && (
+                                  {mode === "registration" ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                                      Đang trong ca
+                                      <FontAwesomeIcon icon={faUserCheck} fontSize={12} />
+                                      Đã đăng ký ca
                                     </span>
+                                  ) : (
+                                    <>
+                                      {staff.checkInStatus === "checked_in" && (() => {
+                                        const isLate = (() => {
+                                          if (!staff.checkInTime || !shift.timeRange) return false;
+                                          const startStr = shift.timeRange.split("-")[0]?.trim().split(" ")[0];
+                                          if (!startStr) return false;
+                                          const [sh, sm] = startStr.split(":").map(Number);
+                                          const [ch, cm] = staff.checkInTime.split(":").map(Number);
+                                          if ([sh, sm, ch, cm].some((n) => Number.isNaN(n))) return false;
+                                          return ch * 60 + cm - (sh * 60 + sm) > 5;
+                                        })();
+                                        return (
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isLate ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                                            <FontAwesomeIcon icon={faUserCheck} fontSize={12} />
+                                            {isLate ? "Trễ" : "Đúng giờ"}
+                                          </span>
+                                        );
+                                      })()}
+                                      {staff.checkInStatus === "in_progress" && (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                                          Đang trong ca
+                                        </span>
+                                      )}
+                                      {staff.checkInStatus === "not_yet" && (() => {
+                                        const isForgot = !currentDay.isToday || weekOffset < 0;
+                                        return (
+                                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isForgot ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                                            <FontAwesomeIcon icon={faCircleExclamation} fontSize={12} />
+                                            {isForgot ? "Quên chấm công" : "Chưa chấm công"}
+                                          </span>
+                                        );
+                                      })()}
+                                    </>
                                   )}
-                                  {staff.checkInStatus === "not_yet" && (() => {
-                                    const isForgot = !currentDay.isToday || weekOffset < 0;
-                                    return (
-                                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isForgot ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                                        <FontAwesomeIcon icon={faCircleExclamation} fontSize={12} />
-                                        {isForgot ? "Quên chấm công" : "Chưa chấm công"}
-                                      </span>
-                                    );
-                                  })()}
                                 </div>
                               </div>
                             </div>
@@ -642,6 +734,7 @@ export default function GeneralScheduleSection({
         })}
       </div>
       <StaffShiftDetailModal
+        mode={mode}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         staff={(() => {
@@ -652,6 +745,15 @@ export default function GeneralScheduleSection({
         shift={detailShift}
         day={currentDay}
         onCancelShift={(staffId) => {
+          const targetStaff = dayShifts.flatMap((s) => s.staffList).find((s) => s.id === staffId);
+          const realId = targetStaff?.rawId || (staffId.startsWith("reg-") ? staffId.replace(/^reg-/, "").replace(/-\d+$/, "") : staffId.startsWith("api-") ? staffId.split("-")[1] : staffId);
+          if (mode === "registration") {
+            if (onDeleteRegistration) {
+              onDeleteRegistration(realId);
+            }
+          } else if (onDeleteShift) {
+            onDeleteShift(realId);
+          }
           setCanceledIds((prev) => new Set(prev).add(staffId));
         }}
         onCheckIn={(staffId) => {

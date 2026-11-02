@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import type { TaskItem, TaskPriority, TaskSourceType } from "./types";
-import type { Employee } from "@/types";
+import type { Employee, Branch } from "@/types";
+
+export interface ShiftTemplateOption {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
+}
 
 interface CreateTaskModalProps {
   open: boolean;
   onClose: () => void;
   employees: Employee[];
+  branches?: Branch[];
+  shiftTemplates?: ShiftTemplateOption[];
+  isAdmin?: boolean;
   currentBranch: string;
   currentUserName: string;
   onCreated: (task: TaskItem) => void;
@@ -19,6 +29,9 @@ export default function CreateTaskModal({
   open,
   onClose,
   employees,
+  branches = [],
+  shiftTemplates = [],
+  isAdmin = false,
   currentBranch,
   currentUserName,
   onCreated,
@@ -26,7 +39,17 @@ export default function CreateTaskModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [sourceType, setSourceType] = useState<TaskSourceType>("manager");
-  const [shiftName, setShiftName] = useState("Ca Sáng (07:00 - 14:00)");
+
+  const getTemplateLabel = (tpl: ShiftTemplateOption) => `${tpl.name} (${tpl.startTime} - ${tpl.endTime})`;
+
+  const defaultShiftLabel =
+    shiftTemplates.length > 0 ? getTemplateLabel(shiftTemplates[0]) : "Ca Sáng (07:00 - 14:00)";
+
+  const [shiftName, setShiftName] = useState(defaultShiftLabel);
+  const [targetBranch, setTargetBranch] = useState(
+    currentBranch || (branches.length > 0 ? branches[0].slug.toUpperCase() : "")
+  );
+
   const [assignedToEmail, setAssignedToEmail] = useState(
     employees.length > 0 ? employees[0].email : ""
   );
@@ -43,6 +66,26 @@ export default function CreateTaskModal({
     return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
   });
 
+  // Đồng bộ khi modal mở hoặc danh sách khung ca/chi nhánh được nạp từ DB
+  useEffect(() => {
+    if (open) {
+      if (currentBranch) {
+        setTargetBranch(currentBranch);
+      } else if (branches.length > 0) {
+        setTargetBranch(branches[0].slug.toUpperCase());
+      }
+      if (shiftTemplates.length > 0) {
+        const found = shiftTemplates.some((t) => getTemplateLabel(t) === shiftName);
+        if (!found) {
+          setShiftName(getTemplateLabel(shiftTemplates[0]));
+        }
+      }
+      if (employees.length > 0 && !employees.some((e) => e.email === assignedToEmail)) {
+        setAssignedToEmail(employees[0].email);
+      }
+    }
+  }, [open, currentBranch, branches, shiftTemplates, employees]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
@@ -53,7 +96,11 @@ export default function CreateTaskModal({
       ? `Tất cả nhân sự trực ${shiftName.split("(")[0].trim()}`
       : (selectedEmployee ? selectedEmployee.name : "Nhân viên");
     const empEmail = isShift ? "shift_all" : assignedToEmail;
-    const empBranch = isShift ? currentBranch : (selectedEmployee ? selectedEmployee.branch : currentBranch);
+    
+    // Chi nhánh thực hiện: ưu tiên chọn từ dropdown chi nhánh, hoặc theo nhân viên, hoặc chi nhánh hiện tại
+    const finalBranch = isShift
+      ? (targetBranch || currentBranch || (branches[0]?.slug?.toUpperCase()) || "")
+      : (selectedEmployee?.branch || targetBranch || currentBranch || "");
 
     const newTask: TaskItem = {
       id: `task-${Date.now()}`,
@@ -62,7 +109,7 @@ export default function CreateTaskModal({
       sourceType,
       assignedByName: sourceType === "manager" ? `${currentUserName} (Giao việc)` : `Quy trình ${shiftName.split("(")[0].trim()}`,
       shiftName: isShift ? shiftName : undefined,
-      branch: empBranch,
+      branch: finalBranch,
       dueDate: dueDate.replace("T", " "),
       status: "pending",
       priority,
@@ -129,16 +176,29 @@ export default function CreateTaskModal({
           {sourceType === "shift" ? (
             <div>
               <label className="block text-sm font-semibold text-gray-800 mb-1">
-                Ca làm việc áp dụng
+                Ca làm việc áp dụng <span className="text-xs font-normal text-gray-500">(từ DB)</span>
               </label>
               <select
                 value={shiftName}
                 onChange={(e) => setShiftName(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-primary"
               >
-                <option value="Ca Sáng (07:00 - 14:00)">Ca Sáng (07:00 - 14:00)</option>
-                <option value="Ca Chiều (14:00 - 22:00)">Ca Chiều (14:00 - 22:00)</option>
-                <option value="Ca Tối (18:00 - 23:00)">Ca Tối (18:00 - 23:00)</option>
+                {shiftTemplates.length > 0 ? (
+                  shiftTemplates.map((tpl) => {
+                    const label = getTemplateLabel(tpl);
+                    return (
+                      <option key={tpl.id} value={label}>
+                        {label}
+                      </option>
+                    );
+                  })
+                ) : (
+                  <>
+                    <option value="Ca Sáng (07:00 - 14:00)">Ca Sáng (07:00 - 14:00)</option>
+                    <option value="Ca Chiều (14:00 - 22:00)">Ca Chiều (14:00 - 22:00)</option>
+                    <option value="Ca Tối (18:00 - 23:00)">Ca Tối (18:00 - 23:00)</option>
+                  </>
+                )}
               </select>
             </div>
           ) : (
@@ -172,7 +232,7 @@ export default function CreateTaskModal({
               >
                 {employees.map((emp) => (
                   <option key={emp.id} value={emp.email}>
-                    {emp.name} ({emp.role} - {emp.branch})
+                    {emp.name} ({emp.branch ? `${emp.role} - ${emp.branch}` : emp.role})
                   </option>
                 ))}
               </select>
@@ -192,7 +252,37 @@ export default function CreateTaskModal({
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                Chi nhánh áp dụng <span className="text-red-500">*</span>
+              </label>
+              {isAdmin ? (
+                <select
+                  value={targetBranch}
+                  onChange={(e) => setTargetBranch(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-primary"
+                >
+                  {branches.length > 0 ? (
+                    branches.map((b) => (
+                      <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                        {b.name} ({b.slug.toUpperCase()})
+                      </option>
+                    ))
+                  ) : (
+                    <option value={currentBranch || ""}>{currentBranch || "Chưa có chi nhánh"}</option>
+                  )}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  disabled
+                  value={currentBranch ? `${currentBranch} (Chi nhánh hiện tại)` : "Chưa có chi nhánh"}
+                  className="w-full px-3 py-2 border border-gray-200 bg-gray-100 text-gray-600 rounded-lg text-sm cursor-not-allowed"
+                />
+              )}
+            </div>
+
             <div>
               <label className="block text-sm font-semibold text-gray-800 mb-1">
                 Hạn chót hoàn thành trong ca <span className="text-red-500">*</span>

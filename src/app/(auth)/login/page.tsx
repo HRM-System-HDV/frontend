@@ -18,13 +18,24 @@ import { apiPost } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useCurrentUser();
+  const { login, authenticated, loading } = useCurrentUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [forgotOpen, setForgotOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Nếu người dùng đã đăng nhập thì tự động chuyển hướng vào dashboard, không cho ở lại trang login
+  useEffect(() => {
+    if (!loading && authenticated) {
+      const from =
+        typeof window !== "undefined"
+          ? new URLSearchParams(window.location.search).get("from")
+          : null;
+      router.replace(from && from.startsWith("/dashboard") ? from : "/dashboard/employees");
+    }
+  }, [loading, authenticated, router]);
 
   // Toast "Phiên làm việc đã hết hạn" — thumbnail ngang góc phải trên, tự ẩn sau ~6s.
   const [expToast, setExpToast] = useState(false);
@@ -82,7 +93,7 @@ export default function LoginPage() {
         typeof window !== "undefined"
           ? new URLSearchParams(window.location.search).get("from")
           : null;
-      router.push(from && from.startsWith("/dashboard") ? from : "/dashboard/employees");
+      router.replace(from && from.startsWith("/dashboard") ? from : "/dashboard/employees");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập thất bại");
     } finally {
@@ -96,7 +107,7 @@ export default function LoginPage() {
       {/* Toast: hết phiên làm việc — góc phải trên, tự mất sau ~6s */}
       {expToast && (
         <div
-          className={`fixed top-4 right-4 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-auto flex items-start gap-3 px-4 py-3 rounded-xl border shadow-lg bg-white ${
+          className={`fixed top-4 right-4 z-50 max-w-sm w-[calc(100vw-2rem)] sm:w-auto flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500 shadow-lg bg-white ${
             expToastExit ? "hrm-toast-anim-exit" : "hrm-toast-anim"
           }`}
           role="alert"
@@ -186,7 +197,7 @@ export default function LoginPage() {
           </form>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
+        <p className="text-center text-xs text-gray-400 mt-6 whitespace-nowrap">
           © 2026 HRM System — Hệ thống Quản lý Nhân sự nội bộ doanh nghiệp
         </p>
 

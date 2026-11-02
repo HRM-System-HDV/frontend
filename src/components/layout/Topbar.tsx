@@ -81,7 +81,12 @@ export default function Topbar({
                   </div>
                   <Link
                     href={logoutHref}
-                    onClick={onLogout}
+                    onClick={async (e) => {
+                      if (onLogout) {
+                        e.preventDefault();
+                        await onLogout();
+                      }
+                    }}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
                   >
                     <FontAwesomeIcon icon={faRightFromBracket} fontSize={18} />

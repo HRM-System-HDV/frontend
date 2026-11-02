@@ -9,11 +9,11 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
-import type { Employee } from "@/types";
+import type { Employee, Branch } from "@/types";
 import type { TaskItem, TaskSourceType, TaskStatus } from "@/features/tasks/types";
 import TaskFilterBar from "@/features/tasks/TaskFilter";
 import TaskTable from "@/features/tasks/TaskTable";
-import CreateTaskModal from "@/features/tasks/TaskForm";
+import CreateTaskModal, { ShiftTemplateOption } from "@/features/tasks/TaskForm";
 import TaskDetailModal from "@/features/tasks/TaskDetail";
 import { useCurrentUser } from "@/context/AuthContext";
 
@@ -89,10 +89,14 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
 
   let assignedToName = raw.assignedToName || raw.assignedTo || "Tất cả nhân sự";
   let assignedToEmail = raw.assignedToEmail || "shift_all";
+  let branch = raw.branchSlug || raw.branch || "";
   if (raw.assignedTo && empMap?.has(raw.assignedTo)) {
     const emp = empMap.get(raw.assignedTo)!;
     assignedToName = emp.name;
     assignedToEmail = emp.email;
+    if (!branch && emp.branch) {
+      branch = emp.branch;
+    }
   }
 
   return {
@@ -102,7 +106,7 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
     sourceType: (raw.sourceType as TaskSourceType) || (raw.shiftName ? "shift" : "manager"),
     assignedByName: raw.assignedByName || "Ban Quản lý",
     shiftName: raw.shiftName,
-    branch: raw.branchSlug || raw.branch || "HN-1",
+    branch,
     dueDate: raw.dueDate ? String(raw.dueDate).replace("T", " ") : "—",
     status,
     priority: raw.priority || "normal",
@@ -125,6 +129,8 @@ export default function TasksPage() {
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [empList, setEmpList] = useState<Employee[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplateOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -170,10 +176,19 @@ export default function TasksPage() {
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-      const [tasksRes, empRes] = await Promise.allSettled([
+      const [tasksRes, empRes, templatesRes, branchesRes] = await Promise.allSettled([
         apiGet<any[]>(`/api/tasks${queryString}`),
         apiGet<Employee[]>("/api/employees"),
+        apiGet<any[]>("/api/shift-templates"),
+        apiGet<Branch[]>("/api/branches"),
       ]);
+
+      if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
+        setBranches(branchesRes.value);
+      }
+      if (templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value)) {
+        setShiftTemplates(templatesRes.value);
+      }
 
       let employeesData: Employee[] = [];
       if (empRes.status === "fulfilled" && Array.isArray(empRes.value)) {
@@ -203,18 +218,17 @@ export default function TasksPage() {
     fetchData();
   }, [fetchData]);
 
-  // Lọc theo chi nhánh: Admin có bộ lọc chi nhánh (all/HN-1...), Manager cố định chi nhánh
+  // Lọc theo chi nhánh: Admin có bộ lọc chi nhánh (all/CN01...), Manager cố định chi nhánh
   const branchFilteredTasks = useMemo(() => {
     if (isAdmin) {
       if (branchFilter === "all") return tasks;
       return tasks.filter(
-        (t) => t.branch.toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", "")
+        (t) => (t.branch || "").toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", "")
       );
     }
     return tasks.filter(
       (t) =>
-        t.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "") ||
-        t.branch === "HN-1"
+        (t.branch || "").toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "")
     );
   }, [tasks, isAdmin, branchSlug, branchFilter]);
 
@@ -373,7 +387,6 @@ export default function TasksPage() {
       )}
 
       <PageHeader
-        title="Giao việc & Quản lý nhiệm vụ"
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Nhiệm vụ" }]}
         actions={
           <div className="flex items-center gap-2">
@@ -440,11 +453,14 @@ export default function TasksPage() {
         employees={
           isAdmin
             ? (branchFilter !== "all"
-                ? empList.filter((e) => e.branch.toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", ""))
+                ? empList.filter((e) => (e.branch || "").toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", ""))
                 : empList)
-            : empList.filter((e) => e.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", ""))
+            : empList.filter((e) => (e.branch || "").toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", ""))
         }
-        currentBranch={isAdmin && branchFilter !== "all" ? branchFilter.toUpperCase() : branchSlug.toUpperCase()}
+        branches={branches}
+        shiftTemplates={shiftTemplates}
+        isAdmin={isAdmin}
+        currentBranch={isAdmin && branchFilter !== "all" ? branchFilter.toUpperCase() : (branchSlug || "").toUpperCase()}
         currentUserName={currentUserName}
         onCreated={handleCreateTask}
       />

@@ -8,6 +8,7 @@ import {
   faKey,
   faShieldHalved,
   faStar,
+  faPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -28,12 +29,7 @@ export default function BankPartnersList({
   return (
     <Card>
       <CardHeader>
-        <div>
-          <CardTitle>Tài khoản Doanh nghiệp & Ngân hàng Chi lương</CardTitle>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Tài khoản nguồn phục vụ thanh toán tiền lương và phụ cấp tự động cho nhân viên
-          </p>
-        </div>
+        <CardTitle>Tài khoản Doanh nghiệp & Ngân hàng Chi lương</CardTitle>
       </CardHeader>
       <CardBody>
         {partners.length === 0 ? (

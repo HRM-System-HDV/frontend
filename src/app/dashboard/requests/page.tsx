@@ -374,7 +374,6 @@ export default function RequestsPage() {
       )}
 
       <PageHeader
-        title={isManager ? "Phê duyệt yêu cầu Chi nhánh Hoàn Kiếm (HN-1)" : "Phê duyệt yêu cầu Toàn hệ thống"}
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phê duyệt yêu cầu" }]}
         actions={
           !isManager ? (

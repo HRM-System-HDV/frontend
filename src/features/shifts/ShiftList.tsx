@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClock, faBuilding, faCalendarDay, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faClock, faBuilding, faCalendarDay, faTrashCan, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
@@ -16,9 +16,10 @@ import type { WorkShift } from "@/features/shifts/types";
 interface Props {
   workShifts: WorkShift[];
   onDelete: (id: string) => void;
+  onAddShift?: () => void;
 }
 
-export default function WorkShiftSection({ workShifts, onDelete }: Props) {
+export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: Props) {
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
   const [branchFilter, setBranchFilter] = useState("all");
   const [dateFilter, setDateFilter] = useState("");
@@ -62,13 +63,27 @@ export default function WorkShiftSection({ workShifts, onDelete }: Props) {
       key: "actions",
       header: "Thao tác",
       render: (s) => (
-        <button
-          type="button"
-          onClick={() => setSelectedShift(s)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-        >
-          Chi tiết
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSelectedShift(s)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`Bạn có chắc muốn xóa ca làm việc của "${s.employee}" (${s.templateName} - ${s.date})?`)) {
+                onDelete(s.id);
+              }
+            }}
+            className="p-1.5 rounded-lg text-xs text-red-600 hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer"
+            title="Xóa ca làm việc này"
+          >
+            <FontAwesomeIcon icon={faTrashCan} fontSize={14} />
+          </button>
+        </div>
       ),
     },
   ];

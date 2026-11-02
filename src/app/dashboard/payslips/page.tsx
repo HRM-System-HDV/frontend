@@ -63,6 +63,8 @@ interface EmployeeRow {
   id: string;
   name: string;
   branch: string;
+  baseSalary?: number;
+  status?: string;
 }
 
 export default function PayslipsPage() {
@@ -266,16 +268,75 @@ export default function PayslipsPage() {
     setGenerateSaving(true);
     setGenerateError(null);
     try {
-      await apiPost("/api/payroll/payslips/generate", {
-        employeeId: input.employeeId,
-        month: input.month.trim(),
-        baseSalary: input.baseSalary,
-        bonus: input.bonus,
-        sumPenalty: input.sumPenalty,
-      });
-      setGenerateOpen(false);
-      await fetchData(selectedMonth);
-      alert("Đã tạo phiếu lương tháng.");
+      if (input.employeeId === "all") {
+        const activeEmployees = employees.filter((e) => e.status !== "đã nghỉ");
+        if (activeEmployees.length === 0) {
+          setGenerateError("Không có nhân viên nào để tạo phiếu lương.");
+          return;
+        }
+
+        const results = await Promise.allSettled(
+          activeEmployees.map((emp) =>
+            apiPost("/api/payroll/payslips/generate", {
+              employeeId: emp.id,
+              month: input.month.trim(),
+              baseSalary: emp.baseSalary && emp.baseSalary > 0 ? emp.baseSalary : input.baseSalary,
+              bonus: input.bonus,
+              sumPenalty: true,
+            })
+          )
+        );
+
+        let createdCount = 0;
+        let skippedCount = 0;
+        const failedErrors: string[] = [];
+
+        results.forEach((res) => {
+          if (res.status === "fulfilled") {
+            createdCount++;
+          } else {
+            const reason = res.reason;
+            if (reason instanceof GatewayError && reason.code === "DUPLICATE_RESOURCE") {
+              skippedCount++;
+            } else {
+              failedErrors.push(reason instanceof Error ? reason.message : "Lỗi không xác định");
+            }
+          }
+        });
+
+        if (createdCount === 0 && skippedCount > 0 && failedErrors.length === 0) {
+          setGenerateError(`Toàn bộ nhân viên (${skippedCount}) đã có phiếu lương trong kỳ ${input.month}.`);
+          return;
+        }
+
+        if (createdCount === 0 && failedErrors.length > 0) {
+          setGenerateError(`Lỗi tạo phiếu lương: ${failedErrors[0]}`);
+          return;
+        }
+
+        setGenerateOpen(false);
+        await fetchData(selectedMonth);
+
+        let msg = `Đã tạo ${createdCount} phiếu lương cho kỳ ${input.month}.`;
+        if (skippedCount > 0) {
+          msg += ` (Bỏ qua ${skippedCount} nhân viên đã có phiếu).`;
+        }
+        if (failedErrors.length > 0) {
+          msg += ` (${failedErrors.length} nhân viên phát sinh lỗi).`;
+        }
+        alert(msg);
+      } else {
+        await apiPost("/api/payroll/payslips/generate", {
+          employeeId: input.employeeId,
+          month: input.month.trim(),
+          baseSalary: input.baseSalary,
+          bonus: input.bonus,
+          sumPenalty: true,
+        });
+        setGenerateOpen(false);
+        await fetchData(selectedMonth);
+        alert("Đã tạo phiếu lương tháng.");
+      }
     } catch (e) {
       if (e instanceof GatewayError && e.code === "DUPLICATE_RESOURCE") {
         setGenerateError("Phiếu lương của nhân sự trong tháng đã tồn tại.");
@@ -290,13 +351,12 @@ export default function PayslipsPage() {
   return (
     <div>
       <PageHeader
-        title={isManager ? "Bảng lương Chi nhánh Hoàn Kiếm (HN-1)" : "Bảng lương & Chốt công Toàn công ty"}
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
           !isManager ? (
             <div className="flex items-center gap-2">
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
-                <FontAwesomeIcon icon={faGear} fontSize={15} /> Cấu hình chấm công
+                <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
               </Button>
             </div>
           ) : undefined
@@ -349,8 +409,16 @@ export default function PayslipsPage() {
       />
       <GeneratePayslipModal
         open={generateOpen}
-        onClose={() => setGenerateOpen(false)}
-        employees={employees.map((e) => ({ id: e.id, name: e.name }))}
+        onClose={() => {
+          setGenerateOpen(false);
+          setGenerateError(null);
+        }}
+        employees={employees.map((e) => ({
+          id: e.id,
+          name: e.name,
+          baseSalary: e.baseSalary,
+          status: e.status,
+        }))}
         defaultMonth={selectedMonth !== "all" ? selectedMonth : "10-2026"}
         saving={generateSaving}
         error={generateError}

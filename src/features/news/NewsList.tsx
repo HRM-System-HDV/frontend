@@ -2,129 +2,229 @@
 
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEye, faPencil, faThumbtack, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import {
+  faBullhorn,
+  faCalendar,
+  faEye,
+  faMagnifyingGlass,
+  faPen,
+  faThumbtack,
+  faTrashCan,
+} from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody } from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import type { NewsItem } from "./types";
-
-const TAGS = ["all", "Nghỉ lễ", "Vận hành", "Khen thưởng", "Khẩn cấp", "Thông báo"];
+import { getTagColor } from "./helpers";
 
 interface Props {
   items: NewsItem[];
   onSelect: (item: NewsItem) => void;
   onEdit: (item: NewsItem) => void;
-  onDelete: (id: string) => void;
+  onDelete: (id: string, title?: string) => void;
+  onTogglePin: (id: string) => void;
 }
 
-export default function NewsSection({ items, onSelect, onEdit, onDelete }: Props) {
-  const [filterTag, setFilterTag] = useState<string>("all");
+export default function NewsSection({
+  items,
+  onSelect,
+  onEdit,
+  onDelete,
+  onTogglePin,
+}: Props) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [pinnedFilter, setPinnedFilter] = useState("all");
 
-  const filteredNews = filterTag === "all"
-    ? items
-    : items.filter((n) => n.tag === filterTag);
+  const filteredNews = items.filter((item) => {
+    const matchSearch =
+      item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.content.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchTag = tagFilter === "all" || item.tag === tagFilter;
+
+    const matchPinned =
+      pinnedFilter === "all" ||
+      (pinnedFilter === "pinned" ? item.pinned : !item.pinned);
+
+    return matchSearch && matchTag && matchPinned;
+  });
+
+  const sortedNews = [...filteredNews].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return 0;
+  });
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* Bộ lọc chuyên mục */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {TAGS.map((tag) => (
-          <button
-            key={tag}
-            onClick={() => setFilterTag(tag)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-              filterTag === tag
-                ? "bg-primary text-white shadow-xs"
-                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-            }`}
-          >
-            {tag === "all" ? "Tất cả thông báo" : tag}
-          </button>
-        ))}
-      </div>
+    <div className="space-y-6">
+      {/* Search & Filter Bar */}
+      <Card className="bg-white border-slate-200 shadow-xs">
+        <CardBody className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="relative">
+              <FontAwesomeIcon
+                icon={faMagnifyingGlass}
+                fontSize={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+              />
+              <input
+                type="text"
+                placeholder="Tìm kiếm thông báo, tin tức..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+              />
+            </div>
 
-      {/* Danh sách bài đăng - Mỗi thông báo 1 dòng (Single-row List) */}
-      <div className="flex flex-col gap-3">
-        {filteredNews.length === 0 ? (
-          <Card>
-            <CardBody className="py-12 text-center text-gray-400 text-sm">
-              Không có thông báo nào trong chuyên mục này.
+            <div>
+              <select
+                value={tagFilter}
+                onChange={(e) => setTagFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+              >
+                <option value="all">Tất cả chuyên mục</option>
+                <option value="Thông báo">Thông báo</option>
+                <option value="Khẩn cấp">Khẩn cấp</option>
+                <option value="Nghỉ lễ">Nghỉ lễ</option>
+                <option value="Khen thưởng">Khen thưởng</option>
+                <option value="Vận hành">Vận hành</option>
+              </select>
+            </div>
+
+            <div>
+              <select
+                value={pinnedFilter}
+                onChange={(e) => setPinnedFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+              >
+                <option value="all">Tất cả bài đăng</option>
+                <option value="pinned">Đã ghim đầu trang</option>
+                <option value="unpinned">Chưa ghim</option>
+              </select>
+            </div>
+          </div>
+        </CardBody>
+      </Card>
+
+      {/* News List Cards */}
+      <div className="space-y-4">
+        {sortedNews.length === 0 ? (
+          <Card className="bg-white border-slate-200">
+            <CardBody className="py-12 text-center text-slate-400">
+              <FontAwesomeIcon
+                icon={faBullhorn}
+                fontSize={40}
+                className="mx-auto mb-2 text-slate-300"
+              />
+              <p className="font-semibold text-slate-600">
+                Không tìm thấy thông báo nào
+              </p>
+              <p className="text-sm mt-1">
+                Thử thay đổi từ khóa hoặc bộ lọc tìm kiếm
+              </p>
             </CardBody>
           </Card>
         ) : (
-          filteredNews.map((item) => (
+          sortedNews.map((item) => (
             <Card
               key={item.id}
-              className="hover:border-primary/40 hover:shadow-md transition-all cursor-pointer group"
-              onClick={() => onSelect(item)}
+              className={`bg-white border transition-all hover:shadow-md ${
+                item.pinned
+                  ? "border-amber-300 bg-amber-50/15"
+                  : "border-slate-200"
+              }`}
             >
-              <CardBody className="p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    {/* Dòng Tag, Ghim & Thời gian */}
-                    <div className="flex items-center flex-wrap gap-2 mb-2">
-                      <Badge tone={item.tagTone}>{item.tag}</Badge>
+              <CardBody className="p-5">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  {/* Left content */}
+                  <div className="space-y-2.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${getTagColor(
+                          item.tag
+                        )}`}
+                      >
+                        {item.tag}
+                      </span>
                       {item.pinned && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
-                          <FontAwesomeIcon icon={faThumbtack} fontSize={12} />
-                          Ghim đầu trang
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                          <FontAwesomeIcon icon={faThumbtack} fontSize={12} /> Đã ghim
                         </span>
                       )}
-                      <span className="text-xs text-gray-400">• Ngày đăng: {item.date}</span>
+                      <span className="text-xs text-slate-500 font-medium">
+                        Ngày đăng:{" "}
+                        <strong className="text-slate-700">{item.date}</strong>
+                      </span>
                     </div>
 
-                    {/* Tiêu đề thông báo - rộng rãi trọn vẹn 1 dòng */}
-                    <h3 className="text-base font-bold text-gray-800 group-hover:text-primary transition-colors mb-1.5 leading-snug">
-                      {item.title}
-                    </h3>
+                    <div>
+                      <h3
+                        onClick={() => onSelect(item)}
+                        className="text-base md:text-lg font-bold text-slate-800 hover:text-primary-600 cursor-pointer transition-colors"
+                      >
+                        {item.title}
+                      </h3>
+                      <p className="text-sm text-slate-600 mt-1 line-clamp-2 leading-relaxed">
+                        {item.summary}
+                      </p>
+                    </div>
 
-                    {/* Nội dung tóm tắt */}
-                    <p className="text-xs sm:text-sm text-gray-600 leading-relaxed mb-3">
-                      {item.summary}
-                    </p>
-
-                    {/* Đơn vị phát hành */}
-                    <div className="flex items-center gap-3 text-xs text-gray-500">
-                      <span>Đăng bởi: <strong className="text-gray-700 font-semibold">{item.author}</strong></span>
+                    <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 pt-1">
+                      <span className="flex items-center gap-1">
+                        <FontAwesomeIcon
+                          icon={faCalendar}
+                          fontSize={14}
+                          className="text-slate-400"
+                        />
+                        Thời gian:{" "}
+                        <strong className="text-slate-700">{item.date}</strong>
+                      </span>
                     </div>
                   </div>
 
-                  {/* Nút hành động */}
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelect(item);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                  {/* Right Actions */}
+                  <div className="flex items-center md:flex-col gap-2 shrink-0 justify-end pt-2 md:pt-0">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => onSelect(item)}
+                      className="flex items-center gap-1.5"
                     >
-                      <FontAwesomeIcon icon={faEye} fontSize={15} />
+                      <FontAwesomeIcon icon={faEye} fontSize={16} />
                       Xem chi tiết
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEdit(item);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors cursor-pointer"
-                      title="Sửa thông báo"
-                    >
-                      <FontAwesomeIcon icon={faPencil} fontSize={16} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(item.id);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
-                      title="Xóa thông báo"
-                    >
-                      <FontAwesomeIcon icon={faTrashCan} fontSize={16} />
-                    </button>
+                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title={item.pinned ? "Bỏ ghim" : "Ghim lên đầu"}
+                        onClick={() => onTogglePin(item.id)}
+                        className={
+                          item.pinned ? "text-amber-600" : "text-slate-400"
+                        }
+                      >
+                        <FontAwesomeIcon icon={faThumbtack} fontSize={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Chỉnh sửa thông báo"
+                        onClick={() => onEdit(item)}
+                        className="text-slate-500 hover:text-slate-700"
+                      >
+                        <FontAwesomeIcon icon={faPen} fontSize={16} />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        title="Xóa thông báo"
+                        onClick={() => onDelete(item.id, item.title)}
+                        className="text-rose-500 hover:bg-rose-50"
+                      >
+                        <FontAwesomeIcon icon={faTrashCan} fontSize={16} />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardBody>

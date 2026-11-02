@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import type { StaffInShift, GeneralShiftItem } from "./ScheduleOverview";
 
 interface Props {
+  mode?: "schedule" | "registration";
   open: boolean;
   onClose: () => void;
   staff: StaffInShift | null;
@@ -21,7 +22,20 @@ interface Props {
   isOwnShift?: boolean;
 }
 
-export default function StaffShiftDetailModal({ open, onClose, staff, shift, day, onCancelShift, onCheckIn, onCheckOut, onSupplement, isAdmin = true, isOwnShift = false }: Props) {
+export default function StaffShiftDetailModal({
+  mode = "schedule",
+  open,
+  onClose,
+  staff,
+  shift,
+  day,
+  onCancelShift,
+  onCheckIn,
+  onCheckOut,
+  onSupplement,
+  isAdmin = true,
+  isOwnShift = false,
+}: Props) {
   if (!staff || !shift || !day) return null;
 
   const isCheckedIn = staff.checkInStatus === "checked_in";
@@ -64,12 +78,23 @@ export default function StaffShiftDetailModal({ open, onClose, staff, shift, day
     <Modal
       open={open}
       onClose={onClose}
-      title="Chi tiết ca làm việc"
+      title={mode === "registration" ? "Chi tiết đăng ký ca" : "Chi tiết ca làm việc"}
       size="lg"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2.5">
           <Button variant="white" onClick={onClose} className="px-5 py-2">Đóng</Button>
-          {showAdminActions ? (
+          {mode === "registration" ? (
+            <Button
+              variant="danger"
+              onClick={() => {
+                onCancelShift(staff.id, shift.id);
+                onClose();
+              }}
+              className="px-4 py-2 whitespace-nowrap"
+            >
+              <FontAwesomeIcon icon={faTrashCan} fontSize={16} /> Hủy đăng ký
+            </Button>
+          ) : showAdminActions ? (
             isCheckedIn && !isLate ? (
               <Button variant="danger" onClick={() => { onCancelShift(staff.id, shift.id); onClose(); }} className="px-4 py-2 whitespace-nowrap"><FontAwesomeIcon icon={faTrashCan} fontSize={16} /> Hủy ca</Button>
             ) : (
@@ -94,7 +119,11 @@ export default function StaffShiftDetailModal({ open, onClose, staff, shift, day
             <div className="font-bold text-gray-900">{staff.name}</div>
             <div className="text-xs text-gray-500">{staff.role} • Chi nhánh {staff.branch}</div>
             <div className="flex items-center gap-2 mt-1">
-              <Badge tone={statusTone}>{statusLabel}</Badge>
+              {mode === "registration" ? (
+                <Badge tone="primary">Đã đăng ký ca</Badge>
+              ) : (
+                <Badge tone={statusTone}>{statusLabel}</Badge>
+              )}
             </div>
           </div>
           <a href={`tel:${staff.phone.replace(/\s/g, "")}`} className="p-2 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-primary-50 hover:text-primary shrink-0" title={staff.phone}>
@@ -115,17 +144,29 @@ export default function StaffShiftDetailModal({ open, onClose, staff, shift, day
               <div className="font-semibold text-gray-800">{day.name}, {day.fullDate} {day.isToday && <span className="ml-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary border border-primary-200 text-[10px]">Hôm nay</span>}</div>
             </div>
             <div>
-              <div className="text-gray-400">Trạng thái ca</div>
-              <div className="font-semibold text-gray-800">{shift.status === "completed" ? "Đã hoàn thành" : shift.status === "active" ? "Đang diễn ra" : "Sắp diễn ra"}</div>
+              <div className="text-gray-400">Trạng thái</div>
+              <div className="font-semibold text-gray-800">
+                {mode === "registration"
+                  ? "Đã đăng ký ca"
+                  : shift.status === "completed"
+                  ? "Đã hoàn thành"
+                  : shift.status === "active"
+                  ? "Đang diễn ra"
+                  : "Sắp diễn ra"}
+              </div>
             </div>
-            <div>
-              <div className="text-gray-400">Giờ check-in</div>
-              <div className="font-mono font-semibold text-gray-800">{staff.checkInTime ?? "—"}</div>
-            </div>
-            <div>
-              <div className="text-gray-400">Giờ check-out</div>
-              <div className="font-mono font-semibold text-gray-800">{effectiveCheckOutTime}</div>
-            </div>
+            {mode !== "registration" && (
+              <>
+                <div>
+                  <div className="text-gray-400">Giờ check-in</div>
+                  <div className="font-mono font-semibold text-gray-800">{staff.checkInTime ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-gray-400">Giờ check-out</div>
+                  <div className="font-mono font-semibold text-gray-800">{effectiveCheckOutTime}</div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

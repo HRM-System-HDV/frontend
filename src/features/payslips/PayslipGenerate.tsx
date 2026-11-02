@@ -8,6 +8,8 @@ import { Field, Input, Select } from "@/components/ui/Form";
 export interface EmployeeOption {
   id: string;
   name: string;
+  baseSalary?: number;
+  status?: string;
 }
 
 export interface GenerateInput {
@@ -29,18 +31,33 @@ interface Props {
 }
 
 export default function GeneratePayslipModal({ open, onClose, employees, defaultMonth, saving, error, onConfirm }: Props) {
-  const [employeeId, setEmployeeId] = useState(employees[0]?.id || "");
+  const [employeeId, setEmployeeId] = useState("all");
   const [month, setMonth] = useState(defaultMonth);
   const [baseSalaryStr, setBaseSalaryStr] = useState("8500000");
   const [bonusStr, setBonusStr] = useState("0");
-  const [sumPenalty, setSumPenalty] = useState(true);
 
   useEffect(() => {
     if (open) {
-      setEmployeeId(employees[0]?.id || "");
+      setEmployeeId("all");
       setMonth(defaultMonth);
+      setBaseSalaryStr("8500000");
+      setBonusStr("0");
     }
-  }, [open, employees, defaultMonth]);
+  }, [open, defaultMonth]);
+
+  const handleEmployeeChange = (id: string) => {
+    setEmployeeId(id);
+    if (id !== "all") {
+      const emp = employees.find((e) => e.id === id);
+      if (emp?.baseSalary) {
+        setBaseSalaryStr(String(emp.baseSalary));
+      }
+    } else {
+      setBaseSalaryStr("8500000");
+    }
+  };
+
+  const isAll = employeeId === "all";
 
   return (
     <Modal
@@ -58,19 +75,24 @@ export default function GeneratePayslipModal({ open, onClose, employees, default
                 month,
                 baseSalary: Number(baseSalaryStr) || 0,
                 bonus: Number(bonusStr) || 0,
-                sumPenalty,
+                sumPenalty: true,
               })
             }
-            disabled={saving || !employeeId}
+            disabled={saving || !employeeId || (isAll && employees.length === 0)}
           >
-            {saving ? "Đang tạo..." : "Tạo phiếu"}
+            {saving
+              ? "Đang tạo..."
+              : isAll
+              ? `Tạo phiếu${employees.length > 0 ? ` (${employees.length} NV)` : ""}`
+              : "Tạo phiếu"}
           </Button>
         </>
       }
     >
       <div className="space-y-3">
         <Field label="Nhân viên" required>
-          <Select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} disabled={saving}>
+          <Select value={employeeId} onChange={(e) => handleEmployeeChange(e.target.value)} disabled={saving}>
+            <option value="all">Toàn bộ nhân viên</option>
             {employees.map((e) => (
               <option key={e.id} value={e.id}>{e.name}</option>
             ))}
@@ -80,32 +102,22 @@ export default function GeneratePayslipModal({ open, onClose, employees, default
           <Input value={month} onChange={(e) => setMonth(e.target.value)} disabled={saving} placeholder="10-2026" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Lương cơ bản (VNĐ)" required>
+          <Field
+            label="Lương cơ bản (VNĐ)"
+            required
+            hint={isAll ? "Tự động lấy theo từng nhân viên (nếu chưa có sẽ dùng mức này)" : undefined}
+          >
             <Input type="number" value={baseSalaryStr} onChange={(e) => setBaseSalaryStr(e.target.value)} disabled={saving} />
           </Field>
           <Field label="Thưởng (VNĐ)">
             <Input type="number" value={bonusStr} onChange={(e) => setBonusStr(e.target.value)} disabled={saving} />
           </Field>
         </div>
-        <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={sumPenalty}
-            onChange={(e) => setSumPenalty(e.target.checked)}
-            disabled={saving}
-            className="w-4 h-4 accent-primary"
-          />
-          Tự tổng hợp phạt chấm công theo tháng từ work-service (sumPenalty)
-        </label>
         {error && (
           <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium">
             {error}
           </div>
         )}
-        <div className="rounded-lg bg-gray-50 px-4 py-3 text-xs text-gray-500">
-          Gọi <span className="font-mono">POST /api/payroll/payslips/generate</span> — chống trùng cặp
-          nhân viên + tháng (trùng trả 409). Công thức: thực lĩnh = cơ bản + thưởng − phạt.
-        </div>
       </div>
     </Modal>
   );

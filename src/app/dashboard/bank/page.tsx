@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPlus,
-  faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
@@ -14,8 +13,8 @@ import SoapTransactionsTable from "@/features/bank/SoapHistory";
 import SoapTestModal from "@/features/bank/SoapTest";
 import SoapPayloadDetailModal from "@/features/bank/PayloadDetail";
 import CreatePayrollDisbursementModal from "@/features/bank/PayoutCreate";
-import BankConfigModal from "@/features/bank/BankForm";
-import { initialSoapGatewayConfig } from "@/features/bank/mock";
+import BankConfigModal, { CreateBankAccountModal } from "@/features/bank/BankForm";
+import { DEFAULT_SOAP_GATEWAY_CONFIG } from "@/features/bank/constants";
 import type { BankPartner, SoapTransaction } from "@/features/bank/types";
 import { apiGet, GatewayError, GATEWAY_URL } from "@/lib/api";
 
@@ -82,12 +81,13 @@ function payoutToTx(row: PayoutRow, bankNameByAccount: Map<string, string>): Soa
 export default function BankIntegrationPage() {
   const [partners, setPartners] = useState<BankPartner[]>([]);
   const [transactions, setTransactions] = useState<SoapTransaction[]>([]);
-  const [gatewayConfig, setGatewayConfig] = useState(initialSoapGatewayConfig);
+  const [gatewayConfig, setGatewayConfig] = useState(DEFAULT_SOAP_GATEWAY_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [createDisburseOpen, setCreateDisburseOpen] = useState(false);
+  const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [selectedPayloadTx, setSelectedPayloadTx] =
     useState<SoapTransaction | null>(null);
   const [selectedBankConfig, setSelectedBankConfig] =
@@ -168,7 +168,6 @@ export default function BankIntegrationPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          title="Liên kết Ngân hàng & Chi lương Tự động"
           breadcrumb={[
             { label: "HRM", href: "#" },
             { label: "Ngân hàng & Chi lương" },
@@ -191,7 +190,6 @@ export default function BankIntegrationPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Liên kết Ngân hàng & Chi lương Tự động"
         breadcrumb={[
           { label: "HRM", href: "#" },
           { label: "Ngân hàng & Chi lương" },
@@ -200,15 +198,14 @@ export default function BankIntegrationPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="white"
-              onClick={() => setTestModalOpen(true)}
+              onClick={() => setCreateAccountOpen(true)}
               className="text-xs"
             >
-              <FontAwesomeIcon icon={faRotateRight} fontSize={12} /> Kiểm tra đường truyền
+              <FontAwesomeIcon icon={faPlus} fontSize={12} /> Thêm tài khoản ngân hàng
             </Button>
             <Button
               onClick={() => setCreateDisburseOpen(true)}
               className="text-xs"
-              disabled={partners.length === 0}
             >
               <FontAwesomeIcon icon={faPlus} fontSize={12} /> Tạo lệnh chi lương mới
             </Button>
@@ -244,7 +241,6 @@ export default function BankIntegrationPage() {
       <SoapTransactionsTable
         transactions={transactions}
         onViewPayload={(t) => setSelectedPayloadTx(t)}
-        onCreateDisbursement={() => setCreateDisburseOpen(true)}
       />
 
       {/* Modals */}
@@ -272,6 +268,16 @@ export default function BankIntegrationPage() {
         onSaved={(updated) => {
           setPartners((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
         }}
+        onDeleted={() => {
+          fetchData();
+        }}
+      />
+
+      <CreateBankAccountModal
+        open={createAccountOpen}
+        onClose={() => setCreateAccountOpen(false)}
+        onCreated={fetchData}
+        isFirstAccount={partners.length === 0}
       />
     </div>
   );

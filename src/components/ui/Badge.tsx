@@ -81,7 +81,9 @@ export function StatusBadge({ status }: { status: string }) {
     "Đã duyệt": { tone: "success", label: "Đã duyệt" },
     "Từ chối": { tone: "danger", label: "Từ chối" },
     "Chưa chốt": { tone: "warning", label: "Chưa chốt" },
+    "chưa chốt": { tone: "warning", label: "Chưa chốt" },
     "Đã chốt": { tone: "success", label: "Đã chốt" },
+    "đã chốt": { tone: "success", label: "Đã chốt" },
     "đã gọi": { tone: "success", label: "Đã gọi" },
     "đang gọi": { tone: "warning", label: "Đang gọi" },
     "Đang tạo": { tone: "warning", label: "Đang tạo" },
@@ -91,7 +93,16 @@ export function StatusBadge({ status }: { status: string }) {
     "Về sớm": { tone: "danger", label: "Về sớm" },
     "Chưa làm": { tone: "gray", label: "Chưa làm" },
   };
-  const matched = map[status] ?? { tone: "gray" as BadgeTone, label: status };
+  const cleanStatus = (status || "").trim();
+  const lowerStatus = cleanStatus.toLowerCase();
+  let matched = map[cleanStatus];
+  if (!matched) {
+    const foundKey = Object.keys(map).find((k) => k.toLowerCase() === lowerStatus);
+    if (foundKey) matched = map[foundKey];
+  }
+  if (!matched) {
+    matched = { tone: "gray" as BadgeTone, label: cleanStatus };
+  }
 
   return <Badge tone={matched.tone}>{matched.label}</Badge>;
 }

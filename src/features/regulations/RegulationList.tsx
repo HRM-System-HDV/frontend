@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCalendar, faEye, faGavel, faMagnifyingGlass, faPen, faThumbtack, faTrashCan, faUser } from "@fortawesome/free-solid-svg-icons";
+import { faCalendar, faEye, faGavel, faMagnifyingGlass, faPen, faThumbtack, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -142,9 +142,6 @@ export default function RegulationSection({ items, onView, onEdit, onDelete, onT
                   {/* Left content */}
                   <div className="space-y-2.5 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
-                        {item.code}
-                      </span>
                       <span
                         className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${getCategoryColor(
                           item.category
@@ -179,21 +176,9 @@ export default function RegulationSection({ items, onView, onEdit, onDelete, onT
 
                     <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 pt-1">
                       <span className="flex items-center gap-1">
-                        <FontAwesomeIcon icon={faUser} fontSize={14} className="text-slate-400" />
-                        Ban hành: <strong className="text-slate-700">{item.author}</strong>
-                      </span>
-                      <span className="flex items-center gap-1">
                         <FontAwesomeIcon icon={faCalendar} fontSize={14} className="text-slate-400" />
                         Hiệu lực: <strong className="text-slate-700">{item.effectiveDate}</strong>
                       </span>
-                      <span>
-                        Phiên bản: <strong className="text-slate-700">v{item.version}</strong>
-                      </span>
-                      {item.attachments && (
-                        <span className="text-primary-600 font-medium flex items-center gap-1">
-                          📎 {item.attachments} tài liệu đính kèm
-                        </span>
-                      )}
                     </div>
                   </div>
 

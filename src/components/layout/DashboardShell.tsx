@@ -70,6 +70,7 @@ interface DashboardShellProps {
   userRole: string;
   notifications?: { id: string; title: string; content: string; time: string; read: boolean; tone?: string }[];
   logoutHref: string;
+  onLogout?: () => void;
   sidebarFooter?: { icon: React.ReactNode; text: string };
   rightExtra?: React.ReactNode;
   defaultCollapsed?: boolean;
@@ -82,6 +83,7 @@ function DashboardShellContent({
   userName,
   userRole,
   logoutHref,
+  onLogout,
   sidebarFooter,
   rightExtra,
   defaultCollapsed = true,
@@ -97,13 +99,20 @@ function DashboardShellContent({
 
   const collapsed = width <= 90;
 
-  // Tìm title của trang hiện tại dựa vào pathname và groups (fallback khi PageHeader không set title)
+  // Tìm title của trang hiện tại dựa vào pathname và groups (đồng bộ hoàn toàn với tên tính năng ở sidebar)
   let activeTitle = headerTitle ?? "";
   if (!activeTitle) {
+    const currentPath = pathname?.replace(/\/$/, "") || "/";
     for (const group of groups) {
-      const item = group.items.find(
-        (it) => pathname === it.href || (it.href !== "/" && pathname.startsWith(it.href))
-      );
+      const item = group.items.find((it) => {
+        const targetHref = it.href?.replace(/\/$/, "") || "/";
+        const isExact = currentPath === targetHref;
+        const isChild =
+          targetHref !== "/" &&
+          targetHref !== "/dashboard" &&
+          currentPath.startsWith(`${targetHref}/`);
+        return isExact || isChild;
+      });
       if (item) {
         activeTitle = item.label;
         break;
@@ -152,6 +161,7 @@ function DashboardShellContent({
           resizing={resizing}
           logoutHref={logoutHref}
           rightExtra={rightExtra}
+          onLogout={onLogout}
         />
         <main className="pt-4">{children}</main>
         <footer className="text-xs text-gray-400 text-center mt-4 pb-2">

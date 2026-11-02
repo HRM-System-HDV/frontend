@@ -21,13 +21,12 @@ import type { SoapTransaction } from "./types";
 interface Props {
   transactions: SoapTransaction[];
   onViewPayload: (t: SoapTransaction) => void;
-  onCreateDisbursement: () => void;
+  onCreateDisbursement?: () => void;
 }
 
 export default function SoapTransactionsTable({
   transactions,
   onViewPayload,
-  onCreateDisbursement,
 }: Props) {
   const [filterBank, setFilterBank] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
@@ -139,17 +138,7 @@ export default function SoapTransactionsTable({
   return (
     <Card>
       <CardHeader>
-        <div>
-          <CardTitle>Lịch sử Chi trả Lương Doanh nghiệp</CardTitle>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Bảng kê các đợt giải ngân tiền lương đã thực hiện tự động qua tài khoản ngân hàng
-          </p>
-        </div>
-        <div className="flex items-center gap-2.5">
-          <Button onClick={onCreateDisbursement} className="text-xs">
-            <FontAwesomeIcon icon={faPlus} fontSize={12} /> Tạo lệnh chi lương mới
-          </Button>
-        </div>
+        <CardTitle>Lịch sử Chi trả Lương Doanh nghiệp</CardTitle>
       </CardHeader>
       <CardBody>
         <div className="flex flex-col sm:flex-row gap-3 mb-4">
