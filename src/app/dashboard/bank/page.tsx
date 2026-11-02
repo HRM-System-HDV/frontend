@@ -14,7 +14,7 @@ import SoapTestModal from "@/features/bank/SoapTest";
 import SoapPayloadDetailModal from "@/features/bank/PayloadDetail";
 import CreatePayrollDisbursementModal from "@/features/bank/PayoutCreate";
 import BankConfigModal, { CreateBankAccountModal } from "@/features/bank/BankForm";
-import { initialSoapGatewayConfig } from "@/features/bank/mock";
+import { DEFAULT_SOAP_GATEWAY_CONFIG } from "@/features/bank/constants";
 import type { BankPartner, SoapTransaction } from "@/features/bank/types";
 import { apiGet, GatewayError, GATEWAY_URL } from "@/lib/api";
 
@@ -81,7 +81,7 @@ function payoutToTx(row: PayoutRow, bankNameByAccount: Map<string, string>): Soa
 export default function BankIntegrationPage() {
   const [partners, setPartners] = useState<BankPartner[]>([]);
   const [transactions, setTransactions] = useState<SoapTransaction[]>([]);
-  const [gatewayConfig, setGatewayConfig] = useState(initialSoapGatewayConfig);
+  const [gatewayConfig, setGatewayConfig] = useState(DEFAULT_SOAP_GATEWAY_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
