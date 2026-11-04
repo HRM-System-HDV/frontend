@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGear } from "@fortawesome/free-solid-svg-icons";
+import { faGear, faPencil, faLock } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import type { Payslip } from "@/types";
@@ -91,9 +91,10 @@ export default function PayslipsPage() {
   const [printSlipTarget, setPrintSlipTarget] = useState<Payslip | null>(null);
   const [confirmCloseSlipTarget, setConfirmCloseSlipTarget] = useState<Payslip | null>(null);
   const [closingOne, setClosingOne] = useState(false);
+  const [attConfigSaving, setAttConfigSaving] = useState(false);
   const [attConfig, setAttConfig] = useState<AttendanceConfigState>({
     gracePeriod: "5",
-    shiftSwapMode: "manager",
+    shiftSwapMode: "Nhân viên tự xác nhận",
     requireReasonSwap: true,
     allowDoubleCheckin: true,
     latePenaltyPct: "10",
@@ -109,19 +110,29 @@ export default function PayslipsPage() {
     try {
       const c = await apiGet<any>("/api/attendance/config");
       if (c) {
+        const mapMode = (m?: string) => {
+          if (!m || m === "manual") return "Nhân viên tự xác nhận";
+          if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
+          return m;
+        };
+        const formatOption = (val: any, fallback: string) => {
+          if (val === 0) return "Không giới hạn";
+          if (val != null) return `${val} lần`;
+          return fallback;
+        };
         setAttConfig((prev) => ({
           ...prev,
           gracePeriod: String(c.gracePeriodMinutes ?? c.gracePeriod ?? prev.gracePeriod),
-          shiftSwapMode: c.shiftSwapMode || prev.shiftSwapMode,
+          shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
           requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
           allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
           latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
           earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
           earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
-          maxPenaltiesPerMonth: c.maxPenaltiesPerMonth != null ? `${c.maxPenaltiesPerMonth} lần` : prev.maxPenaltiesPerMonth,
+          maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
           deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
-          maxCheckinsPerDay: c.maxCheckinsPerDay != null ? `${c.maxCheckinsPerDay} lần` : prev.maxCheckinsPerDay,
-          maxSwapsPerMonth: c.maxSwapsPerMonth != null ? `${c.maxSwapsPerMonth} lần` : prev.maxSwapsPerMonth,
+          maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
+          maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
         }));
       }
     } catch {
@@ -354,7 +365,19 @@ export default function PayslipsPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
           !isManager ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="white"
+                onClick={() => {
+                  setGenerateError(null);
+                  setGenerateOpen(true);
+                }}
+              >
+                <FontAwesomeIcon icon={faPencil} fontSize={14} /> Tạo phiếu lương tháng
+              </Button>
+              <Button onClick={() => setCloseSlipOpen(true)}>
+                <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
+              </Button>
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
               </Button>
@@ -390,8 +413,8 @@ export default function PayslipsPage() {
           }}
           onCloseOne={setConfirmCloseSlipTarget}
           onPrint={setPrintSlipTarget}
-          onBulkClose={!isManager ? () => setCloseSlipOpen(true) : undefined}
-          onGenerate={!isManager ? () => { setGenerateError(null); setGenerateOpen(true); } : undefined}
+          
+          
           selectedMonth={selectedMonth}
           onMonthChange={setSelectedMonth}
           monthOptions={monthOptions}
@@ -424,26 +447,41 @@ export default function PayslipsPage() {
         error={generateError}
         onConfirm={handleGenerate}
       />
-      <AttendanceConfigModal open={attendanceOpen} onClose={async () => {
-        setAttendanceOpen(false);
-        try {
-          await apiPut("/api/attendance/config", {
-            gracePeriodMinutes: parseInt(attConfig.gracePeriod, 10) || 5,
-            shiftSwapMode: attConfig.shiftSwapMode,
-            requireReasonSwap: attConfig.requireReasonSwap,
-            allowDoubleCheckin: attConfig.allowDoubleCheckin,
-            latePenaltyPct: parseInt(attConfig.latePenaltyPct, 10) || 0,
-            earlyLeavePenaltyPct: parseInt(attConfig.earlyLeavePenaltyPct, 10) || 0,
-            earlyCheckinMinutes: parseInt(attConfig.earlyCheckinMinutes, 10) || 0,
-            maxPenaltiesPerMonth: parseInt(attConfig.maxPenaltiesPerMonth, 10) || 0,
-            deductOnCheckout: attConfig.deductOnCheckout,
-            maxCheckinsPerDay: parseInt(attConfig.maxCheckinsPerDay, 10) || 0,
-            maxSwapsPerMonth: parseInt(attConfig.maxSwapsPerMonth, 10) || 0,
-          });
-        } catch {
-          // ignore — giữ config local nếu API lỗi
-        }
-      }} config={attConfig} setConfig={setAttConfig} />
+      <AttendanceConfigModal
+        open={attendanceOpen}
+        onClose={() => setAttendanceOpen(false)}
+        onSave={async () => {
+          try {
+            setAttConfigSaving(true);
+            const parseLimit = (str: string) => {
+              if (!str || str.includes("Không giới hạn")) return 0;
+              const num = parseInt(str, 10);
+              return isNaN(num) ? 0 : num;
+            };
+            await apiPut("/api/attendance/config", {
+              gracePeriodMinutes: parseInt(attConfig.gracePeriod, 10) || 5,
+              shiftSwapMode: attConfig.shiftSwapMode,
+              requireReasonSwap: attConfig.requireReasonSwap,
+              allowDoubleCheckin: attConfig.allowDoubleCheckin,
+              latePenaltyPct: parseInt(attConfig.latePenaltyPct, 10) || 0,
+              earlyLeavePenaltyPct: parseInt(attConfig.earlyLeavePenaltyPct, 10) || 0,
+              earlyCheckinMinutes: parseInt(attConfig.earlyCheckinMinutes, 10) || 0,
+              maxPenaltiesPerMonth: parseLimit(attConfig.maxPenaltiesPerMonth),
+              deductOnCheckout: attConfig.deductOnCheckout,
+              maxCheckinsPerDay: parseLimit(attConfig.maxCheckinsPerDay),
+              maxSwapsPerMonth: parseLimit(attConfig.maxSwapsPerMonth),
+            });
+            setAttendanceOpen(false);
+          } catch {
+            // ignore
+          } finally {
+            setAttConfigSaving(false);
+          }
+        }}
+        saving={attConfigSaving}
+        config={attConfig}
+        setConfig={setAttConfig}
+      />
 
       <EditPayslipModal
         payslip={editSlipTarget}

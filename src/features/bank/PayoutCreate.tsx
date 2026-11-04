@@ -201,6 +201,8 @@ export default function CreatePayrollDisbursementModal({
         id: res.id,
         batchName: res.content || content,
         bankName: selectedBank.shortName,
+        accountNumber: selectedBank.accountNumber,
+        accountName: selectedBank.accountName,
         totalEmployees: res.beneficiaryCount,
         totalAmount: res.totalAmount,
         status: res.status === "success" ? "success" : "processing",
@@ -285,13 +287,12 @@ export default function CreatePayrollDisbursementModal({
 
         {!fetchingSlips && closedSlips.length === 0 && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
-            Không tìm thấy phiếu lương nào ở trạng thái <strong>&ldquo;đã chốt&rdquo;</strong> chưa được chi trả. Vui lòng vào trang <strong>Phiếu lương</strong> để chốt phiếu lương trước khi lập lệnh chi.
+            Chưa có phiếu lương nào được chốt.
           </div>
         )}
 
         <div className="p-4 bg-primary-50/30 border border-primary-200 rounded-xl">
-          <div className="text-xs font-bold text-primary flex items-center gap-1.5">
-            <FontAwesomeIcon icon={faShieldHalved} />
+          <div className="text-xs font-bold text-primary">
             Lệnh chi lương điện tử tự động — Tiền sẽ chuyển trực tiếp vào tài khoản nhân sự
           </div>
         </div>
@@ -353,7 +354,7 @@ export default function CreatePayrollDisbursementModal({
         </div>
 
         {/* Chọn kỳ lương đã chốt */}
-        <Field label="Kỳ lương cần chi trả (từ phiếu đã chốt)" required>
+        <Field label="Kỳ lương cần chi trả" required>
           <Select
             value={selectedMonth}
             onChange={(e) => handleMonthChange(e.target.value)}
@@ -393,7 +394,7 @@ export default function CreatePayrollDisbursementModal({
 
         {/* Tự động tính toán tổng số tiền và số lượng thụ hưởng */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Field label="Tổng số tiền chi (VNĐ) — Tự động cộng từ phiếu đã chốt">
+          <Field label="Tổng số tiền chi (VNĐ)">
             <div className="h-10 px-3.5 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center justify-between font-bold text-sm text-emerald-800">
               <span>{formatVND(calculatedAmount)}</span>
               <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
@@ -401,7 +402,7 @@ export default function CreatePayrollDisbursementModal({
               </span>
             </div>
           </Field>
-          <Field label="Số lượng người nhận (Thụ hưởng)">
+          <Field label="Số lượng người nhận">
             <div className="h-10 px-3.5 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-between font-bold text-sm text-gray-800">
               <span>{calculatedCount} nhân sự</span>
               <span className="text-[10px] font-normal text-gray-500 flex items-center gap-1">
@@ -457,3 +458,4 @@ export default function CreatePayrollDisbursementModal({
     </Modal>
   );
 }
+

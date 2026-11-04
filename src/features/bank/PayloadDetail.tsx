@@ -23,19 +23,61 @@ interface Props {
 }
 
 // Hàm hỗ trợ đọc tiền tiếng Việt cơ bản cho bảng lương
-function convertNumberToVietnameseWords(amount: number): string {
-  if (amount === 154200000) {
-    return "Một trăm năm mươi tư triệu hai trăm nghìn đồng chẵn.";
-  }
-  if (amount === 148500000) {
-    return "Một trăm bốn mươi tám triệu năm trăm nghìn đồng chẵn.";
-  }
-  if (amount === 9500000) {
-    return "Chín triệu năm trăm nghìn đồng chẵn.";
-  }
-  return `${amount.toLocaleString("vi-VN")} đồng Việt Nam.`;
-}
+function convertNumberToVietnameseWords(n: number): string {
+  if (!n || isNaN(n)) return "Không đồng.";
+  const units = ["", "một", "hai", "ba", "bốn", "năm", "sáu", "bảy", "tám", "chín"];
+  const scales = ["", "nghìn", "triệu", "tỷ", "nghìn tỷ", "triệu tỷ"];
 
+  function readGroup(group: number, showZeroHundred: boolean): string {
+    const h = Math.floor(group / 100);
+    const t = Math.floor((group % 100) / 10);
+    const u = group % 10;
+    if (h === 0 && t === 0 && u === 0) return "";
+    let res = "";
+    if (h > 0 || showZeroHundred) {
+      res += `${units[h]} trăm `;
+    }
+    if (t > 1) {
+      res += `${units[t]} mươi `;
+      if (u === 1) res += "mốt ";
+      else if (u === 4) res += "tư ";
+      else if (u === 5) res += "lăm ";
+      else if (u > 0) res += `${units[u]} `;
+    } else if (t === 1) {
+      res += "mười ";
+      if (u === 5) res += "lăm ";
+      else if (u > 0) res += `${units[u]} `;
+    } else if (t === 0 && u > 0) {
+      if (h > 0 || showZeroHundred) res += "lẻ ";
+      res += `${units[u]} `;
+    }
+    return res;
+  }
+
+  let num = Math.floor(Math.abs(n));
+  if (num === 0) return "Không đồng chẵn.";
+
+  const groups: number[] = [];
+  while (num > 0) {
+    groups.push(num % 1000);
+    num = Math.floor(num / 1000);
+  }
+
+  let words = "";
+  for (let idx = groups.length - 1; idx >= 0; idx--) {
+    const g = groups[idx];
+    if (g === 0) continue;
+    const gWords = readGroup(g, idx < groups.length - 1);
+    if (gWords) {
+      words += `${gWords}${scales[idx]} `;
+    }
+  }
+
+  words = words.trim().replace(/\s+/g, " ");
+  if (!words) return `${n.toLocaleString("vi-VN")} đồng Việt Nam.`;
+  const capitalized = words.charAt(0).toUpperCase() + words.slice(1);
+  return `${capitalized} đồng chẵn.`;
+}
 export default function SoapPayloadDetailModal({ transaction, onClose }: Props) {
   const [showTechDetails, setShowTechDetails] = useState(false);
   const [copiedReq, setCopiedReq] = useState(false);
@@ -113,7 +155,7 @@ export default function SoapPayloadDetailModal({ transaction, onClose }: Props) 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-gray-700">
                 <div>
                   <span className="text-gray-500">Tên doanh nghiệp: </span>
-                  <span className="font-bold text-gray-900">CÔNG TY TNHH HỆ THỐNG QUẢN TRỊ HRM</span>
+                  <span className="font-bold text-gray-900">{transaction.accountName || "CÔNG TY CỔ PHẦN HRM"}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Ngân hàng phục vụ: </span>
@@ -121,7 +163,7 @@ export default function SoapPayloadDetailModal({ transaction, onClose }: Props) 
                 </div>
                 <div>
                   <span className="text-gray-500">Số tài khoản trích tiền: </span>
-                  <span className="font-mono font-bold text-gray-900">110028495821</span>
+                  <span className="font-mono font-bold text-gray-900">{transaction.accountNumber || "—"}</span>
                 </div>
                 <div>
                   <span className="text-gray-500">Kênh giải ngân: </span>

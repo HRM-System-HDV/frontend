@@ -1,39 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBullhorn,
   faCalendar,
-  faEye,
   faMagnifyingGlass,
-  faPen,
   faThumbtack,
-  faTrashCan,
 } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
+import { apiGet } from "@/lib/api";
+import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 import { getTagColor } from "./helpers";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   items: NewsItem[];
   onSelect: (item: NewsItem) => void;
-  onEdit: (item: NewsItem) => void;
-  onDelete: (id: string, title?: string) => void;
-  onTogglePin: (id: string) => void;
+  onEdit?: (item: NewsItem) => void;
+  onDelete?: (id: string, title?: string) => void;
+  onTogglePin?: (id: string) => void;
 }
 
 export default function NewsSection({
   items,
   onSelect,
-  onEdit,
-  onDelete,
-  onTogglePin,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
   const [pinnedFilter, setPinnedFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useState("all");
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    apiGet<Branch[]>("/api/branches")
+      .then((d) => setBranches(d || []))
+      .catch(() => {});
+  }, []);
 
   const filteredNews = items.filter((item) => {
     const matchSearch =
@@ -47,7 +52,10 @@ export default function NewsSection({
       pinnedFilter === "all" ||
       (pinnedFilter === "pinned" ? item.pinned : !item.pinned);
 
-    return matchSearch && matchTag && matchPinned;
+    const itemBranch = item.branch || "Toàn công ty";
+    const matchBranch = branchFilter === "all" || itemBranch === branchFilter;
+
+    return matchSearch && matchTag && matchPinned && matchBranch;
   });
 
   const sortedNews = [...filteredNews].sort((a, b) => {
@@ -61,7 +69,7 @@ export default function NewsSection({
       {/* Search & Filter Bar */}
       <Card className="bg-white border-slate-200 shadow-xs">
         <CardBody className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="relative">
               <FontAwesomeIcon
                 icon={faMagnifyingGlass}
@@ -101,6 +109,22 @@ export default function NewsSection({
                 <option value="all">Tất cả bài đăng</option>
                 <option value="pinned">Đã ghim đầu trang</option>
                 <option value="unpinned">Chưa ghim</option>
+              </select>
+            </div>
+
+            <div>
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+              >
+                <option value="all">Tất cả chi nhánh</option>
+                <option value="Toàn công ty">Toàn công ty</option>
+                {branches.map((b) => (
+                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -153,8 +177,7 @@ export default function NewsSection({
                         </span>
                       )}
                       <span className="text-xs text-slate-500 font-medium">
-                        Ngày đăng:{" "}
-                        <strong className="text-slate-700">{item.date}</strong>
+                        Phạm vi: <strong className="text-slate-700">{item.branch || "Toàn công ty"}</strong>
                       </span>
                     </div>
 
@@ -177,54 +200,21 @@ export default function NewsSection({
                           fontSize={14}
                           className="text-slate-400"
                         />
-                        Thời gian:{" "}
-                        <strong className="text-slate-700">{item.date}</strong>
+                        Ngày đăng:{" "}
+                        <strong className="text-slate-700">{formatDate(item.date)}</strong>
                       </span>
                     </div>
                   </div>
 
                   {/* Right Actions */}
-                  <div className="flex items-center md:flex-col gap-2 shrink-0 justify-end pt-2 md:pt-0">
+                  <div className="flex items-center shrink-0 justify-end pt-2 md:pt-0">
                     <Button
                       variant="primary"
                       size="sm"
                       onClick={() => onSelect(item)}
-                      className="flex items-center gap-1.5"
                     >
-                      <FontAwesomeIcon icon={faEye} fontSize={16} />
-                      Xem chi tiết
+                      Chi tiết
                     </Button>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={item.pinned ? "Bỏ ghim" : "Ghim lên đầu"}
-                        onClick={() => onTogglePin(item.id)}
-                        className={
-                          item.pinned ? "text-amber-600" : "text-slate-400"
-                        }
-                      >
-                        <FontAwesomeIcon icon={faThumbtack} fontSize={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Chỉnh sửa thông báo"
-                        onClick={() => onEdit(item)}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        <FontAwesomeIcon icon={faPen} fontSize={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Xóa thông báo"
-                        onClick={() => onDelete(item.id, item.title)}
-                        className="text-rose-500 hover:bg-rose-50"
-                      >
-                        <FontAwesomeIcon icon={faTrashCan} fontSize={16} />
-                      </Button>
-                    </div>
                   </div>
                 </div>
               </CardBody>

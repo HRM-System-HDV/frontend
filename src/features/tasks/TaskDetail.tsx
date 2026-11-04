@@ -127,33 +127,32 @@ export default function TaskDetailModal({
           {/* Hàng 2: Thông tin phân loại & Phụ trách */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs">
             <div>
-              <span className="text-gray-500 block mb-1 font-medium">Nguồn gốc công việc:</span>
-              {task.sourceType === "manager" ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold bg-rose-50 text-rose-800 border border-rose-200">
-                  <FontAwesomeIcon icon={faThumbtack} fontSize={13} className="text-rose-600" />
-                  Quản lý giao riêng
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                  <FontAwesomeIcon icon={faRotateRight} fontSize={13} className="text-blue-600" />
-                  Cố định theo ca {task.shiftName ? `• ${task.shiftName}` : ""}
-                </span>
-              )}
-              <div className="text-gray-500 mt-1.5">
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="text-gray-500 font-medium whitespace-nowrap">Nguồn gốc công việc:</span>
+                {task.sourceType === "manager" ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-semibold bg-rose-50 text-rose-800 border border-rose-200 text-xs">
+                    <FontAwesomeIcon icon={faThumbtack} fontSize={12} className="text-rose-600" />
+                    Quản lý giao riêng
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-semibold bg-blue-50 text-blue-800 border border-blue-200 text-xs">
+                    <FontAwesomeIcon icon={faRotateRight} fontSize={12} className="text-blue-600" />
+                    Cố định theo ca {task.shiftName ? `• ${task.shiftName}` : ""}
+                  </span>
+                )}
+              </div>
+              <div className="text-gray-500">
                 Người khởi tạo: <strong className="text-gray-700">{task.assignedByName}</strong>
               </div>
             </div>
 
             <div>
-              <span className="text-gray-500 block mb-1 font-medium">Đối tượng thực hiện:</span>
-              <div className="font-semibold text-gray-800 text-sm flex items-center gap-1.5">
-                <span>{task.assignedToName}</span>
-                {task.branch ? (
-                  <span className="text-gray-400 font-normal text-xs">({task.branch})</span>
-                ) : null}
+              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                <span className="text-gray-500 font-medium whitespace-nowrap">Đối tượng thực hiện:</span>
+                <span className="font-semibold text-gray-800 text-xs">{task.assignedToName}</span>
               </div>
-              <div className="text-gray-500 mt-1.5 flex items-center gap-1">
-                <FontAwesomeIcon icon={faClock} fontSize={14} className={isOverdue ? "text-red-600" : "text-gray-400"} />
+              <div className="text-gray-500 flex items-center gap-1">
+                <FontAwesomeIcon icon={faClock} fontSize={13} className={isOverdue ? "text-red-600" : "text-gray-400"} />
                 <span>Hạn chót: </span>
                 <strong className={isOverdue ? "text-red-600 font-bold" : "text-gray-700"}>
                   {task.dueDate} {isOverdue && "(Đã quá hạn)"}

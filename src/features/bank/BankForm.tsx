@@ -6,6 +6,7 @@ import {
   faBuildingColumns,
   faShieldHalved,
   faCircleCheck,
+  faCircleXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -23,13 +24,15 @@ interface Props {
 
 export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }: Props) {
   const [accountName, setAccountName] = useState("");
+  const [branch, setBranch] = useState("");
   const [status, setStatus] = useState("hoạt động");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (partner) {
-      setAccountName(partner.accountName);
+      setAccountName(partner.accountName || "");
+      setBranch(partner.branch || "");
       setStatus(partner.status === "active" ? "hoạt động" : "vô hiệu hóa");
       setError(null);
     }
@@ -68,7 +71,11 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
         method: "PUT",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ accountName: accountName.trim(), status }),
+        body: JSON.stringify({
+          accountName: accountName.trim(),
+          branch: branch.trim(),
+          status,
+        }),
       });
       const text = await res.text();
       let body: unknown = null;
@@ -82,10 +89,11 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
         throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
       }
       const data = (body as { data: unknown } | null)?.data ?? body;
-      const row = data as { accountName?: string; bankName?: string; balance?: number; status?: string };
+      const row = data as { accountName?: string; bankName?: string; branch?: string; balance?: number; status?: string };
       onSaved?.({
         ...partner,
         accountName: row.accountName ?? accountName.trim() ?? partner.accountName,
+        branch: row.branch ?? branch.trim() ?? partner.branch,
         name: row.bankName ?? partner.name,
       });
       onClose();
@@ -95,6 +103,8 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
       setSaving(false);
     }
   };
+
+  const isConnected = partner.connectionStatus === "connected";
 
   return (
     <Modal
@@ -136,11 +146,20 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
           </div>
         </div>
 
-        <Field label="Chủ tài khoản">
+        <Field label="Chủ tài khoản (Người dùng tự nhập)">
           <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={saving} />
         </Field>
 
-        <Field label="Trạng thái">
+        <Field label="Chi nhánh mở tài khoản (Người dùng tự nhập)">
+          <Input
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            placeholder="Ví dụ: Chi nhánh Ba Đình - Hà Nội"
+            disabled={saving}
+          />
+        </Field>
+
+        <Field label="Trạng thái tài khoản">
           <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={saving}>
             <option value="hoạt động">hoạt động</option>
             <option value="vô hiệu hóa">vô hiệu hóa</option>
@@ -153,28 +172,37 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
           </div>
         )}
 
+        {/* Khung hệ thống tự động xác nhận trạng thái */}
         <div className="p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-2.5">
           <div className="flex items-center gap-1.5 font-bold text-emerald-900">
             <FontAwesomeIcon icon={faShieldHalved} />
-            Chứng thực Bảo mật & Trạng thái Liên kết
+            Chứng thực Bảo mật & Trạng thái Hệ thống
           </div>
           <div className="flex justify-between text-gray-700">
             <span>Trạng thái liên kết:</span>
-            <span className="font-semibold text-emerald-700 flex items-center gap-1">
-              <FontAwesomeIcon icon={faCircleCheck} fontSize={11} /> Đã liên kết & Sẵn sàng chi lương
-            </span>
+            {isConnected ? (
+              <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                <FontAwesomeIcon icon={faCircleCheck} fontSize={11} /> Đã kết nối & Sẵn sàng chi lương
+              </span>
+            ) : (
+              <span className="font-semibold text-red-600 flex items-center gap-1">
+                <FontAwesomeIcon icon={faCircleXmark} fontSize={11} /> Chưa kết nối Gateway
+              </span>
+            )}
           </div>
           <div className="flex justify-between text-gray-700">
             <span>Chứng thực số doanh nghiệp:</span>
-            <span className="font-semibold text-gray-900">Hợp lệ (Hạn đến: {partner.certExpiry})</span>
+            <span className="font-semibold text-gray-900">
+              {isConnected ? `Hợp lệ (Hạn đến: ${partner.certExpiry})` : "Chưa cấu hình"}
+            </span>
           </div>
           <div className="flex justify-between text-gray-700">
             <span>Kênh truyền dữ liệu:</span>
-            <span className="font-medium text-gray-800">Gateway</span>
+            <span className="font-medium text-gray-800">{partner.channel || "Gateway"}</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-500">
             <FontAwesomeIcon icon={faBuildingColumns} fontSize={11} />
-            Chi nhánh mở tài khoản: <span className="font-semibold text-gray-800">{partner.branch}</span>
+            Chi nhánh đăng ký: <span className="font-semibold text-gray-800">{branch || "Chưa nhập chi nhánh"}</span>
           </div>
         </div>
       </div>
@@ -211,6 +239,7 @@ export function CreateBankAccountModal({
   const [customBankName, setCustomBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("CÔNG TY CỔ PHẦN HRM SYSTEM");
+  const [branch, setBranch] = useState("Chi nhánh Ba Đình - Hà Nội");
   const [balanceStr, setBalanceStr] = useState("500000000");
   const [isPrimary, setIsPrimary] = useState(isFirstAccount);
   const [saving, setSaving] = useState(false);
@@ -222,6 +251,7 @@ export function CreateBankAccountModal({
       setCustomBankName("");
       setAccountNumber("");
       setAccountName("CÔNG TY CỔ PHẦN HRM SYSTEM");
+      setBranch("Chi nhánh Ba Đình - Hà Nội");
       setBalanceStr("500000000");
       setIsPrimary(isFirstAccount);
       setError(null);
@@ -259,6 +289,7 @@ export function CreateBankAccountModal({
           bankName: finalBank,
           accountNumber: accountNumber.trim(),
           accountName: accountName.trim(),
+          branch: branch.trim(),
           balance: balanceNum,
           isPrimary,
         }),
@@ -340,6 +371,15 @@ export function CreateBankAccountModal({
             value={accountName}
             onChange={(e) => setAccountName(e.target.value)}
             placeholder="Ví dụ: CÔNG TY CỔ PHẦN HRM SYSTEM"
+            disabled={saving}
+          />
+        </Field>
+
+        <Field label="Chi nhánh mở tài khoản (Tự nhập)">
+          <Input
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            placeholder="Ví dụ: Chi nhánh Ba Đình - Hà Nội"
             disabled={saving}
           />
         </Field>

@@ -10,6 +10,7 @@ import NewsSection from "@/features/news/NewsList";
 import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
 import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
+import { getTodayVN } from "@/lib/utils";
 
 async function parseEnvelope<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -108,7 +109,7 @@ export default function NewsPage() {
       } else {
         const created = await apiPost<NewsItem>("/api/news", {
           ...payload,
-          date: new Date().toLocaleDateString("vi-VN").replace(/\//g, "-"),
+          date: getTodayVN(),
         });
         setNewsList((prev) => [created, ...prev]);
       }
@@ -195,6 +196,7 @@ export default function NewsPage() {
         onClose={() => setSelectedNews(null)}
         onEdit={handleOpenEdit}
         onDelete={handleDeleteNews}
+        onTogglePin={handleTogglePin}
       />
 
       {/* Modal tạo/sửa thông báo */}
