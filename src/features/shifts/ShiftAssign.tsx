@@ -58,8 +58,15 @@ export default function AssignShiftModal({
   }, [open ]);
   // Chi nhánh: rỗng = admin xem "Tất cả chi nhánh" -> mở select để tự chọn lúc phân công;
   // có giá trị (hoặc manager) -> khóa cứng theo chi nhánh đang lọc.
-  const isBranchLocked = isManager || (!!branch && branch !== "all");
+  // Chỉ khóa chi nhánh khi tài khoản là Manager (chỉ được phân ca chi nhánh mình)
+  const isBranchLocked = isManager;
   const branchDisplay = isManager ? (managerBranch ?? branch) : branch;
+  const branchName = (() => {
+    const target = (branchDisplay || "").toLowerCase().replace(/-/g, "");
+    const matched = branches.find((b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target);
+    return matched ? matched.name : branchDisplay;
+  })();
+  
   return (
     <Modal open={open} onClose={onClose} title="Phân công nhân viên vào ca" size="lg" footer={<><Button variant="white" onClick={onClose}>Hủy</Button><Button onClick={onSave}>Phân công</Button></>}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
@@ -73,7 +80,7 @@ export default function AssignShiftModal({
         <Field label="Chi nhánh" required>
           {isBranchLocked ? (
             <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-              <span>Chi nhánh {branchDisplay}</span>
+              <span>{branchName || `Chi nhánh ${branchDisplay}`}</span>
               <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">{isManager ? "Cố định" : "Đã chọn"}</span>
             </div>
           ) : (
@@ -83,7 +90,7 @@ export default function AssignShiftModal({
               </option>
               {branches.map((b) => (
                 <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  Chi nhánh {b.slug.toUpperCase()} ({b.name})
+                  {b.name} ({b.slug.toUpperCase()})
                 </option>
               ))}
             </Select>

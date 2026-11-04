@@ -5,10 +5,9 @@ import {
   faBuildingColumns,
   faCheck,
   faCircleCheck,
-  faKey,
+  faCircleXmark,
   faShieldHalved,
   faStar,
-  faPlus,
 } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
@@ -40,6 +39,7 @@ export default function BankPartnersList({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {partners.map((partner) => {
             const isPrimary = partner.isPrimary;
+            const isConnected = partner.connectionStatus === "connected";
             return (
               <div
                 key={partner.id}
@@ -103,9 +103,15 @@ export default function BankPartnersList({
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span>Trạng thái liên kết:</span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
-                      <FontAwesomeIcon icon={faCircleCheck} fontSize={11} /> Sẵn sàng chuyển tiền
-                    </span>
+                    {isConnected ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                        <FontAwesomeIcon icon={faCircleCheck} fontSize={11} /> Sẵn sàng chuyển tiền
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600">
+                        <FontAwesomeIcon icon={faCircleXmark} fontSize={11} /> Chưa kết nối Gateway
+                      </span>
+                    )}
                   </div>
                 </div>
 

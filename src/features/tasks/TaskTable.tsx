@@ -1,7 +1,7 @@
 "use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheck, faCircleExclamation, faClock, faFire, faRotateRight, faThumbtack } from "@fortawesome/free-solid-svg-icons";
+import { faCheck, faCircleExclamation, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import type { TaskItem, TaskPriority, TaskStatus } from "./types";
 
 interface TaskTableProps {
@@ -93,7 +93,7 @@ export default function TaskTable({
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold text-xs uppercase tracking-wider">
             <tr>
-              <th className="py-3.5 px-4">Nguồn việc</th>
+              <th className="py-3.5 px-4">Tên công việc</th>
               <th className="py-3.5 px-4">Người thực hiện</th>
               <th className="py-3.5 px-4">Hạn hoàn thành</th>
               <th className="py-3.5 px-4">Mức độ</th>
@@ -103,76 +103,52 @@ export default function TaskTable({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {tasks.map((task) => {
-              const isOverdue = task.status === "overdue";
               const isCompleted = task.status === "completed";
 
               return (
                 <tr
                   key={task.id}
-                  onClick={() => onOpenDetail(task)}
-                  className={`hover:bg-gray-50/80 transition-colors cursor-pointer ${
+                  className={`hover:bg-gray-50/80 transition-colors ${
                     isCompleted ? "bg-gray-50/40 opacity-75" : ""
                   }`}
                 >
-                  {/* Cột 1: Nguồn việc */}
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    {task.sourceType === "manager" ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-rose-50 text-rose-800 border border-rose-200">
-                        <FontAwesomeIcon icon={faThumbtack} fontSize={13} className="text-rose-600" />
-                        Quản lý giao riêng
-                      </span>
-                    ) : (
-                      <div className="inline-flex flex-col">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">
-                          <FontAwesomeIcon icon={faRotateRight} fontSize={13} className="text-blue-600" />
-                          Cố định theo ca
-                        </span>
-                        {task.shiftName && (
-                          <span className="text-[11px] text-gray-500 mt-0.5 ml-1">
-                            {task.shiftName}
-                          </span>
-                        )}
+                  {/* Cột 1: Tên công việc */}
+                  <td className="py-3.5 px-4">
+                    <div className="font-semibold text-gray-900 text-xs">
+                      {task.title}
+                    </div>
+                    {task.description && (
+                      <div className="text-[11px] text-gray-400 truncate max-w-xs mt-0.5">
+                        {task.description}
                       </div>
                     )}
                   </td>
 
-                  {/* Cột 3: Người thực hiện */}
+                  {/* Cột 2: Người thực hiện — Chỉ hiển thị tên nhân viên */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                        {task.assignedToName.charAt(0)}
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900 text-xs">
-                          {task.assignedToName}
-                        </div>
-                        {task.branch ? (
-                          <div className="text-[11px] text-gray-400">
-                            {task.branch}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
+                    <span className="font-medium text-gray-900 text-xs">
+                      {task.assignedToName}
+                    </span>
                   </td>
 
-                  {/* Cột 4: Hạn chót */}
+                  {/* Cột 3: Hạn hoàn thành */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <div className="text-xs font-medium text-gray-800">
                       {task.dueDate}
                     </div>
                   </td>
 
-                  {/* Cột 5: Mức độ ưu tiên */}
+                  {/* Cột 4: Mức độ ưu tiên */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     {renderPriorityBadge(task.priority)}
                   </td>
 
-                  {/* Cột 6: Trạng thái */}
+                  {/* Cột 5: Trạng thái */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     {renderStatusBadge(task.status)}
                   </td>
 
-                  {/* Cột 7: Thao tác — Chỉ có nút Chi tiết duy nhất, mở modal đầy đủ chức năng */}
+                  {/* Cột 6: Thao tác — Chỉ có nút Chi tiết duy nhất, mở modal đầy đủ chức năng */}
                   <td className="py-3.5 px-4 whitespace-nowrap text-right">
                     <button
                       type="button"

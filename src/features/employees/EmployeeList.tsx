@@ -25,6 +25,8 @@ interface Props {
   onDelete?: (e: Employee) => void;
   isManager?: boolean;
   managerBranch?: string;
+  selectedBranchFilter?: string;
+  onBranchFilterChange?: (b: string) => void;
 }
 
 export default function EmployeeSection({
@@ -37,11 +39,18 @@ export default function EmployeeSection({
   onDelete,
   isManager = false,
   managerBranch,
+  selectedBranchFilter,
+  onBranchFilterChange,
 }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [branchFilter, setBranchFilter] = useState<string>(
+  const [internalBranchFilter, setInternalBranchFilter] = useState<string>(
     isManager && managerBranch ? managerBranch : "all"
   );
+  const branchFilter = selectedBranchFilter !== undefined ? selectedBranchFilter : internalBranchFilter;
+  const setBranchFilter = (val: string) => {
+    if (onBranchFilterChange) onBranchFilterChange(val);
+    else setInternalBranchFilter(val);
+  };
   const [departmentFilter, setDepartmentFilter] = useState<string>("all");
 
   const filteredEmployees = useMemo(() => {
@@ -62,6 +71,23 @@ export default function EmployeeSection({
       return matchesSearch && matchesBranch && matchesDepartment;
     });
   }, [employees, searchQuery, branchFilter, departmentFilter]);
+
+    const branchMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of branches) {
+      const slugKey = (b.slug || "").toLowerCase().replace(/-/g, "");
+      if (slugKey) map.set(slugKey, b.name);
+      if (b.id) map.set(b.id.toLowerCase().replace(/-/g, ""), b.name);
+      if (b.name) map.set(b.name.toLowerCase().replace(/-/g, ""), b.name);
+    }
+    return map;
+  }, [branches]);
+
+  const getBranchDisplayName = (slugOrName?: string) => {
+    if (!slugOrName) return "—";
+    const key = slugOrName.toLowerCase().replace(/-/g, "");
+    return branchMap.get(key) || slugOrName;
+  };
 
   const columns: Column<Employee>[] = [
     {
@@ -90,7 +116,7 @@ export default function EmployeeSection({
     {
       key: "branch",
       header: "Chi nhánh",
-      render: (e) => <Badge tone="gray">{e.branch}</Badge>,
+      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branch)}</Badge>,
     },
     {
       key: "department",
@@ -157,12 +183,12 @@ export default function EmployeeSection({
               </span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
+            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs max-w-[180px]">
               <FontAwesomeIcon icon={faStore} fontSize={14} className="text-gray-500" />
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-transparent border-none text-xs font-bold text-gray-800 focus:outline-hidden cursor-pointer"
+                className="bg-transparent border-none text-xs font-semibold text-gray-800 focus:outline-hidden cursor-pointer truncate w-full"
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (

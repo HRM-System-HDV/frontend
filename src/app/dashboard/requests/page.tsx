@@ -139,9 +139,10 @@ export default function RequestsPage() {
   const [branchFilter, setBranchFilter] = useState<string>(isManager ? managerBranch : "all");
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [attConfigSaving, setAttConfigSaving] = useState(false);
   const [attConfig, setAttConfig] = useState<AttendanceConfigState>({
     gracePeriod: "5",
-    shiftSwapMode: "manager",
+    shiftSwapMode: "Nhân viên tự xác nhận",
     requireReasonSwap: true,
     allowDoubleCheckin: true,
     latePenaltyPct: "10",
@@ -209,19 +210,29 @@ export default function RequestsPage() {
 
       if (configRes.status === "fulfilled" && configRes.value) {
         const c = configRes.value;
+        const mapMode = (m?: string) => {
+          if (!m || m === "manual") return "Nhân viên tự xác nhận";
+          if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
+          return m;
+        };
+        const formatOption = (val: any, fallback: string) => {
+          if (val === 0) return "Không giới hạn";
+          if (val != null) return `${val} lần`;
+          return fallback;
+        };
         setAttConfig((prev) => ({
           ...prev,
           gracePeriod: String(c.gracePeriodMinutes ?? prev.gracePeriod),
-          shiftSwapMode: c.shiftSwapMode || prev.shiftSwapMode,
+          shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
           requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
           allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
           latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
           earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
           earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
-          maxPenaltiesPerMonth: c.maxPenaltiesPerMonth != null ? `${c.maxPenaltiesPerMonth} lần` : prev.maxPenaltiesPerMonth,
+          maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
           deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
-          maxCheckinsPerDay: c.maxCheckinsPerDay != null ? `${c.maxCheckinsPerDay} lần` : prev.maxCheckinsPerDay,
-          maxSwapsPerMonth: c.maxSwapsPerMonth != null ? `${c.maxSwapsPerMonth} lần` : prev.maxSwapsPerMonth,
+          maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
+          maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
         }));
       }
     } catch (e: any) {
@@ -325,10 +336,15 @@ export default function RequestsPage() {
     }
   };
 
-  // Lưu cấu hình chấm công khi đóng modal
-  const handleCloseAttendanceModal = async () => {
-    setAttendanceOpen(false);
+  // Lưu cấu hình chấm công vào backend DB
+  const handleSaveAttendanceConfig = async () => {
     try {
+      setAttConfigSaving(true);
+      const parseLimit = (str: string) => {
+        if (!str || str.includes("Không giới hạn")) return 0;
+        const num = parseInt(str, 10);
+        return isNaN(num) ? 0 : num;
+      };
       await apiPut("/api/attendance/config", {
         gracePeriodMinutes: parseInt(attConfig.gracePeriod, 10) || 5,
         shiftSwapMode: attConfig.shiftSwapMode,
@@ -337,14 +353,17 @@ export default function RequestsPage() {
         latePenaltyPct: parseInt(attConfig.latePenaltyPct, 10) || 0,
         earlyLeavePenaltyPct: parseInt(attConfig.earlyLeavePenaltyPct, 10) || 0,
         earlyCheckinMinutes: parseInt(attConfig.earlyCheckinMinutes, 10) || 0,
-        maxPenaltiesPerMonth: parseInt(attConfig.maxPenaltiesPerMonth, 10) || 0,
+        maxPenaltiesPerMonth: parseLimit(attConfig.maxPenaltiesPerMonth),
         deductOnCheckout: attConfig.deductOnCheckout,
-        maxCheckinsPerDay: parseInt(attConfig.maxCheckinsPerDay, 10) || 0,
-        maxSwapsPerMonth: parseInt(attConfig.maxSwapsPerMonth, 10) || 0,
+        maxCheckinsPerDay: parseLimit(attConfig.maxCheckinsPerDay),
+        maxSwapsPerMonth: parseLimit(attConfig.maxSwapsPerMonth),
       });
       showToast("Đã lưu cấu hình chấm công vào hệ thống", "success");
-    } catch {
-      // ignore
+      setAttendanceOpen(false);
+    } catch (e: any) {
+      showToast(e?.message || "Lưu cấu hình thất bại", "danger");
+    } finally {
+      setAttConfigSaving(false);
     }
   };
 
@@ -505,7 +524,9 @@ export default function RequestsPage() {
 
       <AttendanceConfigModal
         open={attendanceOpen}
-        onClose={handleCloseAttendanceModal}
+        onClose={() => setAttendanceOpen(false)}
+        onSave={handleSaveAttendanceConfig}
+        saving={attConfigSaving}
         config={attConfig}
         setConfig={setAttConfig}
       />

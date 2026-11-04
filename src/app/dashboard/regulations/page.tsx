@@ -10,6 +10,7 @@ import RegulationSection from "@/features/regulations/RegulationList";
 import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
 import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
+import { getTodayVN } from "@/lib/utils";
 
 // api.ts dùng chung chưa có apiPut/apiDelete (quy tắc phân công: chỉ đọc, không sửa)
 // nên đặt helper cục bộ trong trang, giống tiền lệ các trang employees/payslips/news.
@@ -64,7 +65,7 @@ async function apiDelete<T>(path: string): Promise<T> {
 }
 
 function todayStr(): string {
-  return new Date().toLocaleDateString("vi-VN").replace(/\//g, "-");
+  return getTodayVN();
 }
 
 export default function RegulationsManagementPage() {
@@ -173,7 +174,7 @@ export default function RegulationsManagementPage() {
   };
 
   // Xóa nội quy qua API thật
-  const handleDeleteItem = async (id: string, title: string) => {
+  const handleDeleteItem = async (id: string, title?: string) => {
     if (!confirm(`Bạn có chắc chắn muốn xóa văn bản nội quy "${title}" không?`)) return;
     try {
       await apiDelete(`/api/regulations/${id}`);
@@ -228,7 +229,13 @@ export default function RegulationsManagementPage() {
       )}
 
       {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH */}
-      <RegulationDetailModal item={viewingItem} onClose={() => setViewingItem(null)} onEdit={handleEditFromView} />
+      <RegulationDetailModal
+        item={viewingItem}
+        onClose={() => setViewingItem(null)}
+        onEdit={handleEditFromView}
+        onDelete={handleDeleteItem}
+        onTogglePin={handleTogglePin}
+      />
 
       {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}
       {isEditModalOpen && (

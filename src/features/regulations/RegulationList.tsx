@@ -2,23 +2,24 @@
 
 import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCalendar, faEye, faGavel, faMagnifyingGlass, faPen, faThumbtack, faTrashCan } from "@fortawesome/free-solid-svg-icons";
+import { faCalendar, faGavel, faMagnifyingGlass, faThumbtack } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
 import type { Regulation, Branch } from "@/types";
 import { getStatusTone, getCategoryColor } from "./helpers";
+import { formatDate } from "@/lib/utils";
 
 interface Props {
   items: Regulation[];
   onView: (item: Regulation) => void;
-  onEdit: (item: Regulation) => void;
-  onDelete: (id: string, title: string) => void;
-  onTogglePin: (id: string) => void;
+  onEdit?: (item: Regulation) => void;
+  onDelete?: (id: string, title: string) => void;
+  onTogglePin?: (id: string) => void;
 }
 
-export default function RegulationSection({ items, onView, onEdit, onDelete, onTogglePin }: Props) {
+export default function RegulationSection({ items, onView }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -177,51 +178,20 @@ export default function RegulationSection({ items, onView, onEdit, onDelete, onT
                     <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500 pt-1">
                       <span className="flex items-center gap-1">
                         <FontAwesomeIcon icon={faCalendar} fontSize={14} className="text-slate-400" />
-                        Hiệu lực: <strong className="text-slate-700">{item.effectiveDate}</strong>
+                        Hiệu lực: <strong className="text-slate-700">{formatDate(item.effectiveDate)}</strong>
                       </span>
                     </div>
                   </div>
 
                   {/* Right Actions */}
-                  <div className="flex items-center md:flex-col gap-2 shrink-0 justify-end pt-2 md:pt-0">
+                  <div className="flex items-center shrink-0 justify-end pt-2 md:pt-0">
                     <Button
                       variant="primary"
                       size="sm"
                       onClick={() => onView(item)}
-                      className="flex items-center gap-1.5"
                     >
-                      <FontAwesomeIcon icon={faEye} fontSize={16} />
-                      Xem toàn văn
+                      Chi tiết
                     </Button>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title={item.pinned ? "Bỏ ghim" : "Ghim lên đầu"}
-                        onClick={() => onTogglePin(item.id)}
-                        className={item.pinned ? "text-amber-600" : "text-slate-400"}
-                      >
-                        <FontAwesomeIcon icon={faThumbtack} fontSize={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Chỉnh sửa văn bản"
-                        onClick={() => onEdit(item)}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        <FontAwesomeIcon icon={faPen} fontSize={16} />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        title="Xóa nội quy"
-                        onClick={() => onDelete(item.id, item.title)}
-                        className="text-rose-500 hover:bg-rose-50"
-                      >
-                        <FontAwesomeIcon icon={faTrashCan} fontSize={16} />
-                      </Button>
-                    </div>
                   </div>
                 </div>
               </CardBody>

@@ -349,12 +349,12 @@ export default function EmployeeDetailModal({
   const getSystemRoleLabel = (r: UserRole) => {
     switch (r) {
       case "admin":
-        return "Quản trị viên (Admin)";
+        return "Quản trị viên";
       case "manager":
-        return "Quản lý Chi nhánh (Manager)";
+        return "Quản lý Chi nhánh";
       case "staff":
       default:
-        return "Nhân viên (Staff)";
+        return "Nhân viên";
     }
   };
 
@@ -531,7 +531,15 @@ export default function EmployeeDetailModal({
                   </span>
                   <span>•</span>
                   <span>
-                    Chi nhánh: <strong className="text-gray-800">{isEditing ? branch : employee.branch}</strong>
+                    Chi nhánh: <strong className="text-gray-800">
+  {(() => {
+    const target = isEditing ? branch : employee.branch;
+    const matched = branches.find(
+      (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === (target || "").toLowerCase().replace(/-/g, "")
+    );
+    return matched ? matched.name : target;
+  })()}
+</strong>
                   </span>
                   <span>•</span>
                   <span>
@@ -931,9 +939,9 @@ export default function EmployeeDetailModal({
                       onChange={(e) => setSystemRole(e.target.value as UserRole)}
                       disabled={isManager}
                     >
-                      <option value="staff">Nhân viên (Staff)</option>
-                      <option value="manager">Quản lý Chi nhánh (Manager)</option>
-                      <option value="admin">Quản trị viên (Admin)</option>
+                      <option value="staff">Nhân viên</option>
+                      <option value="manager">Quản lý Chi nhánh</option>
+                      <option value="admin">Quản trị viên</option>
                     </Select>
                   </Field>
 

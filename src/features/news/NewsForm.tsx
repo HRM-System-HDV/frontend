@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Textarea, Select } from "@/components/ui/Form";
+import { apiGet } from "@/lib/api";
+import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 
 export interface NewsFormPayload {
@@ -13,6 +15,7 @@ export interface NewsFormPayload {
   tag: string;
   tagTone: NewsItem["tagTone"];
   pinned: boolean;
+  branch: string;
 }
 
 interface Props {
@@ -43,6 +46,14 @@ export default function CreateNewsModal({
   const [newSummary, setNewSummary] = useState("");
   const [newContent, setNewContent] = useState("");
   const [newPinned, setNewPinned] = useState(false);
+  const [newBranch, setNewBranch] = useState("Toàn công ty");
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    apiGet<Branch[]>("/api/branches")
+      .then((d) => setBranches(d || []))
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -51,6 +62,7 @@ export default function CreateNewsModal({
       setNewSummary(initial?.summary || "");
       setNewContent(initial?.content || "");
       setNewPinned(Boolean(initial?.pinned));
+      setNewBranch(initial?.branch || "Toàn công ty");
     }
   }, [open, initial]);
 
@@ -67,6 +79,7 @@ export default function CreateNewsModal({
       tag: newTag,
       tagTone: tone,
       pinned: newPinned || newTag === "Khẩn cấp",
+      branch: newBranch,
     });
   };
 
@@ -101,34 +114,38 @@ export default function CreateNewsModal({
           />
         </Field>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <Field label="Phân loại chuyên mục">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Field label="Phân loại chuyên mục" className="mb-0">
             <Select
               value={newTag}
-              onChange={(e) => setNewTag(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setNewTag(val);
+                if (val === "Khẩn cấp") setNewPinned(true);
+              }}
               disabled={saving}
             >
               <option value="Thông báo">Thông báo chung</option>
-              <option value="Khẩn cấp">Thông báo khẩn</option>
+              <option value="Khẩn cấp">Thông báo khẩn (Tự động ghim)</option>
               <option value="Nghỉ lễ">Nghỉ lễ</option>
               <option value="Khen thưởng">Khen thưởng</option>
               <option value="Vận hành">Vận hành</option>
             </Select>
           </Field>
 
-          <Field label="Trạng thái hiển thị">
-            <label className="flex items-center gap-2.5 h-[42px] px-3 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer">
-              <input
-                type="checkbox"
-                checked={newPinned}
-                onChange={(e) => setNewPinned(e.target.checked)}
-                disabled={saving}
-                className="w-4 h-4 accent-primary rounded cursor-pointer"
-              />
-              <span className="text-sm text-slate-700 font-medium">
-                Ghim lên đầu trang
-              </span>
-            </label>
+          <Field label="Chi nhánh áp dụng" className="mb-0">
+            <Select
+              value={newBranch}
+              onChange={(e) => setNewBranch(e.target.value)}
+              disabled={saving}
+            >
+              <option value="Toàn công ty">Toàn công ty</option>
+              {branches.map((b) => (
+                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                  Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                </option>
+              ))}
+            </Select>
           </Field>
         </div>
 
@@ -150,6 +167,25 @@ export default function CreateNewsModal({
             disabled={saving}
           />
         </Field>
+
+        <div className="flex items-center gap-6 pt-1">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="newsPinnedCheckbox"
+              checked={newPinned}
+              onChange={(e) => setNewPinned(e.target.checked)}
+              disabled={saving}
+              className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer"
+            />
+            <label
+              htmlFor="newsPinnedCheckbox"
+              className="text-xs font-semibold text-slate-700 cursor-pointer"
+            >
+              📌 Ghim thông báo này lên đầu danh sách
+            </label>
+          </div>
+        </div>
       </div>
     </Modal>
   );

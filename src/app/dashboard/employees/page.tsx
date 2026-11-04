@@ -13,6 +13,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { apiGet, apiPost, apiPut, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { getTodayVN } from "@/lib/utils";
 import type { Employee, Branch, Department } from "@/types";
 import EmployeeSection from "@/features/employees/EmployeeList";
 import DisableEmployeeDialog from "@/features/employees/EmployeeDisable";
@@ -82,6 +83,7 @@ interface CreateModalProps {
   managerBranch: string;
   branches: Branch[];
   departments: Department[];
+  selectedFilterBranch?: string;
 }
 
 function CreateEmployeeDialog({
@@ -92,6 +94,7 @@ function CreateEmployeeDialog({
   managerBranch,
   branches,
   departments,
+  selectedFilterBranch = "all",
 }: CreateModalProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -113,7 +116,13 @@ function CreateEmployeeDialog({
     if (open) {
       // Manager: cố định chi nhánh phụ trách. Admin: mặc định chi nhánh đầu tiên,
       // không tự gán cứng khi chưa có chi nhánh nào.
-      setBranch(isManager ? managerBranch || "" : branches[0]?.slug || "");
+      if (isManager) {
+        setBranch(managerBranch || "");
+      } else if (selectedFilterBranch && selectedFilterBranch !== "all") {
+        setBranch(selectedFilterBranch);
+      } else {
+        setBranch(branches[0]?.slug || "");
+      }
       // Mặc định phòng ban đầu tiên từ API thay vì tên cứng.
       setDepartment((prev) =>
         departments.some((d) => d.name === prev)
@@ -163,7 +172,7 @@ function CreateEmployeeDialog({
         bankName,
         bankAccountNumber: bankAccountNumber.trim(),
         status: "đang làm",
-        joinDate: new Date().toLocaleDateString("vi-VN").replace(/\//g, "-"),
+        joinDate: getTodayVN(),
       });
       setName("");
       setPhone("");
@@ -238,20 +247,26 @@ function CreateEmployeeDialog({
           />
         </Field>
         <Field label="Gán chi nhánh" required>
-          {isManager ? (
-            managerBranch ? (
-              <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-                <span>Chi nhánh {managerBranch.toUpperCase()}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                  Cố định
-                </span>
-              </div>
-            ) : (
-              <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
-                Tài khoản của bạn chưa được gán chi nhánh phụ trách.
-              </div>
-            )
-          ) : branches.length === 0 ? (
+          {(() => {
+            const isFilterLocked = !isManager && selectedFilterBranch && selectedFilterBranch !== "all";
+            const effectiveBranch = isManager ? managerBranch : (isFilterLocked ? selectedFilterBranch : branch);
+            const matchedBranch = branches.find(
+              (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === (effectiveBranch || "").toLowerCase().replace(/-/g, "")
+            );
+            const displayBranchName = matchedBranch ? matchedBranch.name : `Chi nhánh ${effectiveBranch?.toUpperCase()}`;
+
+            if (isManager || isFilterLocked) {
+              return (
+                <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
+                  <span>{displayBranchName}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
+                    {isManager ? "Cố định" : "Theo bộ lọc"}
+                  </span>
+                </div>
+              );
+            }
+            return null;
+          })() || (branches.length === 0 ? (
             <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
               Chưa có chi nhánh nào. Vui lòng tạo chi nhánh trước.
             </div>
@@ -266,12 +281,7 @@ function CreateEmployeeDialog({
                 </option>
               ))}
             </Select>
-          )}
-          {isManager && managerBranch && (
-            <p className="text-[11px] text-gray-400 mt-1">
-              Tài khoản Manager chỉ tạo nhân viên cho chi nhánh phụ trách
-            </p>
-          )}
+          ))}
         </Field>
         <Field label="Phòng ban" required>
           <Select
@@ -354,6 +364,9 @@ export default function EmployeesPage() {
   const isManager = role === "manager";
 
   const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
+  const [activeBranchFilter, setActiveBranchFilter] = useState<string>(
+    isManager && branchSlug ? branchSlug.toUpperCase() : "all"
+  );
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
@@ -638,6 +651,7 @@ export default function EmployeesPage() {
         onSubmit={handleCreateEmployee}
         isManager={isManager}
         managerBranch={branchSlug.toUpperCase()}
+        selectedFilterBranch={activeBranchFilter}
         branches={branches}
         departments={departments}
       />

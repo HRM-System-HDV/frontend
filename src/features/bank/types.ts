@@ -11,12 +11,16 @@ export interface BankPartner {
   soapProtocol: string;
   mTLSStatus: "valid" | "expiring_soon" | "not_configured";
   certExpiry: string;
+  channel: string;
+  connectionStatus: "connected" | "disconnected" | "checking";
 }
 
 export interface SoapTransaction {
   id: string;
   batchName: string;
   bankName: string;
+  accountNumber?: string;
+  accountName?: string;
   totalEmployees: number;
   totalAmount: number;
   status: "success" | "processing" | "pending" | "failed";
@@ -38,6 +42,8 @@ export interface SoapGatewayConfig {
   securityMode: string;
   allowedIPs: string[];
   status: "healthy" | "degraded" | "down" | "unknown";
-  lastPingTime: string;
-  avgResponseTime: string;
+  lastPingTime: string | null;
+  avgResponseTime: string | null;
+  certExpiry?: string;
+  channel?: string;
 }

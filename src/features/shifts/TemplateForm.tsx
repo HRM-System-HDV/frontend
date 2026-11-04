@@ -3,6 +3,7 @@
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input } from "@/components/ui/Form";
+import TimePicker24 from "@/components/ui/TimePicker24";
 
 interface Props {
   open: boolean;
@@ -47,11 +48,11 @@ export default function TemplateModal({
           <Input placeholder="Nhập tên khung ca..." value={name} onChange={(e) => onNameChange(e.target.value)} />
         </Field>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Giờ bắt đầu" required>
-            <Input type="time" value={start} onChange={(e) => onStartChange(e.target.value)} />
+          <Field label="Giờ bắt đầu" required hint="Quy chuẩn 00:00 - 23:59">
+            <TimePicker24 value={start} onChange={onStartChange} placeholder="07:00" />
           </Field>
-          <Field label="Giờ kết thúc" required>
-            <Input type="time" value={end} onChange={(e) => onEndChange(e.target.value)} />
+          <Field label="Giờ kết thúc" required hint="Quy chuẩn 00:00 - 23:59">
+            <TimePicker24 value={end} onChange={onEndChange} placeholder="14:00" />
           </Field>
         </div>
       </div>

@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title?: string;
+  title?: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl" | "2xl";
   children: React.ReactNode;
   footer?: React.ReactNode;
@@ -64,10 +64,16 @@ export default function Modal({
       >
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h5 className="mb-0 font-semibold">{title}</h5>
+            <div className="min-w-0 flex-1 mr-4">
+              {typeof title === "string" ? (
+                <h5 className="mb-0 font-semibold">{title}</h5>
+              ) : (
+                title
+              )}
+            </div>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-700 cursor-pointer"
+              className="text-gray-400 hover:text-gray-700 cursor-pointer shrink-0"
               aria-label="Đóng"
             >
               <FontAwesomeIcon icon={faXmark} fontSize={20} />

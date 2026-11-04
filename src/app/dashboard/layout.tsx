@@ -12,7 +12,7 @@ export default function DashboardLayout({
 }) {
   const { user, role, logout } = useCurrentUser();
   const isAdmin = role === "admin";
-  const roleName = isAdmin ? "Quản trị viên (Admin)" : "Quản lý Chi nhánh (Manager)";
+  const roleName = isAdmin ? "Quản trị viên" : "Quản lý Chi nhánh";
   const groups = buildMenuItems(role);
 
   return (

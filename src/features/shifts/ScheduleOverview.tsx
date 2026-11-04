@@ -377,7 +377,7 @@ export default function GeneralScheduleSection({
                   <option value="all">Tất cả chi nhánh</option>
                   {branches.map((b) => (
                     <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                      {b.slug.toUpperCase()} ({b.name})
+                      {b.name || b.slug.toUpperCase()}
                     </option>
                   ))}
                 </select>
@@ -485,7 +485,7 @@ export default function GeneralScheduleSection({
 
         <div className="flex items-center gap-2">
           <Badge tone="primary">
-            <FontAwesomeIcon icon={faCalendar} fontSize={13} /> {dayShifts.length} {mode === "registration" ? "khung ca" : "ca làm việc"}
+            <FontAwesomeIcon icon={faCalendar} fontSize={13} /> {dayShifts.length} ca làm việc
           </Badge>
           <Badge tone="gray">
             <FontAwesomeIcon icon={faUsers} fontSize={13} /> {totalStaffInDay} {mode === "registration" ? "lượt đăng ký" : "lượt nhân sự"}
