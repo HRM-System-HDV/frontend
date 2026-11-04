@@ -2,16 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faGear, faPencil, faLock } from "@fortawesome/free-solid-svg-icons";
+import { faGear, faPencil, faLock, faFileExcel } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import type { Payslip } from "@/types";
 import PayslipSection from "@/features/payslips/PayslipList";
 import BulkClosePayslipModal from "@/features/payslips/PayslipClose";
+import ExportPayslipModal from "@/features/payslips/PayslipExport";
 import GeneratePayslipModal, { type GenerateInput } from "@/features/payslips/PayslipGenerate";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { EditPayslipModal, ConfirmClosePayslipDialog, PrintPayslipModal } from "@/features/payslips/PayslipEdit";
 import { useCurrentUser } from "@/context/AuthContext";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
 
 // api.ts dùng chung chưa có apiPut (quy tắc phân công: chỉ đọc, không sửa)
@@ -68,16 +70,17 @@ interface EmployeeRow {
 }
 
 export default function PayslipsPage() {
-  const { role, branchSlug } = useCurrentUser();
+  const { role, branchSlug, name: currentUserName } = useCurrentUser();
   const isManager = role === "manager";
 
   const [slips, setSlips] = useState<Payslip[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState("all");
+  const [selectedMonth, setSelectedMonth] = useLocalStorageState<string>("hrm_payslips_selected_month", "all");
 
   const [closeSlipOpen, setCloseSlipOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [generateOpen, setGenerateOpen] = useState(false);
   const [generateSaving, setGenerateSaving] = useState(false);
@@ -364,25 +367,36 @@ export default function PayslipsPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
-          !isManager ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="white"
-                onClick={() => {
-                  setGenerateError(null);
-                  setGenerateOpen(true);
-                }}
-              >
-                <FontAwesomeIcon icon={faPencil} fontSize={14} /> Tạo phiếu lương tháng
-              </Button>
-              <Button onClick={() => setCloseSlipOpen(true)}>
-                <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
-              </Button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isManager && (
+              <>
+                <Button
+                  variant="white"
+                  onClick={() => {
+                    setGenerateError(null);
+                    setGenerateOpen(true);
+                  }}
+                >
+                  <FontAwesomeIcon icon={faPencil} fontSize={14} /> Tạo phiếu lương tháng
+                </Button>
+                <Button onClick={() => setCloseSlipOpen(true)}>
+                  <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
+                </Button>
+              </>
+            )}
+            <Button
+              variant="white"
+              onClick={() => setExportOpen(true)}
+              className="flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200"
+            >
+              <FontAwesomeIcon icon={faFileExcel} className="text-emerald-600" fontSize={15} /> Xuất file
+            </Button>
+            {!isManager && (
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
               </Button>
-            </div>
-          ) : undefined
+            )}
+          </div>
         }
       />
 
@@ -413,6 +427,7 @@ export default function PayslipsPage() {
           }}
           onCloseOne={setConfirmCloseSlipTarget}
           onPrint={setPrintSlipTarget}
+          onExport={() => setExportOpen(true)}
           
           
           selectedMonth={selectedMonth}
@@ -500,6 +515,14 @@ export default function PayslipsPage() {
         onCancel={() => setConfirmCloseSlipTarget(null)}
       />
       <PrintPayslipModal payslip={printSlipTarget} onClose={() => setPrintSlipTarget(null)} />
+      <ExportPayslipModal
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+        payslips={visibleSlips}
+        months={monthOptions}
+        defaultMonth={selectedMonth}
+        userName={currentUserName || "Quản trị viên"}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBullhorn,
@@ -28,10 +29,10 @@ export default function NewsSection({
   items,
   onSelect,
 }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [tagFilter, setTagFilter] = useState("all");
-  const [pinnedFilter, setPinnedFilter] = useState("all");
-  const [branchFilter, setBranchFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_news_search", "");
+  const [tagFilter, setTagFilter] = useLocalStorageState<string>("hrm_news_tag_filter", "all");
+  const [pinnedFilter, setPinnedFilter] = useLocalStorageState<string>("hrm_news_pinned_filter", "all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_news_branch_filter", "all");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faClock, faBuilding, faCalendarDay, faTrashCan, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -21,8 +22,8 @@ interface Props {
 
 export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: Props) {
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
-  const [branchFilter, setBranchFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_shift_list_branch_filter", "all");
+  const [dateFilter, setDateFilter] = useLocalStorageState<string>("hrm_shift_list_date_filter", "");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
@@ -70,18 +71,6 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
             className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
           >
             Chi tiết
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm(`Bạn có chắc muốn xóa ca làm việc của "${s.employee}" (${s.templateName} - ${s.date})?`)) {
-                onDelete(s.id);
-              }
-            }}
-            className="p-1.5 rounded-lg text-xs text-red-600 hover:bg-red-50 hover:text-red-700 transition-all cursor-pointer"
-            title="Xóa ca làm việc này"
-          >
-            <FontAwesomeIcon icon={faTrashCan} fontSize={14} />
           </button>
         </div>
       ),

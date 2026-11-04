@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLock,
@@ -31,7 +32,7 @@ export default function DepartmentList({
   onDelete,
   isManager = false,
 }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_departments_search", "");
 
   // Tính số nhân sự thực tế theo từng phòng ban
   const staffCounts = useMemo(() => {

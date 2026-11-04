@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -77,38 +77,38 @@ export default function BankPartnersList({
                 </div>
 
                 <div className="mt-4 space-y-2 text-xs">
-                  <div className="flex justify-between items-center text-gray-600 bg-gray-50 p-2 rounded-lg border border-gray-100">
+                  <div className="flex justify-between items-center text-gray-600">
                     <span>Số tài khoản:</span>
-                    <span className="font-mono font-bold text-gray-900">
+                    <span className="font-mono font-bold text-gray-900 text-right">
                       {partner.accountNumber}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span>Chủ tài khoản:</span>
-                    <span className="font-semibold text-gray-800 truncate max-w-[170px]">
+                    <span className="font-semibold text-gray-800 text-right truncate max-w-[170px]">
                       {partner.accountName}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span>Số dư khả dụng:</span>
-                    <span className="font-bold text-emerald-700 text-sm">
+                    <span className="font-bold text-emerald-700 text-sm text-right">
                       {formatVND(partner.balance)}
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span>Hình thức chi lương:</span>
-                    <span className="font-medium text-gray-800 bg-gray-100 px-2 py-0.5 rounded text-[11px]">
+                    <span className="font-medium text-gray-800 text-right">
                       Chuyển tiền theo lô 24/7
                     </span>
                   </div>
                   <div className="flex justify-between items-center text-gray-600">
                     <span>Trạng thái liên kết:</span>
                     {isConnected ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700">
+                      <span className="inline-flex items-center justify-end gap-1 text-[11px] font-semibold text-emerald-700 text-right">
                         <FontAwesomeIcon icon={faCircleCheck} fontSize={11} /> Sẵn sàng chuyển tiền
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600">
+                      <span className="inline-flex items-center justify-end gap-1 text-[11px] font-semibold text-red-600 text-right">
                         <FontAwesomeIcon icon={faCircleXmark} fontSize={11} /> Chưa kết nối Gateway
                       </span>
                     )}

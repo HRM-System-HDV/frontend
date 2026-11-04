@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalendar, faGavel, faMagnifyingGlass, faThumbtack } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody } from "@/components/ui/Card";
@@ -20,10 +21,10 @@ interface Props {
 }
 
 export default function RegulationSection({ items, onView }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [scopeFilter, setScopeFilter] = useState("all");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_regulations_search", "");
+  const [categoryFilter, setCategoryFilter] = useLocalStorageState<string>("hrm_regulations_category_filter", "all");
+  const [statusFilter, setStatusFilter] = useLocalStorageState<string>("hrm_regulations_status_filter", "all");
+  const [scopeFilter, setScopeFilter] = useLocalStorageState<string>("hrm_regulations_scope_filter", "all");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {

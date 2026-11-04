@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalendar, faClock, faPhone, faTrashCan, faUserCheck } from "@fortawesome/free-solid-svg-icons";
@@ -41,7 +41,7 @@ export default function StaffShiftDetailModal({
   const isCheckedIn = staff.checkInStatus === "checked_in";
   const isInProgress = staff.checkInStatus === "in_progress";
   const isNotYet = staff.checkInStatus === "not_yet";
-  const isForgot = isNotYet && !day.isToday; // quá ngày hôm nay hoặc đã qua
+  const isForgot = isNotYet && shift.status === 'completed'; // quá ngày hôm nay hoặc đã qua
 
   const isLate = (() => {
     if (!isCheckedIn || !staff.checkInTime || !shift.timeRange) return false;

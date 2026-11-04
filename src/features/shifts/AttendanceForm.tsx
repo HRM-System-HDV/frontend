@@ -94,22 +94,30 @@ export default function AttendanceConfigModal({ open, onClose, onSave, saving, c
               </div>
             </Field>
             <Field label="Cho phép chấm công trễ" required>
-              <Input
-                type="number"
-                min={0}
-                placeholder="Số phút (VD: 10 phút)"
-                value={config.gracePeriod}
-                onChange={(e) => setConfig((p) => ({ ...p, gracePeriod: e.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Số phút (VD: 10 phút)"
+                  value={config.gracePeriod}
+                  onChange={(e) => setConfig((p) => ({ ...p, gracePeriod: e.target.value }))}
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
+              </div>
             </Field>
             <Field label="Cho phép chấm công trước giờ làm" required>
-              <Input
-                type="number"
-                min={0}
-                placeholder="Số phút (VD: 15 phút)"
-                value={config.earlyCheckinMinutes}
-                onChange={(e) => setConfig((p) => ({ ...p, earlyCheckinMinutes: e.target.value }))}
-              />
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="Số phút (VD: 15 phút)"
+                  value={config.earlyCheckinMinutes}
+                  onChange={(e) => setConfig((p) => ({ ...p, earlyCheckinMinutes: e.target.value }))}
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
+              </div>
             </Field>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

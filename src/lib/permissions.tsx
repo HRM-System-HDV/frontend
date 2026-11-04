@@ -6,6 +6,7 @@ import {
   faCalendarWeek,
   faChartPie,
   faClipboardList,
+  faClockRotateLeft,
   faCoins,
   faGavel,
   faNewspaper,
@@ -33,6 +34,7 @@ export function buildMenuItems(role: string): SidebarGroup[] {
         { label: "Bảng tin & Thông báo", href: "/dashboard/news", icon: <FontAwesomeIcon icon={faNewspaper} fontSize={20} strokeWidth={1.5} /> },
         { label: "Nội quy & Quy định", href: "/dashboard/regulations", icon: <FontAwesomeIcon icon={faGavel} fontSize={20} strokeWidth={1.5} /> },
         { label: "Cấu hình Wi-Fi", href: "/dashboard/wifi", icon: <FontAwesomeIcon icon={faWifi} fontSize={20} strokeWidth={1.5} /> },
+        { label: "Lịch sử thao tác", href: "/dashboard/backlog", icon: <FontAwesomeIcon icon={faClockRotateLeft} fontSize={20} strokeWidth={1.5} /> },
       ]
     : [
         { label: "Tổng quan Dashboard", href: "/dashboard", icon: <FontAwesomeIcon icon={faChartPie} fontSize={20} strokeWidth={1.5} /> },
@@ -47,6 +49,7 @@ export function buildMenuItems(role: string): SidebarGroup[] {
         { label: "Nội quy & Quy định", href: "/dashboard/regulations", icon: <FontAwesomeIcon icon={faGavel} fontSize={20} strokeWidth={1.5} /> },
         { label: "Thông tin Chi nhánh", href: "/dashboard/branches", icon: <FontAwesomeIcon icon={faStore} fontSize={20} strokeWidth={1.5} /> },
         { label: "Wi-Fi chi nhánh", href: "/dashboard/wifi", icon: <FontAwesomeIcon icon={faWifi} fontSize={20} strokeWidth={1.5} /> },
+        { label: "Lịch sử thao tác", href: "/dashboard/backlog", icon: <FontAwesomeIcon icon={faClockRotateLeft} fontSize={20} strokeWidth={1.5} /> },
       ];
 
   return [

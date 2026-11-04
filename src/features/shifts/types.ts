@@ -1,4 +1,4 @@
-export interface ShiftTemplate {
+﻿export interface ShiftTemplate {
   id: string;
   name: string;
   startTime: string;
@@ -8,6 +8,8 @@ export interface ShiftTemplate {
 export interface WorkShift {
   id: string;
   employee: string;
+  employeeId?: string;
+  phone?: string;
   branch: string;
   date: string;
   templateName: string;

@@ -17,8 +17,10 @@ import { getTodayVN } from "@/lib/utils";
 import type { Employee, Branch, Department } from "@/types";
 import EmployeeSection from "@/features/employees/EmployeeList";
 import DisableEmployeeDialog from "@/features/employees/EmployeeDisable";
+import EmployeeDeleteModal from "@/features/employees/EmployeeDeleteModal";
 import EmployeeDetailModal from "@/features/employees/EmployeeDetailModal";
 import { useCurrentUser } from "@/context/AuthContext";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 
 // Chuẩn hoá mã chi nhánh để so sánh (bỏ dấu gạch, không phân biệt hoa/thường).
 const normalizeSlug = (value?: string | null) =>
@@ -360,12 +362,22 @@ function CreateEmployeeDialog({
 }
 
 export default function EmployeesPage() {
-  const { role, branchSlug } = useCurrentUser();
+  const { role, branchSlug, user } = useCurrentUser();
+  const userId = user?.userId;
+  const email = user?.email;
   const isManager = role === "manager";
 
   const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
-  const [activeBranchFilter, setActiveBranchFilter] = useState<string>(
-    isManager && branchSlug ? branchSlug.toUpperCase() : "all"
+  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>(
+    "hrm_employees_branch_filter",
+    "all"
+  );
+  const activeBranchFilter = isManager && branchSlug ? branchSlug.toUpperCase() : savedBranchFilter;
+  const setActiveBranchFilter = useCallback(
+    (b: string) => {
+      if (!isManager) setSavedBranchFilter(b);
+    },
+    [isManager, setSavedBranchFilter]
   );
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -535,6 +547,19 @@ export default function EmployeesPage() {
     }
   };
 
+  const handleInitiateDelete = (emp: Employee) => {
+    const isSelf =
+      emp.id === userId ||
+      (email && emp.email && emp.email.toLowerCase() === email.toLowerCase());
+
+    if (isSelf) {
+      showToast("Không được phép xóa tài khoản của chính bạn đang đăng nhập!", "danger");
+      return;
+    }
+
+    setDeleteTarget(emp);
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -620,7 +645,7 @@ export default function EmployeesPage() {
           departments={departments}
           onOpenDetail={handleOpenDetail}
           onLock={setLockTarget}
-          onDelete={setDeleteTarget}
+          onDelete={handleInitiateDelete}
           isManager={isManager}
           managerBranch={branchSlug.toUpperCase()}
         />
@@ -662,14 +687,19 @@ export default function EmployeesPage() {
         onCancel={() => setLockTarget(null)}
       />
 
-      <ConfirmDialog
+      <EmployeeDeleteModal
         open={!!deleteTarget}
-        title="Xóa nhân viên"
-        message={`Xóa vĩnh viễn "${deleteTarget?.name}"? Hành động này không thể hoàn tác.`}
-        confirmLabel="Xác nhận xóa"
-        tone="danger"
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setDeleteTarget(null)}
+        employee={deleteTarget}
+        branches={branches}
+        departments={departments}
+        currentUserId={userId}
+        currentUserEmail={email}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={(emp) => {
+          setRawEmployees((prev) => prev.filter((e) => e.id !== emp.id));
+          showToast(`Đã xóa vĩnh viễn nhân viên "${emp.name}"`, "success");
+          setDeleteTarget(null);
+        }}
       />
     </div>
   );

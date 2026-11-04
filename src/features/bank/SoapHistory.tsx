@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faCode,
@@ -28,8 +29,8 @@ export default function SoapTransactionsTable({
   transactions,
   onViewPayload,
 }: Props) {
-  const [filterBank, setFilterBank] = useState("all");
-  const [searchTerm, setSearchTerm] = useState("");
+  const [filterBank, setFilterBank] = useLocalStorageState<string>("hrm_bank_filter_bank", "all");
+  const [searchTerm, setSearchTerm] = useLocalStorageState<string>("hrm_bank_search_term", "");
 
   const filtered = useMemo(() => {
     return transactions.filter((t) => {

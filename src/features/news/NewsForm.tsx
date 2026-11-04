@@ -104,8 +104,9 @@ export default function CreateNewsModal({
         </div>
       }
     >
-      <div className="space-y-4 text-sm">
-        <Field label="Tiêu đề thông báo" required>
+      <div className="text-sm">
+        {/* 1. Tiêu đề thông báo */}
+        <Field label="Tiêu đề thông báo" required className="mb-4">
           <Input
             placeholder="VD: Thông báo kiểm kê chi nhánh, lịch nghỉ lễ..."
             value={newTitle}
@@ -114,7 +115,8 @@ export default function CreateNewsModal({
           />
         </Field>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 2. Hàng 2 cột: Phân loại chuyên mục & Chi nhánh áp dụng */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <Field label="Phân loại chuyên mục" className="mb-0">
             <Select
               value={newTag}
@@ -149,7 +151,8 @@ export default function CreateNewsModal({
           </Field>
         </div>
 
-        <Field label="Tóm tắt ngắn (hiển thị trên danh sách thẻ)">
+        {/* 3. Tóm tắt ngắn */}
+        <Field label="Tóm tắt ngắn (hiển thị trên danh sách thẻ)" className="mb-4">
           <Input
             placeholder="Nội dung tóm tắt trong 1-2 câu ngắn gọn..."
             value={newSummary}
@@ -158,7 +161,8 @@ export default function CreateNewsModal({
           />
         </Field>
 
-        <Field label="Nội dung chi tiết thông báo" required>
+        {/* 4. Nội dung chi tiết */}
+        <Field label="Nội dung chi tiết thông báo" required className="mb-4">
           <Textarea
             rows={6}
             placeholder="Soạn thảo toàn văn nội dung thông báo gửi đến toàn thể nhân sự..."
@@ -168,23 +172,22 @@ export default function CreateNewsModal({
           />
         </Field>
 
-        <div className="flex items-center gap-6 pt-1">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="newsPinnedCheckbox"
-              checked={newPinned}
-              onChange={(e) => setNewPinned(e.target.checked)}
-              disabled={saving}
-              className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer"
-            />
-            <label
-              htmlFor="newsPinnedCheckbox"
-              className="text-xs font-semibold text-slate-700 cursor-pointer"
-            >
-              📌 Ghim thông báo này lên đầu danh sách
-            </label>
-          </div>
+        {/* 5. Checkbox ghim */}
+        <div className="flex items-center gap-2 pt-1">
+          <input
+            type="checkbox"
+            id="newsPinnedCheckbox"
+            checked={newPinned}
+            onChange={(e) => setNewPinned(e.target.checked)}
+            disabled={saving}
+            className="w-4 h-4 text-primary-600 rounded border-slate-300 focus:ring-primary-500 cursor-pointer"
+          />
+          <label
+            htmlFor="newsPinnedCheckbox"
+            className="text-xs font-semibold text-slate-700 cursor-pointer"
+          >
+            📌 Ghim thông báo này lên đầu danh sách
+          </label>
         </div>
       </div>
     </Modal>
