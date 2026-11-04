@@ -16,6 +16,7 @@ import TaskTable from "@/features/tasks/TaskTable";
 import CreateTaskModal, { ShiftTemplateOption } from "@/features/tasks/TaskForm";
 import TaskDetailModal from "@/features/tasks/TaskDetail";
 import { useCurrentUser } from "@/context/AuthContext";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -126,6 +127,8 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
 export default function TasksPage() {
   const { role, branchSlug, name: currentUserRealName } = useCurrentUser();
   const isAdmin = role === "admin";
+  const isManager = role === "manager";
+  const managerBranch = branchSlug ? branchSlug.toUpperCase() : "";
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [empList, setEmpList] = useState<Employee[]>([]);
@@ -136,10 +139,17 @@ export default function TasksPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusTab, setStatusTab] = useState<TaskStatus | "all">("all");
-  const [sourceFilter, setSourceFilter] = useState<TaskSourceType | "all">("all");
-  const [branchFilter, setBranchFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_tasks_search", "");
+  const [statusTab, setStatusTab] = useLocalStorageState<TaskStatus | "all">("hrm_tasks_status_tab", "all");
+  const [sourceFilter, setSourceFilter] = useLocalStorageState<TaskSourceType | "all">("hrm_tasks_source_filter", "all");
+  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_tasks_branch_filter", "all");
+  const branchFilter = isManager ? managerBranch : savedBranchFilter;
+  const setBranchFilter = useCallback(
+    (b: string) => {
+      if (!isManager) setSavedBranchFilter(b);
+    },
+    [isManager, setSavedBranchFilter]
+  );
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
   // Modal Chi tiết nhiệm vụ

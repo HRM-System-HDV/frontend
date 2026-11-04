@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -23,6 +23,7 @@ import TemplateModal from "@/features/shifts/TemplateForm";
 import AssignShiftModal from "@/features/shifts/ShiftAssign";
 import ExportModal from "@/features/shifts/ShiftExport";
 import { useCurrentUser } from "@/context/AuthContext";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -78,13 +79,14 @@ async function apiDelete<T>(path: string): Promise<T> {
   }
 }
 
-function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>): WorkShift {
+function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>, empPhoneMap?: Map<string, string>): WorkShift {
   const empName =
     (s.employeeId && empMap?.get(s.employeeId)) ||
     s.employee ||
     s.employeeName ||
     s.employeeId ||
     "Chưa phân công";
+  const phone = (s.employeeId && empPhoneMap?.get(s.employeeId)) || s.phone || "";
 
   let status: WorkShift["status"] = "Chưa làm";
   if (s.status === "Đúng giờ" || s.status === "hoàn thành" || s.status === "completed") {
@@ -104,6 +106,8 @@ function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>): WorkS
   return {
     id: s.id,
     employee: empName,
+    employeeId: s.employeeId,
+    phone,
     branch: s.branchSlug || s.branch || "—",
     date: s.date || "—",
     templateName: s.template || s.templateName || "Ca Sáng",
@@ -310,7 +314,10 @@ export default function ShiftsPage() {
   const { role, branchSlug } = useCurrentUser();
   const isManager = role === "manager";
   const managerBranch = branchSlug.toUpperCase();
-  const [activeTab, setActiveTab] = useState<"scheduling" | "general_schedule" | "templates">("scheduling");
+  const [activeTab, setActiveTab] = useLocalStorageState<"scheduling" | "general_schedule" | "templates">(
+    "hrm_shifts_active_tab",
+    "scheduling"
+  );
 
   const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
   // Khung ca mẫu chưa có API backend -> giữ local state (xử lý sau).
@@ -334,11 +341,17 @@ export default function ShiftsPage() {
   const [branches, setBranches] = useState<Branch[]>([]);
 
   // State dùng chung đồng bộ giữa Tab "Quản lý đăng ký ca" và Tab "Lịch làm việc chung"
-  const [sharedWeekOffset, setSharedWeekOffset] = useState(0);
-  const [sharedDayIndex, setSharedDayIndex] = useState(() => {
-    return (new Date().getDay() + 6) % 7; // Thứ 2 = 0 ... CN = 6
-  });
-  const [sharedBranch, setSharedBranch] = useState(isManager ? managerBranch : "all");
+  const [sharedWeekOffset, setSharedWeekOffset] = useLocalStorageState<number>("hrm_shifts_week_offset", 0);
+  const defaultDayIndex = (new Date().getDay() + 6) % 7;
+  const [sharedDayIndex, setSharedDayIndex] = useLocalStorageState<number>("hrm_shifts_day_index", defaultDayIndex);
+  const [savedBranch, setSavedBranch] = useLocalStorageState<string>("hrm_shifts_branch", "all");
+  const sharedBranch = isManager ? managerBranch : savedBranch;
+  const setSharedBranch = useCallback(
+    (b: string) => {
+      if (!isManager) setSavedBranch(b);
+    },
+    [isManager, setSavedBranch]
+  );
 
   const [assignEmployee, setAssignEmployee] = useState("");
   const [assignBranch, setAssignBranch] = useState("");
@@ -393,8 +406,10 @@ export default function ShiftsPage() {
       setEmpList(employeesData);
 
       const currentEmpMap = new Map<string, string>();
+      const currentEmpPhoneMap = new Map<string, string>();
       for (const e of employeesData) {
         currentEmpMap.set(e.id, e.name);
+        if (e.phone) currentEmpPhoneMap.set(e.id, e.phone);
       }
 
       let templatesData: ShiftTemplate[] = [];
@@ -404,7 +419,7 @@ export default function ShiftsPage() {
       }
 
       if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
-        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap)));
+        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap)));
       }
 
       if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
@@ -756,7 +771,9 @@ export default function ShiftsPage() {
                 onBranchChange={setSharedBranch}
                 onDeleteShift={handleRemoveShift}
                 onOpenAssignModal={(templateId, date, branch) => {
-                  const effectiveBranch = isManager ? managerBranch : (branch === "all" ? "" : branch);
+                  const effectiveBranch = isManager
+                    ? managerBranch
+                    : (branch && branch !== "all" ? branch.toUpperCase() : (sharedBranch !== "all" ? sharedBranch.toUpperCase() : ""));
                   setAssignTemplateId(templateId);
                   setAssignDate(date);
                   setAssignBranch(effectiveBranch);
@@ -867,6 +884,7 @@ export default function ShiftsPage() {
         isRecurring={assignIsRecurring}
         isManager={isManager}
         managerBranch={managerBranch}
+        isFilterLocked={!isManager && sharedBranch !== "all"}
         employees={empList}
         onEmployeeChange={setAssignEmployee}
         onBranchChange={setAssignBranch}

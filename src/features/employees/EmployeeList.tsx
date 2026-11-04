@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faLock,
@@ -42,7 +43,7 @@ export default function EmployeeSection({
   selectedBranchFilter,
   onBranchFilterChange,
 }: Props) {
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_employees_search", "");
   const [internalBranchFilter, setInternalBranchFilter] = useState<string>(
     isManager && managerBranch ? managerBranch : "all"
   );
@@ -51,7 +52,7 @@ export default function EmployeeSection({
     if (onBranchFilterChange) onBranchFilterChange(val);
     else setInternalBranchFilter(val);
   };
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [departmentFilter, setDepartmentFilter] = useLocalStorageState<string>("hrm_employees_dept_filter", "all");
 
   const filteredEmployees = useMemo(() => {
     return employees.filter((e) => {

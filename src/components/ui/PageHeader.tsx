@@ -15,13 +15,18 @@ export default function PageHeader({ title, actions }: PageHeaderProps) {
 
   useEffect(() => {
     if (title) setHeaderTitle(title);
-    return () => setHeaderTitle(null);
   }, [title, setHeaderTitle]);
 
   useEffect(() => {
     setHeaderActions(actions ?? null);
-    return () => setHeaderActions(null);
   }, [actions, setHeaderActions]);
+
+  useEffect(() => {
+    return () => {
+      setHeaderTitle(null);
+      setHeaderActions(null);
+    };
+  }, [setHeaderTitle, setHeaderActions]);
 
   return null; // Tiêu đề & actions được đồng bộ lên Topbar để header nhất quán giữa các tab
 }

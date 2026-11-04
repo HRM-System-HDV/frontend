@@ -189,14 +189,14 @@ export default function BankIntegrationPage() {
         actions={
           <div className="flex items-center gap-2">
             <Button
-              variant="white"
+              key="btn-add-bank" variant="white"
               onClick={() => setCreateAccountOpen(true)}
               className="text-xs"
             >
               <FontAwesomeIcon icon={faPlus} fontSize={11} /> Thêm tài khoản ngân hàng
             </Button>
             <Button
-              onClick={() => setCreateDisburseOpen(true)}
+              key="btn-create-payout" onClick={() => setCreateDisburseOpen(true)}
               className="text-xs"
               disabled={partners.length === 0}
             >

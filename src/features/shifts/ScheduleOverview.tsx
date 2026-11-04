@@ -1,10 +1,11 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalendar, faCheck, faChevronDown, faChevronLeft, faChevronRight, faChevronUp, faCircleExclamation, faClock, faCloudSun, faFilter, faMagnifyingGlass, faMoon, faPhone, faStore, faSun, faUserCheck, faUserPlus, faUsers } from "@fortawesome/free-solid-svg-icons";
 import Badge from "@/components/ui/Badge";
 import StaffShiftDetailModal from "./ShiftDetail";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { apiGet } from "@/lib/api";
 import type { Branch } from "@/types";
 import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
@@ -104,7 +105,10 @@ export default function GeneralScheduleSection({
     if (onBranchChange) onBranchChange(branch);
     else setInternalBranch(branch);
   };
-  const [statusFilter, setStatusFilter] = useState<"all" | "checked_in" | "not_yet">("all");
+  const [statusFilter, setStatusFilter] = useLocalStorageState<"all" | "checked_in" | "not_yet">(
+    "hrm_shifts_status_filter",
+    "all"
+  );
   const [expandedShifts, setExpandedShifts] = useState<Record<string, boolean>>({
     "shift_0": true,
     "shift_1": true,
@@ -175,7 +179,7 @@ export default function GeneralScheduleSection({
       role: ws.templateName || "Nhân viên trực ca",
       branch: ws.branch,
       avatarLetter: (ws.employee || "?").charAt(0).toUpperCase(),
-      phone: "",
+      phone: ws.phone || "",
       checkInStatus: ws.checkIn && ws.checkIn !== "—" ? "checked_in" : "not_yet",
       checkInTime: ws.checkIn !== "—" ? ws.checkIn : undefined,
       checkOutTime: ws.checkOut !== "—" ? ws.checkOut : undefined,
@@ -613,7 +617,7 @@ export default function GeneralScheduleSection({
                       className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary-50 text-primary hover:bg-primary hover:text-white transition-all cursor-pointer"
                       title="Phân công nhân sự vào ca này"
                     >
-                      <FontAwesomeIcon icon={faUserPlus} fontSize={14} /> + Thêm NV
+                      Thêm NV
                     </button>
                   )}
 
@@ -629,13 +633,13 @@ export default function GeneralScheduleSection({
 
               {/* Danh sách nhân sự trong ca khi mở rộng */}
               {isExpanded && (
-                <div className="border-t border-gray-100 bg-gray-50/50 p-4">
+                <div className="border-t border-gray-100 bg-gray-50/50 p-3">
                   {visibleStaff.length === 0 ? (
                     <div className="text-center py-6 text-gray-400 text-xs">
                       {mode === "registration" ? "Chưa có nhân viên đăng ký ca này" : "Trống (Chưa có nhân sự được phân công)"}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
                       {visibleStaff.map((staff) => {
                         const isCheckedIn =
                           staff.checkInStatus === "checked_in" ||
@@ -645,11 +649,11 @@ export default function GeneralScheduleSection({
                           <div
                             key={staff.id}
                             onClick={() => { setDetailStaff(staff); setDetailShift(shift); setDetailOpen(true); }}
-                            className="bg-white border border-gray-200 rounded-xl p-3.5 flex items-start justify-between gap-3 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer hover:border-primary/30"
+                            className="bg-white border border-gray-200 rounded-xl p-2.5 flex items-center justify-between gap-2.5 shadow-2xs hover:shadow-xs transition-shadow cursor-pointer hover:border-primary/30"
                           >
                             <div className="flex items-start gap-3 min-w-0">
                               <div
-                                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border ${
+                                className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${
                                   isCheckedIn
                                     ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                     : "bg-gray-100 text-gray-600 border-gray-200"
@@ -660,14 +664,14 @@ export default function GeneralScheduleSection({
 
                               <div className="min-w-0">
                                 <div className="font-bold text-gray-900 text-sm truncate">
-                                  {staff.name}
+                                  {staff.name}{staff.phone ? ` - ${staff.phone}` : ""}
                                 </div>
                                 <div className="text-xs text-gray-500 truncate">
                                   {staff.role} • Chi nhánh {staff.branch}
                                 </div>
 
                                 {/* Trạng thái Check-in hoặc Đã đăng ký */}
-                                <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                                <div className="mt-1 flex items-center gap-1.5 flex-wrap">
                                   {mode === "registration" ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                       <FontAwesomeIcon icon={faUserCheck} fontSize={12} />
@@ -699,7 +703,7 @@ export default function GeneralScheduleSection({
                                         </span>
                                       )}
                                       {staff.checkInStatus === "not_yet" && (() => {
-                                        const isForgot = !currentDay.isToday || weekOffset < 0;
+                                        const isForgot = shift.status === "completed";
                                         return (
                                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isForgot ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
                                             <FontAwesomeIcon icon={faCircleExclamation} fontSize={12} />
@@ -712,16 +716,6 @@ export default function GeneralScheduleSection({
                                 </div>
                               </div>
                             </div>
-
-                            {/* Nút liên hệ nhanh qua điện thoại */}
-                            <a
-                              href={`tel:${staff.phone.replace(/\s/g, "")}`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="p-2 rounded-lg bg-gray-50 text-gray-600 hover:bg-primary-50 hover:text-primary transition-colors shrink-0 border border-gray-200"
-                              title={`Gọi điện thoại: ${staff.phone}`}
-                            >
-                              <FontAwesomeIcon icon={faPhone} fontSize={15} />
-                            </a>
                           </div>
                         );
                       })}

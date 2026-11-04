@@ -19,6 +19,7 @@ import type { ShiftRequest, Employee, Branch } from "@/types";
 import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { useCurrentUser } from "@/context/AuthContext";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -134,9 +135,19 @@ export default function RequestsPage() {
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
   // Bộ lọc
-  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
-  const [branchFilter, setBranchFilter] = useState<string>(isManager ? managerBranch : "all");
+  const [statusFilter, setStatusFilter] = useLocalStorageState<"all" | "pending" | "approved" | "rejected">(
+    "hrm_requests_status_filter",
+    "all"
+  );
+  const [typeFilter, setTypeFilter] = useLocalStorageState<string>("hrm_requests_type_filter", "all");
+  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_requests_branch_filter", "all");
+  const branchFilter = isManager ? managerBranch : savedBranchFilter;
+  const setBranchFilter = useCallback(
+    (b: string) => {
+      if (!isManager) setSavedBranchFilter(b);
+    },
+    [isManager, setSavedBranchFilter]
+  );
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [attConfigSaving, setAttConfigSaving] = useState(false);

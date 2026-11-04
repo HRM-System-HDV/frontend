@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPencil,
@@ -29,6 +30,7 @@ import { Field, Input, Select } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/Badge";
 import type { Employee, UserRole, Branch, Department } from "@/types";
 import { apiPost } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 
 interface Props {
   open: boolean;
@@ -70,8 +72,17 @@ export default function EmployeeDetailModal({
   isManager = false,
   managerBranch = "",
 }: Props) {
+  const { user } = useCurrentUser();
+  const currentUserId = user?.userId;
+  const currentUserEmail = user?.email;
+  const isSelf = Boolean(
+    employee && (
+      employee.id === currentUserId ||
+      (currentUserEmail && employee.email && employee.email.toLowerCase() === currentUserEmail.toLowerCase())
+    )
+  );
   const [isEditing, setIsEditing] = useState(false);
-  const [activeTab, setActiveTab] = useState<DetailTab>("profile");
+  const [activeTab, setActiveTab] = useLocalStorageState<DetailTab>("hrm_emp_detail_tab", "profile");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -375,12 +386,13 @@ export default function EmployeeDetailModal({
       footer={
         isEditing ? (
           <>
-            {onDelete && !isManager && employee && (
+            {onDelete && !isManager && employee && !isSelf && (
               <Button
                 type="button"
                 variant="danger"
                 className="mr-auto"
                 disabled={saving}
+                title="Xóa nhân viên"
                 onClick={() => onDelete(employee)}
               >
                 Xóa
@@ -397,11 +409,12 @@ export default function EmployeeDetailModal({
           </>
         ) : (
           <>
-            {onDelete && !isManager && employee && (
+            {onDelete && !isManager && employee && !isSelf && (
               <Button
                 type="button"
                 variant="danger"
                 className="mr-auto"
+                title="Xóa nhân viên"
                 onClick={() => onDelete(employee)}
               >
                 Xóa
@@ -859,19 +872,6 @@ export default function EmployeeDetailModal({
                       <span className="font-semibold text-gray-800 text-xs">
                         {employee.joinDate || "Chưa cập nhật"}
                       </span>
-                    </div>
-                    <div className="p-3.5 rounded-xl bg-purple-50/60 border border-purple-100 text-xs text-purple-900 space-y-1.5">
-                      <div className="font-bold flex items-center gap-1.5">
-                        <FontAwesomeIcon icon={faInfoCircle} className="text-purple-600" />
-                        Phạm vi quyền hạn:
-                      </div>
-                      <p className="text-[11px] leading-relaxed text-purple-800">
-                        {employee.systemRole === "admin"
-                          ? "Toàn quyền quản trị tất cả các phân hệ, quản lý tất cả chi nhánh, cấu hình Wi-Fi, bảng lương và cổng SOAP Ngân hàng."
-                          : employee.systemRole === "manager"
-                          ? "Quản lý vận hành chi nhánh phụ trách: xếp ca, phê duyệt đề xuất đổi ca / nghỉ phép, giám sát quân số trực ca thời gian thực."
-                          : "Thao tác cá nhân: xem ca làm, đăng ký ca tuần tới, chấm công Wi-Fi chi nhánh, xin đổi ca và xem phiếu lương."}
-                      </p>
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalendarWeek, faStore } from "@fortawesome/free-solid-svg-icons";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -14,7 +15,7 @@ interface Props {
 }
 
 export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration }: Props) {
-  const [branchFilter, setBranchFilter] = useState("all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter", "all");
 
   const filteredRegistrations = useMemo(() => {
     if (branchFilter === "all") return registrations;

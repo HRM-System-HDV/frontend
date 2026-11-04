@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { Field, Input, Select, Checkbox } from "@/components/ui/Form";
+import { Field, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
 import type { ShiftTemplate } from "@/features/shifts/types";
 import type { Employee, Branch } from "@/types";
@@ -20,6 +20,7 @@ interface Props {
   isRecurring: boolean;
   isManager?: boolean;
   managerBranch?: string;
+  isFilterLocked?: boolean;
   employees?: Employee[];
   onEmployeeChange: (v: string) => void;
   onBranchChange: (v: string) => void;
@@ -36,15 +37,12 @@ export default function AssignShiftModal({
   branch,
   date,
   templateId,
-  note,
-  isRecurring,
   isManager = false,
   managerBranch,
+  isFilterLocked = false,
   employees: employeesProp,
   onEmployeeChange,
   onBranchChange,
-  onNoteChange,
-  onRecurringChange,
   onSave,
 }: Props) {
   const empList = employeesProp ?? [];
@@ -55,20 +53,30 @@ export default function AssignShiftModal({
   useEffect(() => {
     if (!open) return;
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
-  }, [open ]);
-  // Chi nhánh: rỗng = admin xem "Tất cả chi nhánh" -> mở select để tự chọn lúc phân công;
-  // có giá trị (hoặc manager) -> khóa cứng theo chi nhánh đang lọc.
-  // Chỉ khóa chi nhánh khi tài khoản là Manager (chỉ được phân ca chi nhánh mình)
-  const isBranchLocked = isManager;
+  }, [open]);
+
+  // Chi nhánh bị khóa nếu là Manager hoặc khi bên ngoài đang filter một chi nhánh cụ thể (không phải "all")
+  const isLocked = isManager || (isFilterLocked && Boolean(branch));
   const branchDisplay = isManager ? (managerBranch ?? branch) : branch;
   const branchName = (() => {
     const target = (branchDisplay || "").toLowerCase().replace(/-/g, "");
     const matched = branches.find((b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target);
     return matched ? matched.name : branchDisplay;
   })();
-  
+
   return (
-    <Modal open={open} onClose={onClose} title="Phân công nhân viên vào ca" size="lg" footer={<><Button variant="white" onClick={onClose}>Hủy</Button><Button onClick={onSave}>Phân công</Button></>}>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Phân công nhân viên vào ca"
+      size="lg"
+      footer={
+        <>
+          <Button variant="white" onClick={onClose}>Hủy</Button>
+          <Button onClick={onSave}>Phân công</Button>
+        </>
+      }
+    >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
         <Field label="Nhân viên" required>
           <Select value={employee} onChange={(e) => onEmployeeChange(e.target.value)}>
@@ -78,10 +86,12 @@ export default function AssignShiftModal({
           </Select>
         </Field>
         <Field label="Chi nhánh" required>
-          {isBranchLocked ? (
+          {isLocked ? (
             <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-              <span>{branchName || `Chi nhánh ${branchDisplay}`}</span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">{isManager ? "Cố định" : "Đã chọn"}</span>
+              <span>{branchName || (branchDisplay ? `Chi nhánh ${branchDisplay}` : "—")}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
+                {isManager ? "Cố định" : "Đã khóa"}
+              </span>
             </div>
           ) : (
             <Select value={branch} onChange={(e) => onBranchChange(e.target.value)}>
@@ -107,16 +117,6 @@ export default function AssignShiftModal({
             {activeTemplate ? `${activeTemplate.name} (${activeTemplate.startTime} - ${activeTemplate.endTime})` : "—"}
           </div>
         </Field>
-      </div>
-      <Field label="Ghi chú phân công (tùy chọn)">
-        <Input placeholder="VD: Phụ trách ca chính, hỗ trợ chi nhánh..." value={note} onChange={(e) => onNoteChange(e.target.value)} />
-      </Field>
-      <div className="mt-1">
-        <Checkbox
-          label="Lặp lại mỗi tuần"
-          checked={isRecurring}
-          onChange={(e) => onRecurringChange(e.target.checked)}
-        />
       </div>
     </Modal>
   );

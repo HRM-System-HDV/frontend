@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 import { cn } from "@/lib/utils";
@@ -30,6 +31,7 @@ export default function Topbar({
   rightExtra,
 }: TopbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const pathname = usePathname();
 
   return (
     <header
@@ -52,7 +54,7 @@ export default function Topbar({
 
         <div className="flex items-center gap-2">
           {headerActions && (
-            <div className="flex items-center gap-2 mr-1">
+            <div key={pathname} className="flex items-center gap-2 mr-1">
               {headerActions}
             </div>
           )}
