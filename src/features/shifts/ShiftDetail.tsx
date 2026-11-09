@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCalendar, faClock, faPhone, faTrashCan, faUserCheck } from "@fortawesome/free-solid-svg-icons";
@@ -20,6 +20,7 @@ interface Props {
   onSupplement: (staffId: string, shiftId: string) => void;
   isAdmin?: boolean;
   isOwnShift?: boolean;
+  gracePeriodMinutes?: number;
 }
 
 export default function StaffShiftDetailModal({
@@ -35,13 +36,35 @@ export default function StaffShiftDetailModal({
   onSupplement,
   isAdmin = true,
   isOwnShift = false,
+  gracePeriodMinutes = 5,
 }: Props) {
   if (!staff || !shift || !day) return null;
 
   const isCheckedIn = staff.checkInStatus === "checked_in";
   const isInProgress = staff.checkInStatus === "in_progress";
   const isNotYet = staff.checkInStatus === "not_yet";
-  const isForgot = isNotYet && shift.status === 'completed'; // quá ngày hôm nay hoặc đã qua
+
+  // Quên chấm công: Chưa chấm công mà ngày đã qua, HOẶC hôm nay đã qua giờ bắt đầu ca
+  const isForgot = (() => {
+    if (!isNotYet) return false;
+    if (shift.status === "completed") return true;
+    const now = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const [dd, mm, yyyy] = day.fullDate.split("/").map(Number);
+    const dayDate = new Date(yyyy, (mm || 1) - 1, dd || 1);
+    dayDate.setHours(0, 0, 0, 0);
+    if (dayDate.getTime() < today.getTime()) return true;
+    if (dayDate.getTime() > today.getTime()) return false;
+    // Hôm nay: kiểm tra đã qua giờ bắt đầu ca chưa
+    const startStr = shift.timeRange.split("-")[0]?.trim();
+    if (!startStr) return false;
+    const [sh, sm] = startStr.split(":").map(Number);
+    if (Number.isNaN(sh) || Number.isNaN(sm)) return false;
+    const currentMin = now.getHours() * 60 + now.getMinutes();
+    const startMin = sh * 60 + sm;
+    return currentMin >= startMin;
+  })();
 
   const isLate = (() => {
     if (!isCheckedIn || !staff.checkInTime || !shift.timeRange) return false;
@@ -50,7 +73,7 @@ export default function StaffShiftDetailModal({
     const [sh, sm] = startStr.split(":").map(Number);
     const [ch, cm] = staff.checkInTime.split(":").map(Number);
     if ([sh, sm, ch, cm].some((n) => Number.isNaN(n))) return false;
-    return ch * 60 + cm - (sh * 60 + sm) > 5;
+    return ch * 60 + cm - (sh * 60 + sm) > gracePeriodMinutes;
   })();
 
   // Tự động tính toán giờ check-out thực tế nếu ca đã hoàn thành
@@ -117,7 +140,9 @@ export default function StaffShiftDetailModal({
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-bold text-gray-900">{staff.name}</div>
-            <div className="text-xs text-gray-500">{staff.role} • Chi nhánh {staff.branch}</div>
+            <div className="text-xs text-gray-500">
+              {staff.role} • Chi nhánh {staff.branch && staff.branch.startsWith("c") && staff.branch.length >= 20 ? "Quận 1" : staff.branch}
+            </div>
             <div className="flex items-center gap-2 mt-1">
               {mode === "registration" ? (
                 <Badge tone="primary">Đã đăng ký ca</Badge>
