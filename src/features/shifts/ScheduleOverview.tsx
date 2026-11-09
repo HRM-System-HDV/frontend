@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -120,9 +120,14 @@ export default function GeneralScheduleSection({
   const [staffOverrides, setStaffOverrides] = useState<Record<string, { checkInStatus: StaffInShift["checkInStatus"]; checkInTime?: string; checkOutTime?: string }>>({});
   const [canceledIds, setCanceledIds] = useState<Set<string>>(new Set());
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [gracePeriodMinutes, setGracePeriodMinutes] = useState<number>(5);
 
   useEffect(() => {
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
+    apiGet<any>("/api/attendance/config").then((cfg) => {
+      const g = cfg?.gracePeriodMinutes ?? cfg?.data?.gracePeriodMinutes;
+      if (typeof g === "number") setGracePeriodMinutes(g);
+    }).catch(() => {});
   }, []);
 
   // Tính toán các ngày trong tuần được chọn (tuần hiện tại thật + offset)
@@ -238,17 +243,19 @@ export default function GeneralScheduleSection({
 
       const registered = (registrations || [])
         .filter((r) => {
-          if (
-            selectedBranch !== "all" &&
-            r.branch.toLowerCase().replace("-", "") !== selectedBranch.toLowerCase().replace("-", "")
-          ) {
-            return false;
+          if (selectedBranch !== "all") {
+            const cleanSelected = selectedBranch.toLowerCase().replace("-", "");
+            const cleanBranch = (r.branch || "").toLowerCase().replace("-", "");
+            const cleanSlug = (r.branchSlug || "").toLowerCase().replace("-", "");
+            if (cleanBranch !== cleanSelected && cleanSlug !== cleanSelected) {
+              return false;
+            }
           }
           return matchesTemplate(r.days[currentDay.key], t);
         })
         .map((r, idx): StaffInShift => ({
           id: `reg-${r.id}-${idx}`,
-          rawId: r.id,
+          rawId: r.dayRegistrationIds?.[currentDay.key] || r.id,
           name: r.employeeName,
           role: r.role || "Nhân sự",
           branch: r.branch,
@@ -482,7 +489,7 @@ export default function GeneralScheduleSection({
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
             {mode === "registration"
-              ? "Danh sách nhân viên đăng ký ca làm việc • Xem nguyện vọng theo ngày và chi nhánh"
+              ? "Danh sách nhân viên đăng ký ca làm việc • Xem danh sách đăng ký theo ngày và chi nhánh"
               : "Lịch phân công ca làm việc chung toàn bộ nhân sự chi nhánh • Chạm vào từng ca để xem chi tiết"}
           </p>
         </div>
@@ -667,7 +674,7 @@ export default function GeneralScheduleSection({
                                   {staff.name}{staff.phone ? ` - ${staff.phone}` : ""}
                                 </div>
                                 <div className="text-xs text-gray-500 truncate">
-                                  {staff.role} • Chi nhánh {staff.branch}
+                                  {staff.role} • Chi nhánh {staff.branch && staff.branch.startsWith("c") && staff.branch.length >= 20 ? "Quận 1" : staff.branch}
                                 </div>
 
                                 {/* Trạng thái Check-in hoặc Đã đăng ký */}
@@ -687,7 +694,7 @@ export default function GeneralScheduleSection({
                                           const [sh, sm] = startStr.split(":").map(Number);
                                           const [ch, cm] = staff.checkInTime.split(":").map(Number);
                                           if ([sh, sm, ch, cm].some((n) => Number.isNaN(n))) return false;
-                                          return ch * 60 + cm - (sh * 60 + sm) > 5;
+                                          return ch * 60 + cm - (sh * 60 + sm) > gracePeriodMinutes;
                                         })();
                                         return (
                                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isLate ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
@@ -703,7 +710,25 @@ export default function GeneralScheduleSection({
                                         </span>
                                       )}
                                       {staff.checkInStatus === "not_yet" && (() => {
-                                        const isForgot = shift.status === "completed";
+                                        const isForgot = (() => {
+                                          if (shift.status === "completed") return true;
+                                          const now = new Date();
+                                          const today = new Date();
+                                          today.setHours(0, 0, 0, 0);
+                                          const [dd, mm, yyyy] = currentDay.fullDate.split("/").map(Number);
+                                          const dayDate = new Date(yyyy, (mm || 1) - 1, dd || 1);
+                                          dayDate.setHours(0, 0, 0, 0);
+                                          if (dayDate.getTime() < today.getTime()) return true;
+                                          if (dayDate.getTime() > today.getTime()) return false;
+                                          // Hôm nay: nếu giờ hiện tại đã qua giờ bắt đầu ca mà chưa check-in -> Quên chấm công
+                                          const startStr = shift.timeRange.split("-")[0]?.trim().split(" ")[0];
+                                          if (!startStr) return false;
+                                          const [sh, sm] = startStr.split(":").map(Number);
+                                          if (Number.isNaN(sh) || Number.isNaN(sm)) return false;
+                                          const currentMin = now.getHours() * 60 + now.getMinutes();
+                                          const startMin = sh * 60 + sm;
+                                          return currentMin >= startMin;
+                                        })();
                                         return (
                                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold border ${isForgot ? "bg-red-50 text-red-700 border-red-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
                                             <FontAwesomeIcon icon={faCircleExclamation} fontSize={12} />
@@ -731,6 +756,7 @@ export default function GeneralScheduleSection({
         mode={mode}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
+        gracePeriodMinutes={gracePeriodMinutes}
         staff={(() => {
           if (!detailStaff) return null;
           const found = dayShifts.flatMap((s) => s.staffList).find((s) => s.id === detailStaff.id);

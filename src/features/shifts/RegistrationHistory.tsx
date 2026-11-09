@@ -26,17 +26,12 @@ export default function RegistrationHistorySection({
         <div>
           <span className="font-semibold text-gray-800">{r.employeeName}</span>
           <span className="block text-xs text-gray-400">{r.role}</span>
-          {r.note && (
-            <span className="block text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1 border border-amber-200">
-              Ghi chú: {r.note}
-            </span>
-          )}
         </div>
       ),
     },
     {
       key: "requestedCount",
-      header: "SỐ CA NGUYỆN VỌNG",
+      header: "SỐ CA ĐĂNG KÝ",
       render: (r) => (
         <span className="font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-xs">
           {r.requestedCount} ca / tuần

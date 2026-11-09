@@ -40,19 +40,14 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
         <div>
           <span className="font-semibold text-gray-800">{r.employeeName}</span>
           <span className="block text-xs text-gray-400">
-            {r.role} • Chi nhánh {r.branch}
+            {r.role} • Chi nhánh {r.branch && r.branch.startsWith("c") && r.branch.length >= 20 ? "Quận 1" : r.branch}
           </span>
-          {r.note && (
-            <span className="block text-[11px] text-amber-700 bg-amber-50 rounded px-1.5 py-0.5 mt-1 border border-amber-200">
-              Ghi chú: {r.note}
-            </span>
-          )}
         </div>
       ),
     },
     {
       key: "requestedCount",
-      header: "Số ca nguyện vọng",
+      header: "Số ca đăng ký",
       render: (r) => (
         <span className="font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-lg text-xs">
           {r.requestedCount} ca / tuần
@@ -94,7 +89,7 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
     <Card>
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <CardTitle>Bảng tổng hợp đăng ký nguyện vọng ca tuần</CardTitle>
+          <CardTitle>Bảng tổng hợp đăng ký ca làm việc trong tuần</CardTitle>
         </div>
         <div className="flex items-center gap-2">
           {branches.length > 1 && (

@@ -92,6 +92,7 @@ export function StatusBadge({ status }: { status: string }) {
     "Trễ": { tone: "warning", label: "Trễ" },
     "Về sớm": { tone: "danger", label: "Về sớm" },
     "Chưa làm": { tone: "gray", label: "Chưa làm" },
+    "Quên chấm công": { tone: "danger", label: "Quên chấm công" },
   };
   const cleanStatus = (status || "").trim();
   const lowerStatus = cleanStatus.toLowerCase();

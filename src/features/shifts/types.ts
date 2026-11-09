@@ -1,4 +1,4 @@
-﻿export interface ShiftTemplate {
+export interface ShiftTemplate {
   id: string;
   name: string;
   startTime: string;
@@ -11,12 +11,13 @@ export interface WorkShift {
   employeeId?: string;
   phone?: string;
   branch: string;
+  branchSlug?: string;
   date: string;
   templateName: string;
   scheduled: string;
   checkIn: string;
   checkOut: string;
-  status: "Đúng giờ" | "Trễ" | "Về sớm" | "Chưa làm";
+  status: "Đúng giờ" | "Trễ" | "Về sớm" | "Chưa làm" | "Quên chấm công";
   note?: string;
   isRecurring?: boolean;
 }
@@ -26,10 +27,12 @@ export interface WeeklyRegistration {
   employeeName: string;
   role: string;
   branch: string;
+  branchSlug?: string;
   requestedCount: number;
   registeredAt: string;
   order: number;
   days: Record<string, string>;
+  dayRegistrationIds?: Record<string, string>;
   note?: string;
 }
 

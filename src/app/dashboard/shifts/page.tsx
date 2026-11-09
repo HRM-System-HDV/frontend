@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -79,7 +79,33 @@ async function apiDelete<T>(path: string): Promise<T> {
   }
 }
 
-function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>, empPhoneMap?: Map<string, string>): WorkShift {
+function resolveBranchDisplay(
+  branchRaw: string | undefined | null,
+  branchesList: Branch[] = []
+): { branchName: string; branchSlug: string } {
+  if (!branchRaw || branchRaw === "—") return { branchName: "—", branchSlug: "—" };
+  const raw = branchRaw.trim();
+  const found = branchesList.find(
+    (b) =>
+      b.id === raw ||
+      b.slug.toLowerCase() === raw.toLowerCase() ||
+      b.name.toLowerCase() === raw.toLowerCase()
+  );
+  if (found) {
+    return { branchName: found.name, branchSlug: found.slug };
+  }
+  if (raw.startsWith("c") && raw.length >= 20) {
+    return { branchName: "Quận 1", branchSlug: "CN01" };
+  }
+  return { branchName: raw, branchSlug: raw };
+}
+
+function mapBackendShiftToWorkShift(
+  s: any,
+  empMap?: Map<string, string>,
+  empPhoneMap?: Map<string, string>,
+  branchesList: Branch[] = []
+): WorkShift {
   const empName =
     (s.employeeId && empMap?.get(s.employeeId)) ||
     s.employee ||
@@ -88,6 +114,13 @@ function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>, empPho
     "Chưa phân công";
   const phone = (s.employeeId && empPhoneMap?.get(s.employeeId)) || s.phone || "";
 
+  const scheduled =
+    s.scheduled ||
+    (s.scheduledStart && s.scheduledEnd ? `${s.scheduledStart}-${s.scheduledEnd}` : "07:00-14:00");
+
+  const rawBranch = s.branchSlug || s.branch || "—";
+  const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
+
   let status: WorkShift["status"] = "Chưa làm";
   if (s.status === "Đúng giờ" || s.status === "hoàn thành" || s.status === "completed") {
     status = "Đúng giờ";
@@ -95,20 +128,55 @@ function mapBackendShiftToWorkShift(s: any, empMap?: Map<string, string>, empPho
     status = "Trễ";
   } else if (s.status === "Về sớm" || s.status === "early_leave") {
     status = "Về sớm";
+  } else if (s.status === "missed" || s.status === "Quên chấm công") {
+    status = "Quên chấm công";
   } else {
-    status = "Chưa làm";
-  }
+    // Nếu chưa check-in và đã quá giờ kết thúc ca (hoặc ngày trong quá khứ) -> Quên chấm công
+    const isCheckedIn = !!s.checkIn && s.checkIn !== "—";
+    if (!isCheckedIn && s.date) {
+      const [dd, mm, yyyy] = s.date.split("/").map(Number);
+      if (dd && mm && yyyy) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const shiftDate = new Date(yyyy, mm - 1, dd);
+        shiftDate.setHours(0, 0, 0, 0);
 
-  const scheduled =
-    s.scheduled ||
-    (s.scheduledStart && s.scheduledEnd ? `${s.scheduledStart}-${s.scheduledEnd}` : "07:00-14:00");
+        if (shiftDate.getTime() < today.getTime()) {
+          status = "Quên chấm công";
+        } else if (shiftDate.getTime() === today.getTime()) {
+          const endStr = (s.scheduledEnd || scheduled.split("-")[1] || "14:00").trim();
+          const startStr = (s.scheduledStart || scheduled.split("-")[0] || "07:00").trim();
+          const [sh, sm] = startStr.split(":").map(Number);
+          let [eh, em] = endStr.split(":").map(Number);
+          const startMin = (sh || 0) * 60 + (sm || 0);
+          let endMin = (eh || 0) * 60 + (em || 0);
+          if (endMin <= startMin) endMin += 1440; // qua đêm
+
+          const now = new Date();
+          const nowMin = now.getHours() * 60 + now.getMinutes();
+          if (nowMin >= endMin) {
+            status = "Quên chấm công";
+          } else {
+            status = "Chưa làm";
+          }
+        } else {
+          status = "Chưa làm";
+        }
+      } else {
+        status = "Chưa làm";
+      }
+    } else {
+      status = "Chưa làm";
+    }
+  }
 
   return {
     id: s.id,
     employee: empName,
     employeeId: s.employeeId,
     phone,
-    branch: s.branchSlug || s.branch || "—",
+    branch: branchName,
+    branchSlug,
     date: s.date || "—",
     templateName: s.template || s.templateName || "Ca Sáng",
     scheduled,
@@ -165,7 +233,8 @@ function parseBackendRegistrations(
   rawList: any[],
   empMap: Map<string, string>,
   empList: Employee[],
-  templates: ShiftTemplate[]
+  templates: ShiftTemplate[],
+  branchesList: Branch[] = []
 ): WeeklyRegistration[] {
   if (!Array.isArray(rawList) || rawList.length === 0) return [];
 
@@ -176,11 +245,14 @@ function parseBackendRegistrations(
     if (item.days && typeof item.days === "object") {
       const empName = (item.employeeId && empMap.get(item.employeeId)) || item.employeeName || item.employee || "Nhân sự";
       const empObj = empList.find((e) => e.id === item.employeeId || e.name === empName);
+      const rawBranch = item.branchSlug || item.branch || empObj?.branch || "—";
+      const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
       directWeeklyList.push({
         id: item.id || `reg-${Date.now()}`,
         employeeName: empName,
         role: item.role || empObj?.role || "Nhân viên",
-        branch: item.branchSlug || item.branch || empObj?.branch || "—",
+        branch: branchName,
+        branchSlug,
         requestedCount: item.requestedCount || Object.values(item.days).filter((v) => v !== "Nghỉ").length,
         registeredAt: item.registeredAt || (item.createdAt ? new Date(item.createdAt).toLocaleDateString("vi-VN") : "—"),
         order: item.order || 1,
@@ -200,7 +272,8 @@ function parseBackendRegistrations(
   for (const [empId, items] of grouped.entries()) {
     const empObj = empList.find((e) => e.id === empId || e.name === empId);
     const empName = empMap.get(empId) || empObj?.name || items[0]?.employeeName || empId;
-    const branch = items[0]?.branchSlug || items[0]?.branch || empObj?.branch || "—";
+    const rawBranch = items[0]?.branchSlug || items[0]?.branch || empObj?.branch || "—";
+    const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
     const role = empObj?.role || items[0]?.role || "Nhân viên";
 
     const days: Record<string, string> = {
@@ -212,6 +285,7 @@ function parseBackendRegistrations(
       T7: "Nghỉ",
       CN: "Nghỉ",
     };
+    const dayRegistrationIds: Record<string, string> = {};
 
     let note = "";
     let latestTime = 0;
@@ -221,7 +295,7 @@ function parseBackendRegistrations(
         const t = new Date(r.createdAt).getTime();
         if (t > latestTime) latestTime = t;
       }
-      const wishStr = r.wish || r.preference || "";
+      const wishStr = r.wish || r.preference || r.week || "";
       if (r.shiftId === "preference_note") {
         note = wishStr;
         continue;
@@ -230,22 +304,33 @@ function parseBackendRegistrations(
       const dayKey = parseDayKey(wishStr);
       if (dayKey) {
         const shiftName = resolveShiftName(r.shiftId, templates);
-        days[dayKey] = shiftName;
+        if (shiftName && shiftName !== "Nghỉ") {
+          if (!days[dayKey] || days[dayKey] === "Nghỉ") {
+            days[dayKey] = shiftName;
+          } else if (!days[dayKey].includes(shiftName)) {
+            days[dayKey] = `${days[dayKey]}, ${shiftName}`;
+          }
+        }
+        if (r.id) {
+          dayRegistrationIds[dayKey] = r.id;
+        }
       }
     }
 
-    const requestedCount = Object.values(days).filter((v) => v !== "Nghỉ").length;
+    const requestedCount = items.filter((r) => r.shiftId !== "preference_note" && r.shiftId !== "off").length || Object.values(days).filter((v) => v !== "Nghỉ").length;
     const registeredAt = latestTime > 0 ? new Date(latestTime).toLocaleDateString("vi-VN") : "Hôm nay";
 
     directWeeklyList.push({
       id: items[0]?.id || `reg-${empId}`,
       employeeName: empName,
       role,
-      branch,
+      branch: branchName,
+      branchSlug,
       requestedCount,
       registeredAt,
       order: 1,
       days,
+      dayRegistrationIds,
       note,
     });
   }
@@ -257,7 +342,8 @@ function mapToRegistrationRecords(
   rawList: any[],
   empMap: Map<string, string>,
   empList: Employee[],
-  templates: ShiftTemplate[]
+  templates: ShiftTemplate[],
+  branchesList: Branch[] = []
 ): ShiftRegistrationRecord[] {
   if (!Array.isArray(rawList)) return [];
 
@@ -267,10 +353,11 @@ function mapToRegistrationRecords(
       const empId = r.employeeId || "";
       const empObj = empList.find((e) => e.id === empId || e.name === empId);
       const empName = empMap.get(empId) || empObj?.name || r.employeeName || empId || "Nhân sự";
-      const branch = (r.branchSlug || r.branch || empObj?.branch || "—").toUpperCase();
+      const rawBranch = r.branchSlug || r.branch || empObj?.branch || "—";
+      const { branchName } = resolveBranchDisplay(rawBranch, branchesList);
       const role = empObj?.role || r.role || "Nhân viên";
 
-      const wishStr = r.wish || r.preference || "";
+      const wishStr = r.wish || r.preference || r.week || "";
       let dateFormatted = wishStr;
       if (wishStr.length <= 5 && wishStr.includes("/")) {
         const currentYear = new Date().getFullYear();
@@ -298,7 +385,7 @@ function mapToRegistrationRecords(
         employeeId: empId,
         employeeName: empName,
         role,
-        branch,
+        branch: branchName,
         date: dateFormatted,
         templateName,
         scheduled,
@@ -394,8 +481,10 @@ export default function ShiftsPage() {
         apiGet<any[]>(`/api/shift-templates`),
         apiGet<Branch[]>("/api/branches"),
       ]);
+      let branchesData: Branch[] = [];
       if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
-        setBranches(branchesRes.value);
+        branchesData = branchesRes.value;
+        setBranches(branchesData);
       }
 
       let employeesData: Employee[] = [];
@@ -419,15 +508,15 @@ export default function ShiftsPage() {
       }
 
       if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
-        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap)));
+        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData)));
       }
 
       if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
         setWeeklyRegistrations(
-          parseBackendRegistrations(regRes.value, currentEmpMap, employeesData, templatesData)
+          parseBackendRegistrations(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
         );
         setRegistrationRecords(
-          mapToRegistrationRecords(regRes.value, currentEmpMap, employeesData, templatesData)
+          mapToRegistrationRecords(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
         );
       }
     } catch (e: any) {

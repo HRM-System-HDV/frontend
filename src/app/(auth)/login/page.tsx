@@ -73,8 +73,8 @@ export default function LoginPage() {
     setForgotError(null);
     setForgotMessage(null);
     try {
-      await apiPost<{ ok: boolean }>("/api/auth/forgot-password", { email: forgotEmail });
-      setForgotMessage("✅ Mật khẩu đã được đặt lại về mặc định: 123456. Hãy đăng nhập và đổi mật khẩu mới.");
+      const res = await apiPost<{ ok: boolean; message?: string }>("/api/auth/forgot-password", { email: forgotEmail });
+      setForgotMessage(res.message || "Vì lý do bảo mật, vui lòng liên hệ quản trị viên hoặc quản lý để được cấp lại mật khẩu.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Không thể đặt lại mật khẩu";
       setForgotError(msg);

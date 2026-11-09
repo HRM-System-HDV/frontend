@@ -77,7 +77,7 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
     targetName = pObj.name ? `Khung ca ${pObj.name}` : "Khung ca mẫu";
   } else if (path.includes("/shifts/register") || path.includes("/shifts/registrations")) {
     module = "Đăng ký ca";
-    targetName = "Nguyện vọng ca tuần";
+    targetName = "Đăng ký ca tuần";
   } else if (path.includes("/shifts")) {
     module = "Phân ca làm việc";
     targetName = pObj.template ? `Ca ${pObj.template}` : "Phân ca làm việc";
