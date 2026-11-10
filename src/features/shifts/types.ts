@@ -17,7 +17,7 @@ export interface WorkShift {
   scheduled: string;
   checkIn: string;
   checkOut: string;
-  status: "Đúng giờ" | "Trễ" | "Về sớm" | "Chưa làm" | "Quên chấm công";
+  status: "Đúng giờ" | "Trễ" | "Về sớm" | "Chưa chấm công" | "Quên chấm công";
   note?: string;
   isRecurring?: boolean;
 }

@@ -17,6 +17,7 @@ import CreateTaskModal, { ShiftTemplateOption } from "@/features/tasks/TaskForm"
 import TaskDetailModal from "@/features/tasks/TaskDetail";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
+import { formatDateTime, parseDate } from "@/lib/utils";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -81,7 +82,8 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
   } else if (raw.status === "overdue") {
     status = "overdue";
   } else {
-    if (raw.dueDate && new Date(raw.dueDate).getTime() < Date.now()) {
+    const due = parseDate(raw.dueDate);
+    if (due && due.getTime() < Date.now()) {
       status = "overdue";
     } else {
       status = "pending";
@@ -108,15 +110,13 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
     assignedByName: raw.assignedByName || "Ban Quản lý",
     shiftName: raw.shiftName,
     branch,
-    dueDate: raw.dueDate ? String(raw.dueDate).replace("T", " ") : "—",
+    dueDate: raw.dueDate ? formatDateTime(raw.dueDate) : "—",
     status,
     priority: raw.priority || "normal",
     assignedToEmail,
     assignedToName,
     completedAt: raw.completedAt,
-    createdAt: raw.createdAt
-      ? new Date(raw.createdAt).toISOString().replace("T", " ").substring(0, 16)
-      : "—",
+    createdAt: raw.createdAt ? formatDateTime(raw.createdAt) : "—",
     requirePhoto: Boolean(raw.requirePhoto),
     proofPhotoUrl: raw.proofPhotoUrl,
     photoSubmittedBy: raw.photoSubmittedBy,
@@ -285,7 +285,7 @@ export default function TasksPage() {
 
   // Xác nhận hoàn thành công việc từ Modal chi tiết (PUT /api/tasks/:id)
   const handleCompleteTask = async (taskId: string, photoUrl?: string) => {
-    const completedAt = new Date().toISOString().replace("T", " ").substring(0, 16);
+    const completedAt = formatDateTime(new Date());
     try {
       setActionInProgress(true);
       await apiPut(`/api/tasks/${encodeURIComponent(taskId)}`, {
@@ -337,7 +337,7 @@ export default function TasksPage() {
       description: newTask.description,
       assignedTo: newTask.assignedToName,
       branchSlug: newTask.branch,
-      dueDate: newTask.dueDate,
+      dueDate: formatDateTime(newTask.dueDate),
       status: "pending",
       sourceType: newTask.sourceType,
       assignedByName: newTask.assignedByName,

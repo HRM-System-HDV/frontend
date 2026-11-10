@@ -16,7 +16,7 @@ import Button from "@/components/ui/Button";
 import { Select, Input } from "@/components/ui/Form";
 import Table, { Column } from "@/components/ui/Table";
 import Badge from "@/components/ui/Badge";
-import { formatVND } from "@/lib/utils";
+import { formatDateTime, formatVND } from "@/lib/utils";
 import type { SoapTransaction } from "./types";
 
 interface Props {
@@ -89,9 +89,9 @@ export default function SoapTransactionsTable({
       header: "Thời gian thực hiện",
       render: (t) => (
         <div className="text-xs text-gray-600">
-          <div>{t.createdAt}</div>
+          <div>{formatDateTime(t.createdAt)}</div>
           {t.completedAt && (
-            <div className="text-[11px] text-emerald-600 font-medium">Hoàn tất: {t.completedAt}</div>
+            <div className="text-[11px] text-emerald-600 font-medium">Hoàn tất: {formatDateTime(t.completedAt)}</div>
           )}
         </div>
       ),

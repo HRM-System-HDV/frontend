@@ -8,6 +8,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import type { WeeklyRegistration } from "@/features/shifts/types";
+import { formatDateTime } from "@/lib/utils";
 
 interface Props {
   registrations: WeeklyRegistration[];
@@ -81,7 +82,7 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
     {
       key: "registeredAt",
       header: "Thời gian đăng ký",
-      render: (r) => <span className="text-xs text-gray-500">{r.registeredAt}</span>,
+      render: (r) => <span className="text-xs text-gray-500">{formatDateTime(r.registeredAt) || "—"}</span>,
     },
   ];
 

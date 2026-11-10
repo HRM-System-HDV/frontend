@@ -7,6 +7,7 @@ import Badge from "@/components/ui/Badge";
 import StaffShiftDetailModal from "./ShiftDetail";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { apiGet } from "@/lib/api";
+import { formatDate, parseDate } from "@/lib/utils";
 import type { Branch } from "@/types";
 import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
 
@@ -175,7 +176,7 @@ export default function GeneralScheduleSection({
 
   // Xây dựng danh sách ca làm việc của ngày được chọn — chỉ từ API.
   const dayShifts: GeneralShiftItem[] = useMemo(() => {
-    const shiftsOfDay = workShifts.filter((ws) => ws.date === currentDay.fullDate);
+    const shiftsOfDay = workShifts.filter((ws) => formatDate(ws.date) === currentDay.fullDate);
 
     const toStaff = (ws: WorkShift): StaffInShift => ({
       id: ws.id,
@@ -192,8 +193,8 @@ export default function GeneralScheduleSection({
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const [dd, mm, yyyy] = currentDay.fullDate.split("/").map(Number);
-    const dayDate = new Date(yyyy, (mm || 1) - 1, dd || 1);
+    const parsedDay = parseDate(currentDay.fullDate);
+    const dayDate = parsedDay ? new Date(parsedDay) : new Date(NaN);
     dayDate.setHours(0, 0, 0, 0);
     // Trạng thái theo ngày + giờ: ca đã qua giờ kết thúc -> hoàn thành,
     // chưa tới giờ bắt đầu -> sắp diễn ra, đang trong khung -> đang diễn ra.
@@ -311,8 +312,7 @@ export default function GeneralScheduleSection({
 
   const getWeekRange = () => {
     if (weekDays.length < 7) return "";
-    const year = weekDays[6].fullDate.split("/")[2] || "";
-    return `${weekDays[0].date} - ${weekDays[6].date}/${year}`;
+    return `${weekDays[0].fullDate} - ${weekDays[6].fullDate}`;
   };
 
   // Tổng số lượt nhân sự trực trong ngày
@@ -715,8 +715,9 @@ export default function GeneralScheduleSection({
                                           const now = new Date();
                                           const today = new Date();
                                           today.setHours(0, 0, 0, 0);
-                                          const [dd, mm, yyyy] = currentDay.fullDate.split("/").map(Number);
-                                          const dayDate = new Date(yyyy, (mm || 1) - 1, dd || 1);
+                                          const parsedDay = parseDate(currentDay.fullDate);
+                                          if (!parsedDay) return false;
+                                          const dayDate = new Date(parsedDay);
                                           dayDate.setHours(0, 0, 0, 0);
                                           if (dayDate.getTime() < today.getTime()) return true;
                                           if (dayDate.getTime() > today.getTime()) return false;

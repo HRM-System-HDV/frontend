@@ -72,8 +72,16 @@ export default function ShiftRequestSection({ requests, onApprove, onReject }: P
     },
     {
       key: "period",
-      header: "Thời gian",
-      render: (r) => <span className="text-gray-600 text-sm">{r.from} → {r.to}</span>,
+      header: "Thời gian / Số tiền",
+      render: (r) => (
+        r.type === "tạm ứng" ? (
+          <span className="font-semibold text-purple-700 text-sm">
+            {r.amount || r.title || `${r.from} → ${r.to}`}
+          </span>
+        ) : (
+          <span className="text-gray-600 text-sm">{r.from} → {r.to}</span>
+        )
+      ),
     },
     {
       key: "status",

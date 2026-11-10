@@ -2,6 +2,7 @@ import React from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowRightArrowLeft,
+  faBoxArchive,
   faBuildingColumns,
   faCalendarWeek,
   faChartPie,
@@ -35,6 +36,7 @@ export function buildMenuItems(role: string): SidebarGroup[] {
         { label: "Nội quy & Quy định", href: "/dashboard/regulations", icon: <FontAwesomeIcon icon={faGavel} fontSize={20} strokeWidth={1.5} /> },
         { label: "Cấu hình Wi-Fi", href: "/dashboard/wifi", icon: <FontAwesomeIcon icon={faWifi} fontSize={20} strokeWidth={1.5} /> },
         { label: "Lịch sử thao tác", href: "/dashboard/backlog", icon: <FontAwesomeIcon icon={faClockRotateLeft} fontSize={20} strokeWidth={1.5} /> },
+        { label: "Lưu trữ", href: "/dashboard/archive", icon: <FontAwesomeIcon icon={faBoxArchive} fontSize={20} strokeWidth={1.5} /> },
       ]
     : [
         { label: "Tổng quan Dashboard", href: "/dashboard", icon: <FontAwesomeIcon icon={faChartPie} fontSize={20} strokeWidth={1.5} /> },

@@ -91,7 +91,8 @@ export function StatusBadge({ status }: { status: string }) {
     "Đúng giờ": { tone: "success", label: "Đúng giờ" },
     "Trễ": { tone: "warning", label: "Trễ" },
     "Về sớm": { tone: "danger", label: "Về sớm" },
-    "Chưa làm": { tone: "gray", label: "Chưa làm" },
+    "Chưa làm": { tone: "gray", label: "Chưa chấm công" },
+    "Chưa chấm công": { tone: "gray", label: "Chưa chấm công" },
     "Quên chấm công": { tone: "danger", label: "Quên chấm công" },
   };
   const cleanStatus = (status || "").trim();

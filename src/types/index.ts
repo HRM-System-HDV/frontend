@@ -48,6 +48,8 @@ export interface ShiftRequest {
   employee: string;
   branch: string;
   type: "đổi ca" | "nghỉ phép" | "bổ sung công" | "tạm ứng";
+  title?: string;
+  amount?: string;
   from: string;
   to: string;
   reason: string;

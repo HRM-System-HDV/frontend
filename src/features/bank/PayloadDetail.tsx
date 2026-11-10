@@ -14,7 +14,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
-import { formatVND } from "@/lib/utils";
+import { formatDateTime, formatVND } from "@/lib/utils";
 import type { SoapTransaction } from "./types";
 
 interface Props {
@@ -124,7 +124,7 @@ export default function SoapPayloadDetailModal({ transaction, onClose }: Props) 
           <div className="absolute top-4 right-6 border-2 border-emerald-600 rounded-xl px-3 py-1.5 rotate-[-6deg] bg-emerald-50/80 text-emerald-800 text-center select-none shadow-2xs">
             <div className="text-[10px] font-bold uppercase tracking-wider">Đã Trích Nợ Thành Công</div>
             <div className="text-xs font-black">{transaction.bankName}</div>
-            <div className="text-[9px] font-mono text-emerald-700 mt-0.5">{transaction.completedAt || transaction.createdAt}</div>
+            <div className="text-[9px] font-mono text-emerald-700 mt-0.5">{formatDateTime(transaction.completedAt || transaction.createdAt)}</div>
           </div>
 
           {/* Header Chứng từ */}

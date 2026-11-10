@@ -72,7 +72,18 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
 
   const pObj = payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
 
-  if (path.includes("/shifts/templates") || path.includes("/shift-templates")) {
+  if (path.startsWith("/api/archive")) {
+    module = "Lưu trữ";
+    targetName = "Dữ liệu cũ";
+    if (path.includes("/restore")) {
+      actionLabel = "Khôi phục";
+      targetName = "Bản ghi lưu trữ";
+    } else if (path.includes("/run")) {
+      actionLabel = "Thực hiện lưu trữ";
+    } else if (path.includes("/preview")) {
+      actionLabel = "Xem trước lưu trữ";
+    }
+  } else if (path.includes("/shifts/templates") || path.includes("/shift-templates")) {
     module = "Khung ca mẫu";
     targetName = pObj.name ? `Khung ca ${pObj.name}` : "Khung ca mẫu";
   } else if (path.includes("/shifts/register") || path.includes("/shifts/registrations")) {
