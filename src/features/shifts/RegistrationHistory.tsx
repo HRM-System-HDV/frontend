@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import Table, { Column } from "@/components/ui/Table";
 import type { ShiftRegistrationRecord, WeeklyRegistration } from "./types";
 import type { Branch } from "@/types";
+import { formatDateTime } from "@/lib/utils";
 
 interface Props {
   registrationRecords?: ShiftRegistrationRecord[];
@@ -65,7 +66,7 @@ export default function RegistrationHistorySection({
     {
       key: "registeredAt",
       header: "THỜI GIAN ĐĂNG KÝ",
-      render: (r) => <span className="text-xs text-gray-500 font-mono">{r.registeredAt}</span>,
+      render: (r) => <span className="text-xs text-gray-500 font-mono">{formatDateTime(r.registeredAt) || "—"}</span>,
     },
   ];
 

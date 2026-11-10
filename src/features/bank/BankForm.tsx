@@ -11,7 +11,7 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
-import { formatVND } from "@/lib/utils";
+import { formatDate, formatVND } from "@/lib/utils";
 import { GATEWAY_URL, GatewayError } from "@/lib/api";
 import type { BankPartner } from "./types";
 
@@ -193,7 +193,7 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
           <div className="flex justify-between text-gray-700">
             <span>Chứng thực số doanh nghiệp:</span>
             <span className="font-semibold text-gray-900">
-              {isConnected ? `Hợp lệ (Hạn đến: ${partner.certExpiry})` : "Chưa cấu hình"}
+              {isConnected ? `Hợp lệ (Hạn đến: ${formatDate(partner.certExpiry) || "—"})` : "Chưa cấu hình"}
             </span>
           </div>
           <div className="flex justify-between text-gray-700">

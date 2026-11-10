@@ -13,7 +13,7 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { apiGet, apiPost, apiPut, GatewayError, GATEWAY_URL } from "@/lib/api";
-import { getTodayVN } from "@/lib/utils";
+import { formatDate, getTodayVN } from "@/lib/utils";
 import type { Employee, Branch, Department } from "@/types";
 import EmployeeSection from "@/features/employees/EmployeeList";
 import DisableEmployeeDialog from "@/features/employees/EmployeeDisable";
@@ -472,7 +472,7 @@ export default function EmployeesPage() {
         phone: updated.phone,
         email: updated.email,
         gender: updated.gender,
-        birthDate: updated.birthDate,
+        birthDate: updated.birthDate ? formatDate(updated.birthDate) : undefined,
         province: updated.province,
         ward: updated.ward,
         street: updated.street,
@@ -481,7 +481,7 @@ export default function EmployeesPage() {
         role: updated.role,
         systemRole: updated.systemRole,
         status: updated.status,
-        joinDate: updated.joinDate,
+        joinDate: updated.joinDate ? formatDate(updated.joinDate) : undefined,
         salaryType: updated.salaryType,
         hourlySalary: updated.hourlySalary,
         baseSalary: updated.baseSalary,
@@ -489,7 +489,7 @@ export default function EmployeesPage() {
         bankAccountNumber: updated.bankAccountNumber,
         bankAccountName: updated.bankAccountName,
         cccd: updated.cccd,
-        issueDate: updated.issueDate,
+        issueDate: updated.issueDate ? formatDate(updated.issueDate) : undefined,
         issuePlace: updated.issuePlace,
         cccdFront: typeof updated.cccdFront === "string" ? updated.cccdFront : "",
         cccdBack: typeof updated.cccdBack === "string" ? updated.cccdBack : "",

@@ -3,6 +3,7 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCheck, faCircleExclamation, faClock, faFire } from "@fortawesome/free-solid-svg-icons";
 import type { TaskItem, TaskPriority, TaskStatus } from "./types";
+import { formatDateTime } from "@/lib/utils";
 
 interface TaskTableProps {
   tasks: TaskItem[];
@@ -134,7 +135,7 @@ export default function TaskTable({
                   {/* Cột 3: Hạn hoàn thành */}
                   <td className="py-3.5 px-4 whitespace-nowrap">
                     <div className="text-xs font-medium text-gray-800">
-                      {task.dueDate}
+                      {formatDateTime(task.dueDate) || "—"}
                     </div>
                   </td>
 

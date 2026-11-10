@@ -7,7 +7,7 @@ import { faFileExcel, faDownload, faSpinner } from "@fortawesome/free-solid-svg-
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select } from "@/components/ui/Form";
-import { formatVND } from "@/lib/utils";
+import { formatDateTime, formatVND } from "@/lib/utils";
 import type { Payslip } from "@/types";
 
 interface ExportOptions {
@@ -53,8 +53,7 @@ export async function exportPayslipsToExcel(slips: Payslip[], options: ExportOpt
   ];
 
   const now = new Date();
-  const dateStr = `${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}/${now.getFullYear()}`;
-  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const [dateStr, timeStr] = formatDateTime(now).split(" ");
 
   // 1. Quốc hiệu tiêu ngữ
   const r1 = ws.addRow(["CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM"]);

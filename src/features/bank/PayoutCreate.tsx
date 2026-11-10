@@ -13,7 +13,7 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select, Input } from "@/components/ui/Form";
-import { formatVND } from "@/lib/utils";
+import { formatDateTime, formatVND } from "@/lib/utils";
 import { apiGet, createPayout, GATEWAY_URL, GatewayError } from "@/lib/api";
 import type { BankPartner, SoapTransaction } from "./types";
 
@@ -47,10 +47,8 @@ function newIdempotencyKey(): string {
 }
 
 function toDisplayDate(isoOrNow: string): string {
-  const d = isoOrNow ? new Date(isoOrNow) : new Date();
-  if (Number.isNaN(d.getTime())) return isoOrNow;
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  // Hiển thị DD/MM/YYYY HH:mm theo chuẩn chung của hệ thống
+  return formatDateTime(isoOrNow || new Date());
 }
 
 export default function CreatePayrollDisbursementModal({

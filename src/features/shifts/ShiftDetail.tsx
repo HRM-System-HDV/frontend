@@ -6,6 +6,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import type { StaffInShift, GeneralShiftItem } from "./ScheduleOverview";
+import { formatDate, parseDate } from "@/lib/utils";
 
 interface Props {
   mode?: "schedule" | "registration";
@@ -51,8 +52,9 @@ export default function StaffShiftDetailModal({
     const now = new Date();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const [dd, mm, yyyy] = day.fullDate.split("/").map(Number);
-    const dayDate = new Date(yyyy, (mm || 1) - 1, dd || 1);
+    const parsedDay = parseDate(day.fullDate);
+    if (!parsedDay) return false;
+    const dayDate = new Date(parsedDay);
     dayDate.setHours(0, 0, 0, 0);
     if (dayDate.getTime() < today.getTime()) return true;
     if (dayDate.getTime() > today.getTime()) return false;
@@ -166,7 +168,7 @@ export default function StaffShiftDetailModal({
           <div className="grid grid-cols-2 gap-4 text-xs">
             <div>
               <div className="text-gray-400">Ngày làm việc</div>
-              <div className="font-semibold text-gray-800">{day.name}, {day.fullDate} {day.isToday && <span className="ml-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary border border-primary-200 text-[10px]">Hôm nay</span>}</div>
+              <div className="font-semibold text-gray-800">{day.name}, {formatDate(day.fullDate)} {day.isToday && <span className="ml-1 px-1.5 py-0.5 rounded bg-primary-50 text-primary border border-primary-200 text-[10px]">Hôm nay</span>}</div>
             </div>
             <div>
               <div className="text-gray-400">Trạng thái</div>

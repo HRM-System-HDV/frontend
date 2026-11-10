@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import type { TaskItem, TaskPriority, TaskSourceType } from "./types";
 import type { Employee, Branch } from "@/types";
+import { formatDateTime, toInputDateTime } from "@/lib/utils";
 
 export interface ShiftTemplateOption {
   id: string;
@@ -58,12 +59,7 @@ export default function CreateTaskModal({
   const [dueDate, setDueDate] = useState(() => {
     const d = new Date();
     d.setHours(d.getHours() + 4);
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const hh = String(d.getHours()).padStart(2, "0");
-    const min = String(d.getMinutes()).padStart(2, "0");
-    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+    return toInputDateTime(d);
   });
 
   // Đồng bộ khi modal mở hoặc danh sách khung ca/chi nhánh được nạp từ DB
@@ -110,12 +106,12 @@ export default function CreateTaskModal({
       assignedByName: sourceType === "manager" ? `${currentUserName} (Giao việc)` : `Quy trình ${shiftName.split("(")[0].trim()}`,
       shiftName: isShift ? shiftName : undefined,
       branch: finalBranch,
-      dueDate: dueDate.replace("T", " "),
+      dueDate: formatDateTime(dueDate),
       status: "pending",
       priority,
       assignedToEmail: empEmail,
       assignedToName: empName,
-      createdAt: new Date().toISOString().replace("T", " ").substring(0, 16),
+      createdAt: formatDateTime(new Date()),
       requirePhoto,
     };
 

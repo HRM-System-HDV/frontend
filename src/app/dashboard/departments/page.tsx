@@ -15,6 +15,7 @@ import type { Department, Employee } from "@/types";
 import DepartmentList from "@/features/departments/DepartmentList";
 import DepartmentModal from "@/features/departments/DepartmentForm";
 import { useCurrentUser } from "@/context/AuthContext";
+import { getTodayVN } from "@/lib/utils";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -105,7 +106,7 @@ export default function DepartmentsPage() {
         ...d,
         status: d.status || "hoạt động",
         staff: d.staff ?? 0,
-        createdAt: d.createdAt || new Date().toLocaleDateString("vi-VN"),
+        createdAt: d.createdAt || getTodayVN(),
       }));
       setDeptList(normalizedDepts);
       setEmpList(empData || []);
@@ -145,7 +146,7 @@ export default function DepartmentsPage() {
         });
         setDeptList((prev) => [
           ...prev,
-          created || { id: `dept-${Date.now()}`, ...data, staff: 0, createdAt: new Date().toLocaleDateString("vi-VN") },
+          created || { id: `dept-${Date.now()}`, ...data, staff: 0, createdAt: getTodayVN() },
         ]);
         showToast("Thêm phòng ban mới thành công!", "success");
       }

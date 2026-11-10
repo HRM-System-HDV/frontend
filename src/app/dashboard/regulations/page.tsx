@@ -10,7 +10,7 @@ import RegulationSection from "@/features/regulations/RegulationList";
 import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
 import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
-import { getTodayVN } from "@/lib/utils";
+import { formatDate, getTodayVN } from "@/lib/utils";
 
 // api.ts dùng chung chưa có apiPut/apiDelete (quy tắc phân công: chỉ đọc, không sửa)
 // nên đặt helper cục bộ trong trang, giống tiền lệ các trang employees/payslips/news.
@@ -129,7 +129,7 @@ export default function RegulationsManagementPage() {
           content: input.content.trim(),
           status: input.status,
           scope: input.scope,
-          effectiveDate: input.effectiveDate,
+          effectiveDate: formatDate(input.effectiveDate) || getTodayVN(),
           version: input.version,
           pinned: input.pinned,
         });
@@ -144,7 +144,7 @@ export default function RegulationsManagementPage() {
           content: input.content.trim(),
           status: input.status,
           scope: input.scope,
-          effectiveDate: input.effectiveDate || todayStr(),
+          effectiveDate: formatDate(input.effectiveDate) || todayStr(),
           version: input.version || "1.0",
           pinned: input.pinned,
           attachments: 0,

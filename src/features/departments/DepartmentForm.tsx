@@ -5,6 +5,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
 import type { Department, Employee } from "@/types";
+import { getTodayVN } from "@/lib/utils";
 
 interface Props {
   open: boolean;
@@ -42,7 +43,7 @@ export default function DepartmentModal({ open, onClose, department, employees, 
       manager: manager.trim(),
       status,
       staff: department?.staff ?? 0,
-      createdAt: department?.createdAt || new Date().toLocaleDateString("vi-VN"),
+      createdAt: department?.createdAt || getTodayVN(),
     });
   };
 

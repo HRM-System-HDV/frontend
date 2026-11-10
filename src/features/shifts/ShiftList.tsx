@@ -11,6 +11,7 @@ import { Input, Select } from "@/components/ui/Form";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
+import { formatDate } from "@/lib/utils";
 import type { Branch } from "@/types";
 import type { WorkShift } from "@/features/shifts/types";
 
@@ -39,9 +40,8 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
         return false;
       }
       if (dateFilter) {
-        const [y, m, d] = dateFilter.split("-");
-        const formatted = `${d}/${m}/${y}`;
-        if (s.date !== formatted && !s.date.includes(formatted)) return false;
+        // dateFilter là ISO từ <input type="date">; s.date có thể là DD/MM/YYYY -> so sánh qua formatDate.
+        if (formatDate(s.date) !== formatDate(dateFilter)) return false;
       }
       return true;
     });
@@ -50,7 +50,7 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
   const columns: Column<WorkShift>[] = [
     { key: "employee", header: "Nhân viên", render: (s) => <span className="font-semibold text-gray-800">{s.employee}</span> },
     { key: "branch", header: "Chi nhánh", render: (s) => <Badge tone="gray">{s.branch}</Badge> },
-    { key: "date", header: "Ngày", render: (s) => <span className="text-gray-600">{s.date}</span> },
+    { key: "date", header: "Ngày", render: (s) => <span className="text-gray-600">{formatDate(s.date) || "—"}</span> },
     { key: "templateName", header: "Khung ca", render: (s) => <Badge tone="primary">{s.templateName}</Badge> },
     { key: "scheduled", header: "Giờ làm", render: (s) => <span className="font-medium text-gray-700">{s.scheduled}</span> },
     { key: "checkIn", header: "Check-in", render: (s) => <span className="font-mono text-sm">{s.checkIn}</span> },
@@ -58,7 +58,7 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
     {
       key: "status",
       header: "Trạng thái",
-      render: (s) => (s.status === "Chưa làm" ? <Badge tone="gray">{s.status}</Badge> : <StatusBadge status={s.status} />),
+      render: (s) => (s.status === "Chưa chấm công" ? <Badge tone="gray">Chưa chấm công</Badge> : <StatusBadge status={s.status} />),
     },
     {
       key: "actions",
@@ -160,7 +160,7 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
                   <FontAwesomeIcon icon={faCalendarDay} className="text-gray-400 text-xs w-4" />
                   Ngày làm việc:
                 </span>
-                <span className="font-semibold text-gray-800">{selectedShift.date}</span>
+                <span className="font-semibold text-gray-800">{formatDate(selectedShift.date) || "—"}</span>
               </div>
               <div className="flex justify-between items-center py-1 border-b border-gray-100">
                 <span className="text-gray-500 flex items-center gap-2">

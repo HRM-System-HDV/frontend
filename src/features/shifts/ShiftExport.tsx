@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Select } from "@/components/ui/Form";
 import type { WorkShift } from "@/features/shifts/types";
+import { formatDate, formatDateTime, getTodayVN } from "@/lib/utils";
 import ExcelJS from "exceljs";
 
 interface Props {
@@ -60,7 +61,7 @@ export default function ExportModal({ open, onClose, workShifts = [] }: Props) {
 
       const rangeLabel = range === "day" ? "Hôm nay" : range === "month" ? "Tháng này" : "Tuần này";
       const rSub = ws.addRow([
-        `Phạm vi: ${rangeLabel} | Thời điểm trích xuất: ${new Date().toLocaleString("vi-VN")} | Tổng cộng: ${workShifts.length} ca`,
+        `Phạm vi: ${rangeLabel} | Thời điểm trích xuất: ${formatDateTime(new Date())} | Tổng cộng: ${workShifts.length} ca`,
       ]);
       rSub.font = { name: "Times New Roman", size: 10, italic: true, color: { argb: "FF475569" } };
       rSub.alignment = { horizontal: "center", vertical: "middle" };
@@ -101,7 +102,7 @@ export default function ExportModal({ open, onClose, workShifts = [] }: Props) {
           idx + 1,
           clean(s.employee),
           clean(s.branch),
-          clean(s.date),
+          clean(formatDate(s.date) || "—"),
           clean(s.templateName),
           clean(s.scheduled),
           clean(s.checkIn),
@@ -131,7 +132,8 @@ export default function ExportModal({ open, onClose, workShifts = [] }: Props) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `ca-lam-viec-${range}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      // Tên file dùng ngày VN không dấu "/" (tên file không cho phép ký tự "/")
+      a.download = `ca-lam-viec-${range}-${getTodayVN().replace(/\//g, "")}.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
       onClose();

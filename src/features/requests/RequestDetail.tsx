@@ -6,6 +6,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import type { ShiftRequest } from "@/types";
+import { formatDateTime } from "@/lib/utils";
 
 interface RequestDetailModalProps {
   open: boolean;
@@ -128,7 +129,7 @@ export default function RequestDetailModal({
       <div className="space-y-4">
         {/* Banner tiêu đề loại yêu cầu & trạng thái */}
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-          <div className="flex items-center justify-between gap-3 mb-1.5">
+          <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               {typeInfo.badge}
               <span className="font-bold text-gray-900 text-base">
@@ -137,7 +138,6 @@ export default function RequestDetailModal({
             </div>
             <StatusBadge status={request.status} />
           </div>
-          <p className="text-xs text-gray-500">{typeInfo.desc}</p>
         </div>
 
         {/* Thông tin người gửi & Chi nhánh */}
@@ -164,23 +164,29 @@ export default function RequestDetailModal({
             {request.createdAt && (
               <div className="text-[11px] text-gray-400 mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-1">
                 <FontAwesomeIcon icon={faClock} fontSize={12} />
-                <span>Thời điểm gửi: {request.createdAt}</span>
+                <span>Thời điểm gửi: {formatDateTime(request.createdAt)}</span>
               </div>
             )}
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl p-3.5">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-2">
-              Thời gian áp dụng
+              {request.type === "tạm ứng" ? "Số tiền tạm ứng" : "Thời gian áp dụng"}
             </span>
             <div className="flex items-start gap-2.5">
-              <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-sm shrink-0 border border-amber-100">
-                <FontAwesomeIcon icon={faCalendar} fontSize={20} />
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border ${
+                request.type === "tạm ứng"
+                  ? "bg-purple-50 text-purple-700 border-purple-100"
+                  : "bg-amber-50 text-amber-700 border-amber-100"
+              }`}>
+                <FontAwesomeIcon icon={request.type === "tạm ứng" ? faCoins : faCalendar} fontSize={20} />
               </div>
               <div>
-                <div className="text-xs text-gray-500">Khoảng thời gian:</div>
-                <div className="font-bold text-gray-800 text-sm mt-0.5">
-                  {request.from} → {request.to}
+                <div className="text-xs text-gray-500">
+                  {request.type === "tạm ứng" ? "Số tiền đề xuất:" : "Khoảng thời gian:"}
+                </div>
+                <div className={`font-bold text-sm mt-0.5 ${request.type === "tạm ứng" ? "text-purple-700 text-base" : "text-gray-800"}`}>
+                  {request.type === "tạm ứng" ? (request.amount || request.title || "—") : `${request.from} → ${request.to}`}
                 </div>
                 <div className="text-[11px] text-gray-400 mt-1">
                   Mã tham chiếu: #{request.id}
@@ -190,16 +196,18 @@ export default function RequestDetailModal({
           </div>
         </div>
 
-        {/* Nội dung chi tiết & Lý do giải trình */}
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5 mb-2">
-            <FontAwesomeIcon icon={faFileLines} fontSize={15} className="text-primary" />
-            <span>Nội dung & Lý do đề xuất của nhân viên</span>
-          </h4>
-          <div className="bg-gray-50 rounded-lg p-3.5 text-sm text-gray-800 leading-relaxed border border-gray-100">
-            {request.reason || "Không có nội dung giải trình thêm."}
+        {/* Nội dung chi tiết & Lý do giải trình (không bắt buộc với nhờ làm thay) */}
+        {request.type !== "đổi ca" || (request.reason && !request.reason.startsWith("Nhờ ") && request.reason !== "Yêu cầu nội bộ cần phê duyệt") ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5 mb-2">
+              <FontAwesomeIcon icon={faFileLines} fontSize={15} className="text-primary" />
+              <span>Nội dung & Lý do đề xuất của nhân viên</span>
+            </h4>
+            <div className="bg-gray-50 rounded-lg p-3.5 text-sm text-gray-800 leading-relaxed border border-gray-100">
+              {request.reason || "Không có nội dung giải trình thêm."}
+            </div>
           </div>
-        </div>
+        ) : null}
       </div>
     </Modal>
   );

@@ -12,7 +12,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
-import { formatVND } from "@/lib/utils";
+import { formatDate, formatDateTime, formatVND, getTodayVN } from "@/lib/utils";
 import { GATEWAY_URL, GatewayError } from "@/lib/api";
 import type { Employee, Branch, Department } from "@/types";
 import ExcelJS from "exceljs";
@@ -201,7 +201,7 @@ export default function EmployeeDeleteModal({
       rTitle.height = 28;
       wsProfile.mergeCells("A5:B5");
 
-      const rSub1 = wsProfile.addRow([`Thời điểm trích xuất dữ liệu: ${new Date().toLocaleString("vi-VN")}`]);
+      const rSub1 = wsProfile.addRow([`Thời điểm trích xuất dữ liệu: ${formatDateTime(new Date())}`]);
       rSub1.font = { name: "Times New Roman", size: 10, italic: true, color: { argb: "FF475569" } };
       rSub1.alignment = { horizontal: "center" };
       wsProfile.mergeCells("A6:B6");
@@ -253,9 +253,9 @@ export default function EmployeeDeleteModal({
       addDataRow("Email công vụ / liên hệ:", cleanText(employee.email));
       addDataRow("Số điện thoại di động:", cleanText(employee.phone));
       addDataRow("Giới tính:", cleanText(employee.gender));
-      addDataRow("Ngày tháng năm sinh:", cleanText(employee.birthDate));
+      addDataRow("Ngày tháng năm sinh:", cleanText(formatDate(employee.birthDate)));
       addDataRow("Số CCCD / CMND định danh:", cleanText(employee.cccd));
-      addDataRow("Ngày cấp CCCD:", cleanText(employee.issueDate));
+      addDataRow("Ngày cấp CCCD:", cleanText(formatDate(employee.issueDate)));
       addDataRow("Nơi cấp CCCD:", cleanText(employee.issuePlace));
       addDataRow("Địa chỉ cư trú hiện tại:", fullAddress);
 
@@ -273,7 +273,7 @@ export default function EmployeeDeleteModal({
           : "Nhân viên (Staff)"
       );
       addDataRow("Trạng thái công tác:", employee.status === "đang làm" ? "Đang làm việc" : "Đã vô hiệu hóa");
-      addDataRow("Ngày vào làm việc chính thức:", cleanText(employee.joinDate));
+      addDataRow("Ngày vào làm việc chính thức:", cleanText(formatDate(employee.joinDate)));
 
       // Phần III
       addSectionHeader("III. CHÍNH SÁCH TIỀN LƯƠNG & TÀI KHOẢN NGÂN HÀNG");
@@ -387,7 +387,7 @@ export default function EmployeeDeleteModal({
             penalty,
             net,
             p.status === "đã chốt" ? "Đã chốt" : "Chưa chốt",
-            p.issuedAt ? new Date(p.issuedAt).toLocaleString("vi-VN") : "—",
+            p.issuedAt ? formatDateTime(p.issuedAt) : "—",
           ]);
           row.height = 22;
 
@@ -544,14 +544,14 @@ export default function EmployeeDeleteModal({
           const row = wsShifts.addRow([
             idx + 1,
             s.id,
-            cleanText(s.date),
+            cleanText(formatDate(s.date)),
             tmpl,
             cleanText(s.branch || s.branchSlug || "—"),
             sched,
             cleanText(s.checkIn),
             cleanText(s.checkOut),
             hours,
-            cleanText(s.status || "Chưa làm"),
+            cleanText(s.status === "Chưa làm" ? "Chưa chấm công" : (s.status || "Chưa chấm công")),
             cleanText(s.note || ""),
           ]);
           row.height = 22;
@@ -610,7 +610,8 @@ export default function EmployeeDeleteModal({
 
       // Xuất file và kích hoạt tải về trên trình duyệt
       const safeName = employee.name.trim().replace(/[^a-zA-Z0-9_\u00C0-\u024F\u1EA0-\u1EF9]/g, "_");
-      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      // Ngày VN không dấu "/" (tên file không cho phép ký tự "/")
+      const dateStr = getTodayVN().replace(/\//g, "");
       const fileName = `Ho_So_Luu_Tru_${employee.id}_${safeName}_${dateStr}.xlsx`;
 
       const buffer = await wb.xlsx.writeBuffer();
@@ -783,7 +784,7 @@ export default function EmployeeDeleteModal({
             </div>
             <div className="p-2.5 rounded-lg bg-white border border-gray-200">
               <span className="text-gray-400 block text-[11px]">Ngày vào làm:</span>
-              <span className="font-semibold text-gray-800 block">{employee.joinDate || "—"}</span>
+              <span className="font-semibold text-gray-800 block">{formatDate(employee.joinDate) || "—"}</span>
             </div>
           </div>
         </div>

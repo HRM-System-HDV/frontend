@@ -24,6 +24,7 @@ import AssignShiftModal from "@/features/shifts/ShiftAssign";
 import ExportModal from "@/features/shifts/ShiftExport";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
+import { formatDate, formatDateTime, parseDate, getTodayVN } from "@/lib/utils";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -121,7 +122,11 @@ function mapBackendShiftToWorkShift(
   const rawBranch = s.branchSlug || s.branch || "—";
   const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
 
-  let status: WorkShift["status"] = "Chưa làm";
+  // Mobile ghi ngày ISO (yyyy-MM-dd), web ghi dd/MM/yyyy; chuẩn hóa về dd/MM/yyyy
+  // để khối Lịch làm việc chung khớp đúng ngày và bảng không lẫn lộn định dạng.
+  const date = formatDate(s.date) || "—";
+
+  let status: WorkShift["status"] = "Chưa chấm công";
   if (s.status === "Đúng giờ" || s.status === "hoàn thành" || s.status === "completed") {
     status = "Đúng giờ";
   } else if (s.status === "Trễ" || s.status === "late") {
@@ -131,42 +136,38 @@ function mapBackendShiftToWorkShift(
   } else if (s.status === "missed" || s.status === "Quên chấm công") {
     status = "Quên chấm công";
   } else {
-    // Nếu chưa check-in và đã quá giờ kết thúc ca (hoặc ngày trong quá khứ) -> Quên chấm công
+    // Nếu chưa check-in và đã quá giờ bắt đầu ca (hoặc ngày trong quá khứ) -> Quên chấm công
     const isCheckedIn = !!s.checkIn && s.checkIn !== "—";
-    if (!isCheckedIn && s.date) {
-      const [dd, mm, yyyy] = s.date.split("/").map(Number);
-      if (dd && mm && yyyy) {
+    if (!isCheckedIn && date !== "—") {
+      const parsed = parseDate(date);
+      if (parsed) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const shiftDate = new Date(yyyy, mm - 1, dd);
+        const shiftDate = new Date(parsed);
         shiftDate.setHours(0, 0, 0, 0);
 
         if (shiftDate.getTime() < today.getTime()) {
           status = "Quên chấm công";
         } else if (shiftDate.getTime() === today.getTime()) {
-          const endStr = (s.scheduledEnd || scheduled.split("-")[1] || "14:00").trim();
           const startStr = (s.scheduledStart || scheduled.split("-")[0] || "07:00").trim();
           const [sh, sm] = startStr.split(":").map(Number);
-          let [eh, em] = endStr.split(":").map(Number);
           const startMin = (sh || 0) * 60 + (sm || 0);
-          let endMin = (eh || 0) * 60 + (em || 0);
-          if (endMin <= startMin) endMin += 1440; // qua đêm
 
           const now = new Date();
           const nowMin = now.getHours() * 60 + now.getMinutes();
-          if (nowMin >= endMin) {
+          if (nowMin >= startMin) {
             status = "Quên chấm công";
           } else {
-            status = "Chưa làm";
+            status = "Chưa chấm công";
           }
         } else {
-          status = "Chưa làm";
+          status = "Chưa chấm công";
         }
       } else {
-        status = "Chưa làm";
+        status = "Chưa chấm công";
       }
     } else {
-      status = "Chưa làm";
+      status = "Chưa chấm công";
     }
   }
 
@@ -177,7 +178,7 @@ function mapBackendShiftToWorkShift(
     phone,
     branch: branchName,
     branchSlug,
-    date: s.date || "—",
+    date,
     templateName: s.template || s.templateName || "Ca Sáng",
     scheduled,
     checkIn: s.checkIn || "—",
@@ -215,13 +216,19 @@ function parseDayKey(wish: string): string | null {
   if (w.includes("BẢY") || w.includes("BAY") || w === "THỨ 7" || w === "THU 7") return "T7";
   if (w.includes("NHẬT") || w.includes("NHAT") || w.includes("CHU NHAT")) return "CN";
 
-  const parts = w.split(/[\/\-]/);
-  if (parts.length >= 2) {
+  // Ngày đầy đủ (DD/MM/YYYY, DD-MM-YYYY hoặc ISO) -> thứ trong tuần
+  const parsed = parseDate(w);
+  if (parsed) {
+    return validKeys[(parsed.getDay() + 6) % 7] || null;
+  }
+
+  // Dạng ngắn DD/MM (thiếu năm) -> dùng năm hiện tại
+  const parts = w.split("/");
+  if (parts.length === 2) {
     const day = parseInt(parts[0], 10);
     const month = parseInt(parts[1], 10);
-    const year = parts.length >= 3 ? parseInt(parts[2], 10) : new Date().getFullYear();
     if (!isNaN(day) && !isNaN(month)) {
-      const d = new Date(year, month - 1, day);
+      const d = new Date(new Date().getFullYear(), month - 1, day);
       const dayIndex = (d.getDay() + 6) % 7; // 0 = Mon, 6 = Sun
       return validKeys[dayIndex] || null;
     }
@@ -254,7 +261,7 @@ function parseBackendRegistrations(
         branch: branchName,
         branchSlug,
         requestedCount: item.requestedCount || Object.values(item.days).filter((v) => v !== "Nghỉ").length,
-        registeredAt: item.registeredAt || (item.createdAt ? new Date(item.createdAt).toLocaleDateString("vi-VN") : "—"),
+        registeredAt: formatDateTime(item.registeredAt || item.createdAt) || "—",
         order: item.order || 1,
         days: item.days,
         note: item.note || item.wish || "",
@@ -292,7 +299,7 @@ function parseBackendRegistrations(
 
     for (const r of items) {
       if (r.createdAt) {
-        const t = new Date(r.createdAt).getTime();
+        const t = parseDate(r.createdAt)?.getTime() ?? 0;
         if (t > latestTime) latestTime = t;
       }
       const wishStr = r.wish || r.preference || r.week || "";
@@ -318,7 +325,7 @@ function parseBackendRegistrations(
     }
 
     const requestedCount = items.filter((r) => r.shiftId !== "preference_note" && r.shiftId !== "off").length || Object.values(days).filter((v) => v !== "Nghỉ").length;
-    const registeredAt = latestTime > 0 ? new Date(latestTime).toLocaleDateString("vi-VN") : "Hôm nay";
+    const registeredAt = latestTime > 0 ? formatDateTime(new Date(latestTime)) : "Hôm nay";
 
     directWeeklyList.push({
       id: items[0]?.id || `reg-${empId}`,
@@ -363,6 +370,8 @@ function mapToRegistrationRecords(
         const currentYear = new Date().getFullYear();
         dateFormatted = `${wishStr}/${currentYear}`;
       }
+      // Chuẩn hóa DD/MM/YYYY cho mọi giá trị ngày (idempotent, giữ nguyên chuỗi ngày trong tuần).
+      dateFormatted = formatDate(dateFormatted);
 
       const templateName = resolveShiftName(r.shiftId, templates);
       const matchedTemplate = templates.find((t) => t.name.toLowerCase() === templateName.toLowerCase());
@@ -372,13 +381,7 @@ function mapToRegistrationRecords(
         templateName === "Ca Tối" ? "18:00 - 23:00" : "07:00 - 14:00"
       );
 
-      const registeredAt = r.createdAt ? new Date(r.createdAt).toLocaleString("vi-VN", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      }) : "—";
+      const registeredAt = r.createdAt ? formatDateTime(r.createdAt) : "—";
 
       return {
         id: r.id || `reg-rec-${Date.now()}-${Math.random()}`,
@@ -420,10 +423,7 @@ export default function ShiftsPage() {
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
   // Bộ chọn ngày & chi nhánh cho khối Xếp ca (mặc định hôm nay)
-  const todayStr = (() => {
-    const n = new Date();
-    return `${String(n.getDate()).padStart(2, "0")}/${String(n.getMonth() + 1).padStart(2, "0")}/${n.getFullYear()}`;
-  })();
+  const todayStr = getTodayVN();
   const [schedulerDate, setSchedulerDate] = useState(todayStr);
   const [branches, setBranches] = useState<Branch[]>([]);
 
@@ -712,11 +712,11 @@ export default function ShiftsPage() {
     const payload = {
       employeeId: matchedEmp?.id || assignEmployee,
       branchSlug: assignBranch,
-      date: assignDate,
+      date: formatDate(assignDate),
       template: template.name,
       scheduledStart: template.startTime,
       scheduledEnd: template.endTime,
-      status: "Chưa làm",
+      status: "Chưa chấm công",
       note: assignNote,
       isRecurring: assignIsRecurring,
     };
@@ -916,7 +916,7 @@ export default function ShiftsPage() {
                   const matchedEmp = empList.find((e) => e.name === rec.employeeName || e.id === rec.employeeId);
                   if (matchedEmp) setAssignEmployee(matchedEmp.name);
                   if (rec.branch && rec.branch !== "—") setAssignBranch(rec.branch.toUpperCase());
-                  setAssignDate(rec.date);
+                  setAssignDate(formatDate(rec.date));
                   const matchedT = templates.find((t) => t.name.toLowerCase() === rec.templateName.toLowerCase());
                   if (matchedT) setAssignTemplateId(matchedT.id);
                   setAssignShiftOpen(true);

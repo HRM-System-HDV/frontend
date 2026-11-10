@@ -20,6 +20,7 @@ import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
+import { formatDate, formatDateTime } from "@/lib/utils";
 
 async function parseEnvelope(res: Response) {
   const text = await res.text();
@@ -103,20 +104,32 @@ function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
     status = "chờ duyệt";
   }
 
-  const createdDate = r.createdAt ? new Date(r.createdAt).toLocaleDateString("vi-VN") : "—";
+  const createdDate = r.createdAt ? formatDate(r.createdAt) : "—";
   const from = r.from || `${createdDate} 08:00`;
   const to = r.to || `${createdDate} 17:30`;
+
+  let amount: string | undefined;
+  if (r.amount) {
+    amount = String(r.amount);
+  } else if (r.title && typeof r.title === "string") {
+    const match = r.title.match(/Tạm ứng(?: lương)?:\s*(.+)$/i);
+    if (match && match[1]) {
+      amount = match[1].trim();
+    }
+  }
 
   return {
     id: r.id,
     employee: empName,
     branch: r.branchSlug || r.branch || "HN-1",
     type,
+    title: r.title,
+    amount,
     from,
     to,
     reason: r.content || r.title || r.reason || "Yêu cầu nội bộ cần phê duyệt",
     status,
-    createdAt: r.createdAt || createdDate,
+    createdAt: r.createdAt ? formatDateTime(r.createdAt) : createdDate,
   };
 }
 

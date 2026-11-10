@@ -6,6 +6,7 @@ import Button from "@/components/ui/Button";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCamera, faCheck, faCircleExclamation, faClock, faFire, faLocationDot, faMagnifyingGlassPlus, faRotateRight, faThumbtack, faUser } from "@fortawesome/free-solid-svg-icons";
 import type { TaskItem } from "./types";
+import { formatDateTime } from "@/lib/utils";
 
 interface TaskDetailModalProps {
   open: boolean;
@@ -155,7 +156,7 @@ export default function TaskDetailModal({
                 <FontAwesomeIcon icon={faClock} fontSize={13} className={isOverdue ? "text-red-600" : "text-gray-400"} />
                 <span>Hạn chót: </span>
                 <strong className={isOverdue ? "text-red-600 font-bold" : "text-gray-700"}>
-                  {task.dueDate} {isOverdue && "(Đã quá hạn)"}
+                  {formatDateTime(task.dueDate)} {isOverdue && "(Đã quá hạn)"}
                 </strong>
               </div>
             </div>
@@ -234,7 +235,7 @@ export default function TaskDetailModal({
                       <span>
                         Thời gian chụp:{" "}
                         <strong className="text-gray-800 whitespace-nowrap">
-                          {task.photoSubmittedAt || task.completedAt || task.dueDate}
+                          {formatDateTime(task.photoSubmittedAt || task.completedAt || task.dueDate)}
                         </strong>
                       </span>
                     </div>
@@ -290,7 +291,7 @@ export default function TaskDetailModal({
                 Ảnh chụp bởi: <strong className="text-gray-700">{task.photoSubmittedBy || task.assignedToName}</strong>
               </span>
               <span>
-                Thời gian: <strong className="text-gray-700">{task.photoSubmittedAt || task.completedAt || task.dueDate}</strong>
+                Thời gian: <strong className="text-gray-700">{formatDateTime(task.photoSubmittedAt || task.completedAt || task.dueDate)}</strong>
               </span>
             </div>
           </div>

@@ -29,7 +29,8 @@ import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/Badge";
 import type { Employee, UserRole, Branch, Department } from "@/types";
-import { apiPost } from "@/lib/api";
+import { uploadImageFile } from "@/lib/imageUpload";
+import { formatDate } from "@/lib/utils";
 import { useCurrentUser } from "@/context/AuthContext";
 
 interface Props {
@@ -139,7 +140,7 @@ export default function EmployeeDetailModal({
       setPhone(employee.phone);
       setEmail(employee.email);
       setGender(employee.gender || "");
-      setBirthDate(employee.birthDate || "");
+      setBirthDate(formatDate(employee.birthDate));
 
       setProvince(employee.province || "");
       setWard(employee.ward || "");
@@ -150,7 +151,7 @@ export default function EmployeeDetailModal({
       setRole(employee.role);
       setSystemRole(employee.systemRole || "staff");
       setStatus(employee.status);
-      setJoinDate(employee.joinDate || "");
+      setJoinDate(formatDate(employee.joinDate));
 
       setSalaryType(employee.salaryType || "monthly");
       setHourlySalary(employee.hourlySalary ?? 0);
@@ -160,7 +161,7 @@ export default function EmployeeDetailModal({
       setBankAccountName(employee.bankAccountName || "");
 
       setCccd(employee.cccd || "");
-      setIssueDate(employee.issueDate || "");
+      setIssueDate(formatDate(employee.issueDate));
       setIssuePlace(employee.issuePlace || "");
       setCccdFront(typeof employee.cccdFront === "string" ? employee.cccdFront : "");
       setCccdBack(typeof employee.cccdBack === "string" ? employee.cccdBack : "");
@@ -184,7 +185,7 @@ export default function EmployeeDetailModal({
     setPhone(employee.phone);
     setEmail(employee.email);
     setGender(employee.gender || "");
-    setBirthDate(employee.birthDate || "");
+    setBirthDate(formatDate(employee.birthDate));
 
     setProvince(employee.province || "");
     setWard(employee.ward || "");
@@ -195,7 +196,7 @@ export default function EmployeeDetailModal({
     setRole(employee.role);
     setSystemRole(employee.systemRole || "staff");
     setStatus(employee.status);
-    setJoinDate(employee.joinDate || "");
+    setJoinDate(formatDate(employee.joinDate));
 
     setSalaryType(employee.salaryType || "monthly");
     setHourlySalary(employee.hourlySalary ?? 0);
@@ -205,7 +206,7 @@ export default function EmployeeDetailModal({
     setBankAccountName(employee.bankAccountName || "");
 
     setCccd(employee.cccd || "");
-    setIssueDate(employee.issueDate || "");
+    setIssueDate(formatDate(employee.issueDate));
     setIssuePlace(employee.issuePlace || "");
     setCccdFront(typeof employee.cccdFront === "string" ? employee.cccdFront : "");
     setCccdBack(typeof employee.cccdBack === "string" ? employee.cccdBack : "");
@@ -234,7 +235,7 @@ export default function EmployeeDetailModal({
       phone: phone.trim(),
       email: email.trim(),
       gender,
-      birthDate,
+      birthDate: formatDate(birthDate),
       province,
       ward,
       street,
@@ -243,7 +244,7 @@ export default function EmployeeDetailModal({
       role,
       systemRole,
       status,
-      joinDate,
+      joinDate: formatDate(joinDate),
       salaryType,
       hourlySalary: Number(hourlySalary) || 0,
       baseSalary: Number(baseSalary) || 0,
@@ -251,7 +252,7 @@ export default function EmployeeDetailModal({
       bankAccountNumber: bankAccountNumber.trim(),
       bankAccountName: bankAccountName.trim().toUpperCase(),
       cccd,
-      issueDate,
+      issueDate: formatDate(issueDate),
       issuePlace,
       cccdFront: cccdFront.trim(),
       cccdBack: cccdBack.trim(),
@@ -283,30 +284,10 @@ export default function EmployeeDetailModal({
     try {
       setUploadingAvatar(true);
       setSaveError("");
-
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Không thể đọc file ảnh"));
-        reader.readAsDataURL(file);
-      });
-
-      try {
-        const res = await apiPost<{ url: string }>("/api/upload", {
-          file: dataUrl,
-          folder: "hrm/avatars",
-        });
-        if (res && res.url) {
-          setAvatar(res.url);
-          return;
-        }
-      } catch (uploadErr) {
-        console.warn("Upload API không khả dụng, dùng data URL:", uploadErr);
-      }
-
-      setAvatar(dataUrl);
+      const url = await uploadImageFile(file, "hrm/avatars");
+      setAvatar(url);
     } catch (err: unknown) {
-      setSaveError(err instanceof Error ? err.message : "Lỗi khi xử lý ảnh đại diện");
+      setSaveError(err instanceof Error ? err.message : "Lỗi khi tải ảnh đại diện lên máy chủ");
     } finally {
       setUploadingAvatar(false);
     }
@@ -328,30 +309,10 @@ export default function EmployeeDetailModal({
     try {
       setUploading(true);
       setSaveError("");
-
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = () => reject(new Error("Không thể đọc file ảnh"));
-        reader.readAsDataURL(file);
-      });
-
-      try {
-        const res = await apiPost<{ url: string }>("/api/upload", {
-          file: dataUrl,
-          folder: "hrm/cccd",
-        });
-        if (res && res.url) {
-          setTarget(res.url);
-          return;
-        }
-      } catch (uploadErr) {
-        console.warn("Upload API không khả dụng, dùng data URL:", uploadErr);
-      }
-
-      setTarget(dataUrl);
+      const url = await uploadImageFile(file, "hrm/cccd");
+      setTarget(url);
     } catch (err: unknown) {
-      setSaveError(err instanceof Error ? err.message : "Lỗi khi xử lý ảnh CCCD");
+      setSaveError(err instanceof Error ? err.message : "Lỗi khi tải ảnh CCCD lên máy chủ");
     } finally {
       setUploading(false);
     }
@@ -668,7 +629,7 @@ export default function EmployeeDetailModal({
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Ngày sinh:</span>
                       <span className="font-semibold text-gray-800 text-xs">
-                        {employee.birthDate || "Chưa cập nhật"}
+                        {formatDate(employee.birthDate) || "Chưa cập nhật"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
@@ -751,7 +712,7 @@ export default function EmployeeDetailModal({
                       <Input
                         value={birthDate}
                         onChange={(e) => setBirthDate(e.target.value)}
-                        placeholder="dd/mm/yyyy"
+                        placeholder="DD/MM/YYYY"
                       />
                     </Field>
                   </div>
@@ -870,7 +831,7 @@ export default function EmployeeDetailModal({
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Ngày vào làm việc:</span>
                       <span className="font-semibold text-gray-800 text-xs">
-                        {employee.joinDate || "Chưa cập nhật"}
+                        {formatDate(employee.joinDate) || "Chưa cập nhật"}
                       </span>
                     </div>
                   </div>
@@ -1165,7 +1126,7 @@ export default function EmployeeDetailModal({
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Ngày cấp:</span>
                       <span className="font-semibold text-gray-800 text-xs">
-                        {employee.issueDate || "Chưa cập nhật"}
+                        {formatDate(employee.issueDate) || "Chưa cập nhật"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
