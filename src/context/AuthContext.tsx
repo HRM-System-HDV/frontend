@@ -5,6 +5,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -83,6 +84,14 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
+// Staff chỉ dùng app di động: cookie do gateway set khi đăng nhập phải bị xoá
+// ngay để web không còn phiên nửa vời.
+function clearWebSessionCookies() {
+  const expired = "Thu, 01 Jan 1970 00:00:00 GMT";
+  document.cookie = `hrm-session=; path=/; expires=${expired}`;
+  document.cookie = `hrm-refresh=; path=/; expires=${expired}`;
+}
+
 async function fetchMe(): Promise<UserSession | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
@@ -94,7 +103,12 @@ async function fetchMe(): Promise<UserSession | null> {
     if (!res.ok) return null;
     const body = await res.json();
     if (!body || typeof body !== "object" || !("data" in body)) return null;
-    return toSession(body.data as AuthMeResponse);
+    const session = toSession(body.data as AuthMeResponse);
+    if (session.role === "staff") {
+      clearWebSessionCookies();
+      return null;
+    }
+    return session;
   } catch {
     return null;
   } finally {
@@ -108,6 +122,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  // Phân biệt "người dùng bấm đăng xuất" với "phiên hết hạn": chỉ trường hợp sau
+  // mới đáng báo "Phiên làm việc đã hết hạn" ở trang login.
+  const signingOutRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,17 +143,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Hết phiên mà đang ở dashboard thì đánh dấu cờ (login sẽ hiện toast) + đá về login.
+  // Rơi khỏi phiên khi đang ở dashboard: phiên hết hạn thì để lại dấu cho trang
+  // login báo toast, còn đăng xuất chủ đích thì về /login sạch, không báo gì.
   useEffect(() => {
-    if (!loading && !authenticated && pathname.startsWith("/dashboard")) {
-      try {
-        sessionStorage.setItem("hrm_session_expired", "1");
-        document.cookie = "hrm-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-      } catch {
-        /* ignore */
-      }
-      router.replace(`/login?from=${encodeURIComponent(pathname)}`);
+    if (loading || authenticated || !pathname.startsWith("/dashboard")) return;
+    if (signingOutRef.current) {
+      router.replace("/login");
+      return;
     }
+    try {
+      sessionStorage.setItem("hrm_session_expired", "1");
+      document.cookie = "hrm-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    } catch {
+      /* ignore */
+    }
+    router.replace(`/login?from=${encodeURIComponent(pathname)}`);
   }, [loading, authenticated, pathname, router]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -169,14 +190,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = (body as { data?: { user?: AuthMeResponse } }).data;
       if (!data?.user) throw new GatewayError("UNKNOWN", "Phản hồi máy chủ không hợp lệ", 500);
       const session = toSession(data.user);
+      if (session.role === "staff") {
+        clearWebSessionCookies();
+        throw new GatewayError(
+          "STAFF_WEB_FORBIDDEN",
+          "Tài khoản nhân viên chỉ đăng nhập được trên ứng dụng di động.",
+          403
+        );
+      }
       setUser(session);
       setAuthenticated(true);
+      signingOutRef.current = false;
     } finally {
       clearTimeout(timer);
     }
   }, []);
 
   const logout = useCallback(async () => {
+    signingOutRef.current = true;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);

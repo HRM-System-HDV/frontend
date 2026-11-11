@@ -17,6 +17,11 @@ import { apiGet } from "@/lib/api";
 import type { Branch, Department, Employee } from "@/types";
 import { useCurrentUser } from "@/context/AuthContext";
 
+// Gateway trả về hồ sơ nhân sự với khóa `branchSlug` (schema Employee không có
+// trường `branch`), nên phải đọc `branchSlug` — giữ `branch` làm giá trị dự phòng
+// cho dữ liệu đã được chuẩn hóa ở nơi khác.
+const employeeBranchOf = (e: Employee) => e.branchSlug || e.branch || "";
+
 export default function DashboardOverviewPage() {
   const { role, branchSlug } = useCurrentUser();
   const isManager = role === "manager";
@@ -51,7 +56,7 @@ export default function DashboardOverviewPage() {
   // Filter if manager
   const displayedEmployees = isManager
     ? employees.filter(
-        (e) => (e.branch || "").toLowerCase().replace(/-/g, "") === branchSlug.toLowerCase().replace(/-/g, "")
+        (e) => employeeBranchOf(e).toLowerCase().replace(/-/g, "") === branchSlug.toLowerCase().replace(/-/g, "")
       )
     : employees;
 
@@ -74,7 +79,18 @@ export default function DashboardOverviewPage() {
         </div>
       ),
     },
-    { key: "branch", header: "Chi nhánh", render: (e) => <Badge tone="gray">{e.branch || "—"}</Badge> },
+    {
+      key: "branch",
+      header: "Chi nhánh",
+      render: (e) => {
+        const raw = employeeBranchOf(e);
+        return (
+          <Badge tone="gray">
+            {branches.find((b) => b.slug.toLowerCase() === raw.toLowerCase())?.name || raw || "—"}
+          </Badge>
+        );
+      },
+    },
     { key: "role", header: "Chức vụ", render: (e) => <span className="text-gray-700 text-sm">{e.role}</span> },
     { key: "phone", header: "Số điện thoại", render: (e) => <span className="text-gray-600 text-sm">{e.phone || "—"}</span> },
     { key: "status", header: "Trạng thái", render: (e) => <StatusBadge status={e.status === "đang làm" ? "Hoạt động" : "Bị khóa"} /> },
@@ -126,7 +142,7 @@ export default function DashboardOverviewPage() {
         <CardBody className="space-y-4">
           {branches.map((b) => {
             const count = displayedEmployees.filter(
-              (e) => (e.branch || "").toLowerCase().replace(/-/g, "") === (b.slug || "").toLowerCase().replace(/-/g, "")
+              (e) => employeeBranchOf(e).toLowerCase().replace(/-/g, "") === (b.slug || "").toLowerCase().replace(/-/g, "")
             ).length;
             const pct = totalEmployees > 0 ? Math.round((count / totalEmployees) * 100) : 0;
 

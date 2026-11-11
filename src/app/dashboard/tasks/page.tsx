@@ -16,6 +16,7 @@ import TaskTable from "@/features/tasks/TaskTable";
 import CreateTaskModal, { ShiftTemplateOption } from "@/features/tasks/TaskForm";
 import TaskDetailModal from "@/features/tasks/TaskDetail";
 import { useCurrentUser } from "@/context/AuthContext";
+import { roleLabel } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDateTime, parseDate } from "@/lib/utils";
 
@@ -74,6 +75,8 @@ export default function TasksPage() {
   const { role, branchSlug, name: currentUserRealName } = useCurrentUser();
   const isAdmin = role === "admin";
   const isManager = role === "manager";
+  // Ghi task (POST/DELETE /api/tasks) chỉ dành cho manager + admin.
+  const canWriteTasks = role !== "staff";
   const managerBranch = branchSlug ? branchSlug.toUpperCase() : "";
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
@@ -367,10 +370,8 @@ export default function TasksPage() {
 
   const currentUserName =
     currentUserRealName && currentUserRealName !== "Đang tải..."
-      ? `${currentUserRealName} (${isAdmin ? "Admin" : "Quản lý"})`
-      : isAdmin
-        ? "Quản trị viên"
-        : "Quản lý chi nhánh";
+      ? `${currentUserRealName} (${roleLabel(role)})`
+      : roleLabel(role);
 
   return (
     <div className="space-y-6">
@@ -401,9 +402,11 @@ export default function TasksPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Nhiệm vụ" }]}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="primary" onClick={() => setCreateModalOpen(true)} disabled={actionInProgress}>
-              Giao việc mới
-            </Button>
+            {canWriteTasks && (
+              <Button variant="primary" onClick={() => setCreateModalOpen(true)} disabled={actionInProgress}>
+                Giao việc mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -432,7 +435,6 @@ export default function TasksPage() {
         branchFilter={branchFilter}
         onBranchFilterChange={setBranchFilter}
         isManager={!isAdmin}
-        managerBranch={branchSlug.toUpperCase()}
         statusCounts={statusCounts}
       />
 
@@ -487,7 +489,10 @@ export default function TasksPage() {
           onClose={() => setDetailTask(null)}
           task={detailTask}
           onComplete={handleCompleteTask}
-          onDelete={handleDeleteTask}
+          onDelete={canWriteTasks ? handleDeleteTask : undefined}
+          branchLabel={(slug) =>
+            branches.find((b) => b.slug.toLowerCase() === slug.toLowerCase())?.name || slug
+          }
         />
       )}
     </div>

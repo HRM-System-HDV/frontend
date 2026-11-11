@@ -12,7 +12,10 @@ interface Props {
   registrationRecords?: ShiftRegistrationRecord[];
   weeklyRegistrations?: WeeklyRegistration[];
   branches?: Branch[];
-  onDelete?: (id: string) => void;
+  // Không khai báo onDelete: mỗi dòng ở đây là TỔNG HỢP cả tuần, `id` của dòng chỉ
+  // là id của một bản ghi đăng ký trong ngày (items[0]?.id) hoặc id giả `reg-<empId>`.
+  // Nút xóa ở đây sẽ xóa nhầm một ca lẻ (hoặc gọi id không tồn tại); xóa theo ngày
+  // đã có GeneralScheduleSection (mode="registration") đảm nhận.
   onAssignFromRegistration?: (record: ShiftRegistrationRecord) => void;
 }
 

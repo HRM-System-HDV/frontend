@@ -143,7 +143,9 @@ export default function StaffShiftDetailModal({
           <div className="flex-1 min-w-0">
             <div className="font-bold text-gray-900">{staff.name}</div>
             <div className="text-xs text-gray-500">
-              {staff.role} • Chi nhánh {staff.branch && staff.branch.startsWith("c") && staff.branch.length >= 20 ? "Quận 1" : staff.branch}
+              {/* staff.branch đã được trang cha resolve slug -> tên qua /api/branches;
+                  không còn heuristic bịa "Quận 1" từ độ dài chuỗi. */}
+              {staff.role} • Chi nhánh {staff.branch || "—"}
             </div>
             <div className="flex items-center gap-2 mt-1">
               {mode === "registration" ? (

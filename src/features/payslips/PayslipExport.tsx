@@ -7,6 +7,7 @@ import { faFileExcel, faDownload, faSpinner } from "@fortawesome/free-solid-svg-
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select } from "@/components/ui/Form";
+import { useCurrentUser } from "@/context/AuthContext";
 import { formatDateTime, formatVND } from "@/lib/utils";
 import type { Payslip } from "@/types";
 
@@ -254,6 +255,8 @@ interface ExportModalProps {
   months: string[];
   defaultMonth?: string;
   userName?: string;
+  /** Đổi slug chi nhánh thành tên hiển thị; thiếu thì hiện slug gốc. */
+  branchLabel?: (slug: string) => string;
 }
 
 export default function ExportPayslipModal({
@@ -263,7 +266,11 @@ export default function ExportPayslipModal({
   months,
   defaultMonth = "all",
   userName,
+  branchLabel,
 }: ExportModalProps) {
+  const { role } = useCurrentUser();
+  // Tài khoản bị ghim chi nhánh: tập dữ liệu đã chốt theo prop `payslips` nên để "all".
+  const isAdmin = role === "admin";
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultMonth);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
@@ -313,12 +320,17 @@ export default function ExportPayslipModal({
     }
     setExporting(true);
     try {
-      await exportPayslipsToExcel(targetSlips, {
-        month: selectedMonth,
-        branch: selectedBranch,
-        status: selectedStatus,
-        exportedBy: userName,
-      });
+      // Giá trị lọc vẫn là slug; chỉ nhãn (header + cột Excel) đổi slug -> tên.
+      const resolve = (slug?: string) => (slug ? (branchLabel ? branchLabel(slug) : slug) : slug);
+      await exportPayslipsToExcel(
+        targetSlips.map((p) => ({ ...p, branch: resolve(p.branch) })),
+        {
+          month: selectedMonth,
+          branch: selectedBranch === "all" ? selectedBranch : resolve(selectedBranch),
+          status: selectedStatus,
+          exportedBy: userName,
+        }
+      );
       onClose();
     } catch (e: any) {
       alert(e?.message || "Lỗi khi xuất file Excel phiếu lương");
@@ -389,7 +401,7 @@ export default function ExportPayslipModal({
           </Field>
         </div>
 
-        {branchOptions.length > 0 && (
+        {isAdmin && branchOptions.length > 0 && (
           <Field label="Chi nhánh áp dụng" className="mb-0">
             <Select
               value={selectedBranch}
@@ -399,7 +411,7 @@ export default function ExportPayslipModal({
               <option value="all">Toàn bộ chi nhánh</option>
               {branchOptions.map((b) => (
                 <option key={b} value={b}>
-                  Chi nhánh {b}
+                  Chi nhánh {branchLabel ? branchLabel(b) : b}
                 </option>
               ))}
             </Select>

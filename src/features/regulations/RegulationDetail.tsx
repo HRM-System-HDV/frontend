@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPen,
@@ -9,14 +10,15 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import type { Regulation } from "@/types";
+import { apiGet } from "@/lib/api";
+import type { Regulation, Branch } from "@/types";
 import { getStatusTone, getCategoryColor } from "./helpers";
 import { formatDate } from "@/lib/utils";
 
 interface Props {
   item: Regulation | null;
   onClose: () => void;
-  onEdit: (item: Regulation) => void;
+  onEdit?: (item: Regulation) => void;
   onDelete?: (id: string, title?: string) => void;
   onTogglePin?: (id: string) => void;
 }
@@ -28,6 +30,17 @@ export default function RegulationDetailModal({
   onDelete,
   onTogglePin,
 }: Props) {
+  // Component không nhận branches từ page cha (page không fetch) -> tự tải
+  // bảng chi nhánh để map slug -> tên, giống RegulationList.
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
+  }, []);
+
+  const getBranchDisplayName = (slug?: string) =>
+    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
+
   return (
     <Modal
       open={!!item}
@@ -54,7 +67,7 @@ export default function RegulationDetailModal({
               </span>
             )}
             <span className="text-xs text-slate-500 font-medium">
-              Phạm vi: <strong className="text-slate-700">{item.scope}</strong>
+              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scope)}</strong>
             </span>
             <span className="text-xs text-slate-500 font-medium">
               Hiệu lực: <strong className="text-slate-700">{formatDate(item.effectiveDate)}</strong>
@@ -97,10 +110,10 @@ export default function RegulationDetailModal({
                 {item.pinned ? "Bỏ ghim" : "Ghim đầu trang"}
               </Button>
             )}
-            {item && (
+            {item && onEdit && (
               <Button
                 variant="outline"
-                onClick={() => onEdit(item)}
+                onClick={() => onEdit?.(item)}
                 className="flex items-center gap-1.5"
               >
                 <FontAwesomeIcon icon={faPen} fontSize={14} />

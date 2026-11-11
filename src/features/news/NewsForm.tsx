@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Textarea, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 
@@ -41,12 +42,17 @@ export default function CreateNewsModal({
   onSubmit,
 }: Props) {
   const isEdit = Boolean(initial);
+  const { role, branchSlug } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [newTitle, setNewTitle] = useState(initial?.title || "");
   const [newTag, setNewTag] = useState(initial?.tag || "Thông báo");
   const [newSummary, setNewSummary] = useState(initial?.summary || "");
   const [newContent, setNewContent] = useState(initial?.content || "");
   const [newPinned, setNewPinned] = useState(Boolean(initial?.pinned));
-  const [newBranch, setNewBranch] = useState(initial?.branch || "Toàn công ty");
+  // Tài khoản bị ghim không có control nhưng giá trị vẫn phải vào payload.
+  const [newBranch, setNewBranch] = useState(
+    initial?.branch || (isAdmin ? "Toàn công ty" : branchSlug.toUpperCase())
+  );
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
@@ -130,20 +136,22 @@ export default function CreateNewsModal({
             </Select>
           </Field>
 
-          <Field label="Chi nhánh áp dụng" className="mb-0">
-            <Select
-              value={newBranch}
-              onChange={(e) => setNewBranch(e.target.value)}
-              disabled={saving}
-            >
-              <option value="Toàn công ty">Toàn công ty</option>
-              {branches.map((b) => (
-                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {isAdmin && (
+            <Field label="Chi nhánh áp dụng" className="mb-0">
+              <Select
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+                disabled={saving}
+              >
+                <option value="Toàn công ty">Toàn công ty</option>
+                {branches.map((b) => (
+                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
         </div>
 
         {/* 3. Tóm tắt ngắn */}

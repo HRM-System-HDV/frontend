@@ -1,7 +1,7 @@
 "use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFileExcel, faLock, faPencil } from "@fortawesome/free-solid-svg-icons";
+import { faLock, faPencil } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import Button from "@/components/ui/Button";
@@ -12,12 +12,11 @@ import type { Payslip } from "@/types";
 
 interface Props {
   payslips: Payslip[];
-  onEdit: (p: Payslip) => void;
-  onCloseOne: (p: Payslip) => void;
+  onEdit?: (p: Payslip) => void;
+  onCloseOne?: (p: Payslip) => void;
   onPrint: (p: Payslip) => void;
   onBulkClose?: () => void;
   onGenerate?: () => void;
-  onExport?: () => void;
   selectedMonth: string;
   onMonthChange: (month: string) => void;
   monthOptions: string[];
@@ -30,7 +29,6 @@ export default function PayslipSection({
   onPrint,
   onBulkClose,
   onGenerate,
-  onExport,
   selectedMonth,
   onMonthChange,
   monthOptions,
@@ -80,19 +78,25 @@ export default function PayslipSection({
       header: "Trạng thái",
       render: (p) => <StatusBadge status={p.status} />,
     },
-    {
-      key: "actions",
-      header: "Thao tác",
-      render: (p) => (
-        <button
-          type="button"
-          onClick={() => onEdit(p)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-        >
-          Chi tiết
-        </button>
-      ),
-    },
+    // Chỉ người được ghi phiếu lương (admin) thấy "Chi tiết" vì nó mở form điều
+    // chỉnh thưởng/phạt — manager/staff chỉ xem, không bấm rồi ăn 403.
+    ...(onEdit
+      ? [
+          {
+            key: "actions",
+            header: "Thao tác",
+            render: (p: Payslip) => (
+              <button
+                type="button"
+                onClick={() => onEdit(p)}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+              >
+                Chi tiết
+              </button>
+            ),
+          } as Column<Payslip>,
+        ]
+      : []),
   ];
 
   return (
@@ -112,18 +116,6 @@ export default function PayslipSection({
               </option>
             ))}
           </Select>
-
-          {onExport && (
-            <Button
-              size="sm"
-              variant="white"
-              onClick={onExport}
-              className="flex items-center gap-1.5 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200"
-            >
-              <FontAwesomeIcon icon={faFileExcel} className="text-emerald-600" fontSize={14} />
-              Xuất file
-            </Button>
-          )}
 
           {onGenerate && (
             <Button size="sm" variant="white" onClick={onGenerate}>

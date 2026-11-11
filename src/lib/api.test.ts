@@ -139,4 +139,46 @@ describe("api client (@/lib/api)", () => {
 
     await expect(apiGet("/api/protected")).rejects.toThrow(GatewayError);
   });
+
+  it("401 -> gọi /api/auth/refresh rồi thử lại đúng một lần", async () => {
+    const urls: string[] = [];
+    let protectedHits = 0;
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
+      urls.push(url);
+      if (url.includes("/api/auth/refresh")) {
+        return { ok: true, status: 200, text: async () => "{}" } as Response;
+      }
+      protectedHits += 1;
+      if (protectedHits === 1) {
+        return {
+          ok: false,
+          status: 401,
+          text: async () => JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Hết hạn" } }),
+        } as Response;
+      }
+      return { ok: true, status: 200, text: async () => JSON.stringify({ data: { ok: true } }) } as Response;
+    });
+
+    const result = await apiGet("/api/protected");
+    expect(result).toEqual({ ok: true });
+    expect(urls).toEqual([
+      `${GATEWAY_URL}/api/protected`,
+      `${GATEWAY_URL}/api/auth/refresh`,
+      `${GATEWAY_URL}/api/protected`,
+    ]);
+  });
+
+  it("login sai mật khẩu (401 trên /api/auth/*) không bị mang đi refresh", async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: async () => JSON.stringify({ error: { code: "UNAUTHORIZED", message: "Sai mật khẩu" } }),
+    } as Response);
+
+    await expect(apiPost("/api/auth/login", { email: "a@b.c", password: "x" })).rejects.toThrow(GatewayError);
+    const refreshCalls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c: unknown[]) =>
+      String(c[0]).includes("/api/auth/refresh")
+    );
+    expect(refreshCalls).toHaveLength(0);
+  });
 });

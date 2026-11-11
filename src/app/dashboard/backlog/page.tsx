@@ -8,10 +8,16 @@ import {
   faClock,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
+import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { fetchBacklogs, type BacklogItem } from "@/lib/backlog";
 
 export default function BacklogPage() {
+  const { role } = useCurrentUser();
+  // Nhật ký thao tác hệ thống: gateway chặn GET /api/backlog cho admin.
+  const isAdmin = role === "admin";
+
   const [logs, setLogs] = useState<BacklogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
@@ -27,6 +33,9 @@ export default function BacklogPage() {
   };
 
   useEffect(() => {
+    // Không tải nhật ký khi vai trò khác mở thẳng URL: trang đã chặn bằng
+    // NoAccessNotice nên trạng thái tải/empty mặc định là đủ.
+    if (!isAdmin) return;
     let ignore = false;
     fetchBacklogs({
       action: actionFilter,
@@ -48,7 +57,7 @@ export default function BacklogPage() {
     return () => {
       ignore = true;
     };
-  }, [actionFilter, moduleFilter, searchQuery]);
+  }, [isAdmin, actionFilter, moduleFilter, searchQuery]);
 
   // Danh sách các phân hệ duy nhất để lọc
   const moduleOptions = useMemo(() => {
@@ -75,6 +84,10 @@ export default function BacklogPage() {
     return Array.from(set);
   }, [logs]);
 
+  if (!canAccessPath(role, "/dashboard/backlog")) {
+    return <NoAccessNotice />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Toast thông báo */}
@@ -100,9 +113,9 @@ export default function BacklogPage() {
 
       {/* Thanh lọc & tìm kiếm */}
       <div className="bg-white rounded-xl border border-gray-200 p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3 flex-1 min-w-[260px]">
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
           {/* Ô tìm kiếm */}
-          <div className="relative flex-1 max-w-sm">
+          <div className="relative flex-1 min-w-0 max-w-sm">
             <input
               type="text"
               placeholder="Tìm theo người, đối tượng, mô tả..."
@@ -126,12 +139,12 @@ export default function BacklogPage() {
           </div>
 
           {/* Lọc Phân hệ */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-xs font-semibold text-gray-500">Phân hệ:</span>
             <select
               value={moduleFilter}
               onChange={(e) => setModuleFilter(e.target.value)}
-              className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value="all">Tất cả phân hệ</option>
               {moduleOptions.map((m) => (
@@ -143,12 +156,12 @@ export default function BacklogPage() {
           </div>
 
           {/* Lọc Thao tác */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-xs font-semibold text-gray-500">Thao tác:</span>
             <select
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
-              className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
             >
               <option value="all">Tất cả thao tác</option>
               <option value="CREATE">Thêm mới</option>

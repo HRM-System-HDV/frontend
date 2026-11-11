@@ -5,7 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear, faPencil, faLock, faFileExcel } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import type { Payslip } from "@/types";
+import type { Payslip, Branch } from "@/types";
 import PayslipSection from "@/features/payslips/PayslipList";
 import BulkClosePayslipModal from "@/features/payslips/PayslipClose";
 import ExportPayslipModal from "@/features/payslips/PayslipExport";
@@ -31,7 +31,8 @@ interface PayslipRow {
 interface EmployeeRow {
   id: string;
   name: string;
-  branch: string;
+  // API /api/employees chỉ trả branchSlug (không có field branch)
+  branchSlug?: string;
   baseSalary?: number;
   status?: string;
 }
@@ -39,9 +40,15 @@ interface EmployeeRow {
 export default function PayslipsPage() {
   const { role, branchSlug, name: currentUserName } = useCurrentUser();
   const isManager = role === "manager";
+  // Ghi lương (tạo bảng công, chỉnh phiếu, chốt) là thao tác ngân hàng: gateway
+  // chặn WRITE /api/payroll cho admin. Cấu hình chấm công vẫn thuộc manager.
+  const isAdmin = role === "admin";
+  const canWritePayroll = isAdmin;
+  const canConfigureAttendance = role !== "staff";
 
   const [slips, setSlips] = useState<Payslip[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useLocalStorageState<string>("hrm_payslips_selected_month", "all");
@@ -127,7 +134,7 @@ export default function PayslipsPage() {
           return {
             id: r.id,
             employee: emp?.name || r.employeeId,
-            branch: emp?.branch,
+            branch: emp?.branchSlug,
             month: r.month,
             days: 0,
             salary: Number(r.baseSalary) || 0,
@@ -162,7 +169,7 @@ export default function PayslipsPage() {
               return {
                 id: r.id,
                 employee: emp?.name || r.employeeId,
-                branch: emp?.branch,
+                branch: emp?.branchSlug,
                 month: r.month,
                 days: 0,
                 salary: Number(r.baseSalary) || 0,
@@ -231,6 +238,26 @@ export default function PayslipsPage() {
     const norm = (s: string) => s.toLowerCase().replace("-", "");
     return slips.filter((p) => !p.branch || norm(p.branch) === norm(branchSlug));
   }, [slips, isManager, branchSlug]);
+
+  // Danh sách chi nhánh để map slug -> tên cho nhãn hiển thị (selector, Excel).
+  useEffect(() => {
+    let ignore = false;
+    apiGet<Branch[]>("/api/branches")
+      .then((d) => {
+        if (!ignore) setBranches(d || []);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const getBranchDisplayName = (slug: string): string =>
+    branches.find(
+      (b) =>
+        (b.slug || "").toLowerCase().replace(/-/g, "") ===
+        slug.toLowerCase().replace(/-/g, "")
+    )?.name || slug;
 
   const monthOptions = useMemo(
     () => Array.from(new Set(slips.map((s) => s.month))).sort().reverse(),
@@ -407,7 +434,7 @@ export default function PayslipsPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {!isManager && (
+            {canWritePayroll && (
               <>
                 <Button
                   variant="white"
@@ -430,7 +457,7 @@ export default function PayslipsPage() {
             >
               <FontAwesomeIcon icon={faFileExcel} className="text-emerald-600" fontSize={15} /> Xuất file
             </Button>
-            {!isManager && (
+            {canConfigureAttendance && (
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
               </Button>
@@ -458,17 +485,18 @@ export default function PayslipsPage() {
       ) : (
         <PayslipSection
           payslips={visibleSlips}
-          onEdit={(p) => {
-            setEditSlipTarget(p);
-            setEditBonusStr(p.bonus ? String(p.bonus) : "");
-            setEditPenaltyStr(p.penalty ? String(p.penalty) : "");
-            setEditReasonStr(p.reason ?? "");
-          }}
-          onCloseOne={setConfirmCloseSlipTarget}
+          onEdit={
+            canWritePayroll
+              ? (p) => {
+                  setEditSlipTarget(p);
+                  setEditBonusStr(p.bonus ? String(p.bonus) : "");
+                  setEditPenaltyStr(p.penalty ? String(p.penalty) : "");
+                  setEditReasonStr(p.reason ?? "");
+                }
+              : undefined
+          }
+          onCloseOne={canWritePayroll ? setConfirmCloseSlipTarget : undefined}
           onPrint={setPrintSlipTarget}
-          onExport={() => setExportOpen(true)}
-          
-          
           selectedMonth={selectedMonth}
           onMonthChange={setSelectedMonth}
           monthOptions={monthOptions}
@@ -567,6 +595,7 @@ export default function PayslipsPage() {
         months={monthOptions}
         defaultMonth={selectedMonth}
         userName={currentUserName || "Quản trị viên"}
+        branchLabel={getBranchDisplayName}
       />
     </div>
   );

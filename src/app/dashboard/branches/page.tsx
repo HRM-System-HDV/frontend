@@ -15,10 +15,13 @@ import type { Branch, Employee } from "@/types";
 import BranchSection from "@/features/branches/BranchList";
 import BranchModal from "@/features/branches/BranchForm";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
 export default function BranchesPage() {
   const { role } = useCurrentUser();
-  const isManager = role === "manager";
+  // Quản trị chi nhánh là tính năng hệ thống: gateway chặn WRITE /api/branches
+  // cho admin, nên manager/staff không vào trang này và không thấy control nào.
+  const isAdmin = role === "admin";
 
   const [list, setList] = useState<Branch[]>([]);
   const [empList, setEmpList] = useState<Employee[]>([]);
@@ -169,6 +172,10 @@ export default function BranchesPage() {
     }
   };
 
+  if (!canAccessPath(role, "/dashboard/branches")) {
+    return <NoAccessNotice />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Toast thông báo nổi */}
@@ -197,7 +204,7 @@ export default function BranchesPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Chi nhánh" }]}
         actions={
-          !isManager ? (
+          isAdmin ? (
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => {
@@ -246,13 +253,11 @@ export default function BranchesPage() {
         <BranchSection
           branches={list}
           onEdit={(b) => {
-            if (!isManager) {
+            if (isAdmin) {
               setEditing(b);
               setModalOpen(true);
             }
           }}
-          onLock={!isManager ? setLockTarget : undefined}
-          onDelete={!isManager ? setDeleteTarget : undefined}
         />
       )}
 
@@ -267,7 +272,12 @@ export default function BranchesPage() {
           branch={editing}
           employees={empList}
           onSave={handleSave}
-          onDelete={!isManager ? (b) => {
+          onLock={isAdmin ? (b) => {
+            setModalOpen(false);
+            setEditing(null);
+            setLockTarget(b);
+          } : undefined}
+          onDelete={isAdmin ? (b) => {
             setModalOpen(false);
             setEditing(null);
             setDeleteTarget(b);

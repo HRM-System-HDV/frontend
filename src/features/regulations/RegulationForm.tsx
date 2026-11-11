@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Textarea, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import { formatDate, getTodayVN } from "@/lib/utils";
 import type { Regulation, RegulationStatus, RegulationCategory, Branch } from "@/types";
 
@@ -29,12 +30,15 @@ interface Props {
 }
 
 export default function RegulationFormModal({ initial, onClose, onSave, saving }: Props) {
+  const { role, branchSlug } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [formTitle, setFormTitle] = useState(initial?.title ?? "");
   const [formCategory, setFormCategory] = useState<RegulationCategory>(initial?.category ?? "Nội quy lao động");
   const [formSummary, setFormSummary] = useState(initial?.summary ?? "");
   const [formContent, setFormContent] = useState(initial?.content ?? "");
   const [formStatus, setFormStatus] = useState<RegulationStatus>(initial?.status ?? "hiệu lực");
-  const [formScope, setFormScope] = useState(initial?.scope ?? "Toàn công ty");
+  // Tài khoản bị ghim không có control nhưng giá trị vẫn phải vào payload.
+  const [formScope, setFormScope] = useState(initial?.scope ?? (isAdmin ? "Toàn công ty" : branchSlug.toUpperCase()));
   const [formEffectiveDate, setFormEffectiveDate] = useState(
     initial?.effectiveDate ? formatDate(initial.effectiveDate) : getTodayVN()
   );
@@ -109,20 +113,22 @@ export default function RegulationFormModal({ initial, onClose, onSave, saving }
             </Select>
           </Field>
 
-          <Field label="Phạm vi áp dụng" className="mb-0">
-            <Select
-              value={formScope}
-              onChange={(e) => setFormScope(e.target.value)}
-              disabled={saving}
-            >
-              <option value="Toàn công ty">Toàn công ty</option>
-              {branches.map((b) => (
-                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {isAdmin && (
+            <Field label="Phạm vi áp dụng" className="mb-0">
+              <Select
+                value={formScope}
+                onChange={(e) => setFormScope(e.target.value)}
+                disabled={saving}
+              >
+                <option value="Toàn công ty">Toàn công ty</option>
+                {branches.map((b) => (
+                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
         </div>
 
         {/* 3. Hàng 2 cột phụ: Trạng thái & Ngày bắt đầu hiệu lực */}

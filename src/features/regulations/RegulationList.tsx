@@ -8,6 +8,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Regulation, Branch } from "@/types";
 import { getStatusTone, getCategoryColor } from "./helpers";
 import { formatDate } from "@/lib/utils";
@@ -21,6 +22,8 @@ interface Props {
 }
 
 export default function RegulationSection({ items, onView }: Props) {
+  const { role, branchSlug } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_regulations_search", "");
   const [categoryFilter, setCategoryFilter] = useLocalStorageState<string>("hrm_regulations_category_filter", "all");
   const [statusFilter, setStatusFilter] = useLocalStorageState<string>("hrm_regulations_status_filter", "all");
@@ -30,6 +33,14 @@ export default function RegulationSection({ items, onView }: Props) {
   useEffect(() => {
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
   }, []);
+
+  // Đổi slug chi nhánh thành tên hiển thị; không map được (vd "Toàn công ty") thì hiện giá trị gốc.
+  const getBranchDisplayName = (slug?: string) =>
+    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
+
+  // Tài khoản bị ghim không còn control: phạm vi chốt theo session, vẫn kèm văn bản toàn công ty.
+  const sameBranchSlug = (a?: string, b?: string) =>
+    (a || "").toLowerCase().replace(/-/g, "") === (b || "").toLowerCase().replace(/-/g, "");
 
   // Filtered items
   const filteredItems = items.filter((item) => {
@@ -44,8 +55,10 @@ export default function RegulationSection({ items, onView }: Props) {
     const matchStatus =
       statusFilter === "all" || item.status === statusFilter;
 
-    const matchScope =
-      scopeFilter === "all" || item.scope === scopeFilter;
+    const itemScope = item.scope || "Toàn công ty";
+    const matchScope = isAdmin
+      ? scopeFilter === "all" || itemScope === scopeFilter
+      : itemScope === "Toàn công ty" || sameBranchSlug(itemScope, branchSlug);
 
     return matchSearch && matchCategory && matchStatus && matchScope;
   });
@@ -102,21 +115,23 @@ export default function RegulationSection({ items, onView }: Props) {
               </select>
             </div>
 
-            <div>
-              <select
-                value={scopeFilter}
-                onChange={(e) => setScopeFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-              >
-                <option value="all">Tất cả phạm vi áp dụng</option>
-                <option value="Toàn công ty">Toàn công ty</option>
-                {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <select
+                  value={scopeFilter}
+                  onChange={(e) => setScopeFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                >
+                  <option value="all">Tất cả phạm vi áp dụng</option>
+                  <option value="Toàn công ty">Toàn công ty</option>
+                  {branches.map((b) => (
+                    <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                      Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -160,7 +175,7 @@ export default function RegulationSection({ items, onView }: Props) {
                         </span>
                       )}
                       <span className="text-xs text-slate-500 font-medium">
-                        Phạm vi: <strong className="text-slate-700">{item.scope}</strong>
+                        Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scope)}</strong>
                       </span>
                     </div>
 

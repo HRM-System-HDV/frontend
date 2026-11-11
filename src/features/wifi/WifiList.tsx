@@ -15,10 +15,13 @@ interface WifiDetailModalProps {
   config: WifiConfig | null;
   open: boolean;
   onClose: () => void;
+  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
+  branchLabel?: (slug: string) => string;
 }
 
-export function WifiDetailModal({ config, open, onClose }: WifiDetailModalProps) {
+export function WifiDetailModal({ config, open, onClose, branchLabel }: WifiDetailModalProps) {
   if (!config) return null;
+  const branchName = branchLabel ? branchLabel(config.branch) : config.branch;
   return (
     <Modal
       open={open}
@@ -43,7 +46,7 @@ export function WifiDetailModal({ config, open, onClose }: WifiDetailModalProps)
         <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
           <span className="text-gray-500 font-medium">Chi nhánh:</span>
           <span className="col-span-2">
-            <Badge tone="gray">{config.branch}</Badge>
+            <Badge tone="gray">{branchName}</Badge>
           </span>
         </div>
         <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
@@ -60,11 +63,14 @@ export function WifiDetailModal({ config, open, onClose }: WifiDetailModalProps)
 interface Props {
   configs: WifiConfig[];
   onDelete?: (id: string) => void | Promise<void>;
+  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
+  branchLabel?: (slug: string) => string;
 }
 
-export default function WifiTableSection({ configs, onDelete }: Props) {
+export default function WifiTableSection({ configs, onDelete, branchLabel }: Props) {
   const [viewingConfig, setViewingConfig] = useState<WifiConfig | null>(null);
   const [deletingConfig, setDeletingConfig] = useState<WifiConfig | null>(null);
+  const label = (slug: string) => (branchLabel ? branchLabel(slug) : slug);
 
   const columns: Column<WifiConfig>[] = [
     {
@@ -87,7 +93,7 @@ export default function WifiTableSection({ configs, onDelete }: Props) {
     {
       key: "branch",
       header: "Chi nhánh",
-      render: (w) => <Badge tone="gray">{w.branch}</Badge>,
+      render: (w) => <Badge tone="gray">{label(w.branch)}</Badge>,
     },
     {
       key: "status",
@@ -144,6 +150,7 @@ export default function WifiTableSection({ configs, onDelete }: Props) {
           config={viewingConfig}
           open={!!viewingConfig}
           onClose={() => setViewingConfig(null)}
+          branchLabel={branchLabel}
         />
       )}
 
@@ -151,7 +158,7 @@ export default function WifiTableSection({ configs, onDelete }: Props) {
         <ConfirmDialog
           open={!!deletingConfig}
           title="Xác nhận xóa Wi-Fi"
-          message={`Xác nhận xóa cấu hình Wi-Fi "${deletingConfig.ssid}" khỏi chi nhánh ${deletingConfig.branch}?`}
+          message={`Xác nhận xóa cấu hình Wi-Fi "${deletingConfig.ssid}" khỏi chi nhánh ${label(deletingConfig.branch)}?`}
           confirmLabel="Xóa"
           cancelLabel="Hủy"
           tone="danger"

@@ -17,6 +17,8 @@ import BankConfigModal, { CreateBankAccountModal } from "@/features/bank/BankFor
 import { DEFAULT_SOAP_GATEWAY_CONFIG } from "@/features/bank/constants";
 import type { BankPartner, SoapTransaction, SoapGatewayConfig } from "@/features/bank/types";
 import { apiGet, apiPut, GatewayError } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
 interface BankAccountRow {
   id: string;
@@ -89,6 +91,12 @@ function payoutToTx(
 }
 
 export default function BankIntegrationPage() {
+  const { role } = useCurrentUser();
+  // Số tài khoản, lệnh chi và cấu hình SOAP là dữ liệu quản trị hệ thống:
+  // gateway chặn GET bank-accounts/payouts/soap-config cho admin. Vì vậy trang
+  // này chỉ render với admin và không gửi request nào khi vai trò khác mở URL.
+  const isAdmin = role === "admin";
+
   const [partners, setPartners] = useState<BankPartner[]>([]);
   const [transactions, setTransactions] = useState<SoapTransaction[]>([]);
   const [gatewayConfig, setGatewayConfig] = useState<SoapGatewayConfig>(DEFAULT_SOAP_GATEWAY_CONFIG);
@@ -148,6 +156,10 @@ export default function BankIntegrationPage() {
   }, []);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setLoading(false);
+      return;
+    }
     let ignore = false;
     Promise.all([
       apiGet<BankAccountRow[]>("/api/payroll/bank-accounts"),
@@ -195,7 +207,7 @@ export default function BankIntegrationPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [isAdmin]);
 
   const handleSetPrimary = async (bankId: string) => {
     try {
@@ -221,6 +233,10 @@ export default function BankIntegrationPage() {
     fetchData();
   };
 
+  if (!canAccessPath(role, "/dashboard/bank")) {
+    return <NoAccessNotice />;
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -230,13 +246,11 @@ export default function BankIntegrationPage() {
             <Button
               key="btn-add-bank" variant="white"
               onClick={() => setCreateAccountOpen(true)}
-              className="text-xs"
             >
               <FontAwesomeIcon icon={faPlus} fontSize={11} /> Thêm tài khoản ngân hàng
             </Button>
             <Button
               key="btn-create-payout" onClick={() => setCreateDisburseOpen(true)}
-              className="text-xs"
               disabled={partners.length === 0}
             >
               <FontAwesomeIcon icon={faPlus} fontSize={11} /> Tạo lệnh chi lương

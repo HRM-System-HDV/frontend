@@ -1,19 +1,33 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import type { WifiConfig } from "@/types";
+import type { WifiConfig, Branch } from "@/types";
 import WifiTableSection from "@/features/wifi/WifiList";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { apiGet, apiDelete, GatewayError } from "@/lib/api";
 
 export default function WifiPage() {
-  const { role, branchSlug } = useCurrentUser();
-  const isManager = role === "manager";
+  const { role } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [configs, setConfigs] = useState<WifiConfig[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let ignore = false;
+    apiGet<Branch[]>("/api/branches")
+      .then((data) => {
+        if (!ignore) setBranches(Array.isArray(data) ? data : []);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -58,10 +72,11 @@ export default function WifiPage() {
     }
   };
 
-  const filteredConfigs = useMemo(
-    () => (isManager ? configs.filter((c) => c.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", "")) : configs),
-    [configs, isManager, branchSlug]
-  );
+  // Cấu hình Wi-Fi là tính năng hệ thống (gateway: WRITE wifi-configs = admin)
+  // nên admin xem toàn bộ chi nhánh, không có chế độ lọc theo chi nhánh.
+  if (!canAccessPath(role, "/dashboard/wifi")) {
+    return <NoAccessNotice />;
+  }
 
   return (
     <div>
@@ -86,7 +101,13 @@ export default function WifiPage() {
             <div className="text-xs text-gray-500">Đang tải cấu hình Wi-Fi qua Gateway...</div>
           </div>
         ) : (
-          <WifiTableSection configs={filteredConfigs} onDelete={handleDelete} />
+          <WifiTableSection
+            configs={configs}
+            onDelete={isAdmin ? handleDelete : undefined}
+            branchLabel={(slug) =>
+              branches.find((b) => b.slug.toLowerCase() === slug.toLowerCase())?.name || slug
+            }
+          />
         )}
       </div>
     </div>

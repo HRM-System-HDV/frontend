@@ -14,6 +14,9 @@ import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
 export interface StaffInShift {
   id: string;
   rawId?: string;
+  // Id nhân sự trong DB — bắt buộc để gọi đúng API chấm công
+  // (POST /api/attendance/checkin yêu cầu employeeId).
+  employeeId?: string;
   name: string;
   role: string;
   branch: string;
@@ -45,6 +48,11 @@ interface Props {
   onOpenAssignModal?: (templateId: string, date: string, branch: string) => void;
   onDeleteShift?: (shiftId: string) => void;
   onDeleteRegistration?: (regId: string) => void;
+  // Chấm công thật qua work-service (POST /api/attendance/checkin | /checkout).
+  // Trang cha (dashboard/shifts) owns call vì có showToast + fetchData để cập nhật
+  // lại lịch sau khi ghi; component chỉ suy ra employeeId/shiftId rồi gọi lên.
+  onCheckIn?: (employeeId: string, shiftId: string) => void | Promise<void>;
+  onCheckOut?: (employeeId: string, shiftId: string) => void | Promise<void>;
   weekOffset?: number;
   onWeekOffsetChange?: (offset: number) => void;
   selectedDayIndex?: number;
@@ -75,6 +83,8 @@ export default function GeneralScheduleSection({
   onOpenAssignModal,
   onDeleteShift,
   onDeleteRegistration,
+  onCheckIn,
+  onCheckOut,
   weekOffset: propsWeekOffset,
   onWeekOffsetChange,
   selectedDayIndex: propsDayIndex,
@@ -181,6 +191,7 @@ export default function GeneralScheduleSection({
     const toStaff = (ws: WorkShift): StaffInShift => ({
       id: ws.id,
       rawId: ws.id,
+      employeeId: ws.employeeId,
       name: ws.employee,
       role: ws.templateName || "Nhân viên trực ca",
       branch: ws.branch,
@@ -369,20 +380,14 @@ export default function GeneralScheduleSection({
 
           {/* Bộ lọc chi nhánh & tìm kiếm */}
           <div className="flex items-center gap-2.5 flex-wrap">
-            {isManager ? (
-              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700">
+            {/* Tài khoản ghim chi nhánh không còn control lọc; tên chi nhánh hiển thị ở footer sidebar */}
+            {!isManager && (
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700">
                 <FontAwesomeIcon icon={faStore} fontSize={15} className="text-primary" />
-                <span>Chi nhánh: <strong className="text-gray-900">{managerBranch}</strong></span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary border border-primary-200 ml-1">Cố định</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs font-medium text-gray-700">
-                <FontAwesomeIcon icon={faStore} fontSize={15} className="text-primary" />
-                <span>Chi nhánh:</span>
                 <select
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="bg-transparent border-none text-xs font-bold text-gray-900 focus:outline-hidden cursor-pointer"
+                  className="min-w-0 max-w-full bg-transparent border-none text-xs font-bold text-gray-900 focus:outline-hidden cursor-pointer"
                 >
                   <option value="all">Tất cả chi nhánh</option>
                   {branches.map((b) => (
@@ -395,14 +400,14 @@ export default function GeneralScheduleSection({
             )}
 
             {mode !== "registration" && (
-              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
+              <div className="flex flex-wrap items-center gap-1 min-w-0 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
                 <FontAwesomeIcon icon={faFilter} fontSize={14} className="text-gray-400" />
                 <select
                   value={statusFilter}
                   onChange={(e) =>
                     setStatusFilter(e.target.value as "all" | "checked_in" | "not_yet")
                   }
-                  className="bg-transparent border-none text-xs text-gray-700 focus:outline-hidden cursor-pointer"
+                  className="min-w-0 max-w-full bg-transparent border-none text-xs text-gray-700 focus:outline-hidden cursor-pointer"
                 >
                   <option value="all">Tất cả trạng thái</option>
                   <option value="checked_in">Đã chấm công</option>
@@ -673,7 +678,12 @@ export default function GeneralScheduleSection({
                                   {staff.name}{staff.phone ? ` - ${staff.phone}` : ""}
                                 </div>
                                 <div className="text-xs text-gray-500 truncate">
-                                  {staff.role} • Chi nhánh {staff.branch && staff.branch.startsWith("c") && staff.branch.length >= 20 ? "Quận 1" : staff.branch}
+                                  {staff.role} • Chi nhánh{" "}
+                                  {branches.find(
+                                    (b) => b.slug.toLowerCase() === (staff.branch || "").toLowerCase()
+                                  )?.name ||
+                                    staff.branch ||
+                                    "—"}
                                 </div>
 
                                 {/* Trạng thái Check-in hoặc Đã đăng ký */}
@@ -777,22 +787,18 @@ export default function GeneralScheduleSection({
           setCanceledIds((prev) => new Set(prev).add(staffId));
         }}
         onCheckIn={(staffId) => {
-          const now = new Date();
-          const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-          setStaffOverrides((prev) => ({ ...prev, [staffId]: { checkInStatus: "checked_in", checkInTime: time } }));
+          // Nút "Chấm công" phải ghi xuống work-service thay vì chỉ đổi state cục bộ
+          // (state cũ mất ngay khi tải lại trang). `shiftId` gửi lên là id bản ghi
+          // Shift trong DB = `rawId`/`id` của nhân viên ở chế độ xếp ca, KHÔNG phải
+          // `shift.id` của modal (chuỗi nhóm "shift_0").
+          const target = dayShifts.flatMap((s) => s.staffList).find((s) => s.id === staffId);
+          // Thiếu employeeId (dòng suy ra từ đăng ký ca) thì backend từ chối; truyền
+          // rỗng để trang cha báo lỗi thật thay vì ghi state giả như trước.
+          onCheckIn?.(target?.employeeId || "", target?.rawId || target?.id || staffId);
         }}
         onCheckOut={(staffId) => {
-          const now = new Date();
-          const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-          setStaffOverrides((prev) => ({
-            ...prev,
-            [staffId]: {
-              ...prev[staffId],
-              checkInStatus: "checked_in",
-              checkInTime: prev[staffId]?.checkInTime ?? detailStaff?.checkInTime ?? "07:00",
-              checkOutTime: time,
-            },
-          }));
+          const target = dayShifts.flatMap((s) => s.staffList).find((s) => s.id === staffId);
+          onCheckOut?.(target?.employeeId || "", target?.rawId || target?.id || staffId);
         }}
         onSupplement={(staffId) => {
           const now = new Date();

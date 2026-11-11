@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "./api";
+import { apiDelete, apiGet, apiPost } from "./api";
 
 export type BacklogAction = "CREATE" | "UPDATE" | "DELETE" | "APPROVE" | "REJECT";
 
@@ -72,11 +72,13 @@ export async function recordBacklog(entry: {
   }
 }
 
+/**
+ * Xóa toàn bộ nhật ký thao tác. Đi qua client @/lib/api để dùng chung cơ chế
+ * credentials + tự làm mới phiên khi 401. apiDelete ném GatewayError khi server
+ * trả lỗi (VD: 500 = không xóa được bản ghi nào), nên nơi gọi phải bắt lỗi và
+ * thông báo thất bại cho người dùng thay vì báo thành công.
+ */
 export async function clearAllBacklogs(): Promise<void> {
-  const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:4000";
-  await fetch(`${GATEWAY_URL}/api/backlog`, {
-    method: "DELETE",
-    credentials: "include",
-  });
+  await apiDelete("/api/backlog");
 }
 

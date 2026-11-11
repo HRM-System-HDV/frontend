@@ -229,11 +229,12 @@ export default function CreateTaskModal({
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-gray-800 mb-1">
-                Chi nhánh áp dụng <span className="text-red-500">*</span>
-              </label>
-              {isAdmin ? (
+            {isAdmin && (
+              /* Vai trò bị ghim: payload vẫn lấy currentBranch từ session, ẩn luôn ô hiển thị. */
+              <div>
+                <label className="block text-sm font-semibold text-gray-800 mb-1">
+                  Chi nhánh áp dụng <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={targetBranch}
                   onChange={(e) => setTargetBranch(e.target.value)}
@@ -249,15 +250,8 @@ export default function CreateTaskModal({
                     <option value={currentBranch || ""}>{currentBranch || "Chưa có chi nhánh"}</option>
                   )}
                 </select>
-              ) : (
-                <input
-                  type="text"
-                  disabled
-                  value={currentBranch ? `${currentBranch} (Chi nhánh hiện tại)` : "Chưa có chi nhánh"}
-                  className="w-full px-3 py-2 border border-gray-200 bg-gray-100 text-gray-600 rounded-lg text-sm cursor-not-allowed"
-                />
-              )}
-            </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-800 mb-1">

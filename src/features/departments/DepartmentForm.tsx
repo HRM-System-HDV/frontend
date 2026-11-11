@@ -14,9 +14,10 @@ interface Props {
   employees: Employee[];
   onSave: (data: Omit<Department, "id"> & { id?: string }) => void;
   onDelete?: (department: Department) => void;
+  onLock?: (department: Department) => void;
 }
 
-export default function DepartmentModal({ open, onClose, department, employees, onSave, onDelete }: Props) {
+export default function DepartmentModal({ open, onClose, department, employees, onSave, onDelete, onLock }: Props) {
   const [name, setName] = useState(department?.name || "");
   const [manager, setManager] = useState(
     department?.manager ? department.manager.split(/—|-|\(/)[0].trim() : ""
@@ -47,15 +48,24 @@ export default function DepartmentModal({ open, onClose, department, employees, 
       size="lg"
       footer={
         <>
-          {department && onDelete && (
-            <Button
-              type="button"
-              variant="danger"
-              className="mr-auto"
-              onClick={() => onDelete(department)}
-            >
-              Xóa
-            </Button>
+          {department && (onDelete || onLock) && (
+            <div className="mr-auto flex items-center gap-2">
+              {onLock && (
+                <Button
+                  type="button"
+                  variant="white"
+                  className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                  onClick={() => onLock(department)}
+                >
+                  {department.status === "hoạt động" ? "Khóa" : "Mở khóa"}
+                </Button>
+              )}
+              {onDelete && (
+                <Button type="button" variant="danger" onClick={() => onDelete(department)}>
+                  Xóa
+                </Button>
+              )}
+            </div>
           )}
           <Button variant="white" onClick={onClose}>
             Hủy

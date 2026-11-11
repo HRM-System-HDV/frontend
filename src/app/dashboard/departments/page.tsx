@@ -15,11 +15,15 @@ import type { Department, Employee } from "@/types";
 import DepartmentList from "@/features/departments/DepartmentList";
 import DepartmentModal from "@/features/departments/DepartmentForm";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { getTodayVN } from "@/lib/utils";
 
 export default function DepartmentsPage() {
   const { role } = useCurrentUser();
   const isManager = role === "manager";
+  // Ghi phòng ban (WRITE /api/departments) là nghiệp vụ vận hành: manager +
+  // admin làm được, nhân viên không thấy control nào.
+  const canWriteDepartments = role !== "staff";
 
   const [deptList, setDeptList] = useState<Department[]>([]);
   const [empList, setEmpList] = useState<Employee[]>([]);
@@ -175,6 +179,10 @@ export default function DepartmentsPage() {
     }
   };
 
+  if (!canAccessPath(role, "/dashboard/departments")) {
+    return <NoAccessNotice description="Cơ cấu phòng ban chỉ dành cho Quản trị viên và Quản lý Chi nhánh." />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Toast thông báo nổi */}
@@ -203,7 +211,7 @@ export default function DepartmentsPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phòng ban" }]}
         actions={
-          !isManager ? (
+          canWriteDepartments ? (
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => {
@@ -250,13 +258,11 @@ export default function DepartmentsPage() {
           departments={deptList}
           employees={empList}
           onEdit={(d) => {
-            if (!isManager) {
+            if (canWriteDepartments) {
               setEditing(d);
               setModalOpen(true);
             }
           }}
-          onLock={!isManager ? setLockTarget : undefined}
-          onDelete={!isManager ? setDeleteTarget : undefined}
           isManager={isManager}
         />
       )}
@@ -272,7 +278,12 @@ export default function DepartmentsPage() {
           department={editing}
           employees={empList}
           onSave={handleSave}
-          onDelete={!isManager ? (d) => {
+          onLock={canWriteDepartments ? (d) => {
+            setModalOpen(false);
+            setEditing(null);
+            setLockTarget(d);
+          } : undefined}
+          onDelete={canWriteDepartments ? (d) => {
             setModalOpen(false);
             setEditing(null);
             setDeleteTarget(d);

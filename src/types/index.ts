@@ -115,9 +115,12 @@ export interface Department {
 export interface Notification {
   id: string;
   title: string;
-  content: string;
-  time: string;
-  read: boolean;
+  /** Tên trường thật của API integration-service (không phải `content`). */
+  body: string;
+  /** ISO/định dạng gốc server trả về (không phải `time`). */
+  createdAt: string;
+  /** Cờ đã đọc theo schema DB (không phải `read`). */
+  isRead: boolean;
   icon?: string;
   tone?: "primary" | "info" | "danger" | "warning" | "success";
 }

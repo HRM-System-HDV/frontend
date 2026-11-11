@@ -23,6 +23,7 @@ import {
   faSpinner,
   faRotateRight,
   faCamera,
+  faLock,
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
@@ -41,6 +42,7 @@ interface Props {
   departments?: Department[];
   onSave?: (updated: Employee) => Promise<Employee | void>;
   onDelete?: (employee: Employee) => void;
+  onLock?: (employee: Employee) => void;
   isManager?: boolean;
   managerBranch?: string;
 }
@@ -62,6 +64,11 @@ const COMMON_BANKS = [
 
 type DetailTab = "profile" | "job" | "salary" | "cccd";
 
+// Lời giải thích thống nhất cho nhóm trường chỉ admin mới ghi được
+// (systemRole / branchSlug / email / baseSalary).
+const ADMIN_ONLY_FIELD_HINT =
+  "Chỉ Quản trị viên mới được thay đổi thông tin này, hệ thống đang khóa lại cho bạn.";
+
 export default function EmployeeDetailModal({
   open,
   onClose,
@@ -70,12 +77,20 @@ export default function EmployeeDetailModal({
   departments = [],
   onSave,
   onDelete,
+  onLock,
   isManager = false,
   managerBranch = "",
 }: Props) {
-  const { user } = useCurrentUser();
+  const { user, role: authRole } = useCurrentUser();
   const currentUserId = user?.userId;
   const currentUserEmail = user?.email;
+  // organization-service lọc im lặng 4 trường systemRole / branchSlug / email /
+  // baseSalary khỏi payload PUT /api/employees/:id khi người gọi không phải admin
+  // (omitPrivilegedFields). Vì vậy chỉ admin mới được sửa và gửi các trường này;
+  // với manager các ô input phải khóa + giải thích để không tưởng là đã lưu.
+  // `authRole` là quyền hệ thống của người đang đăng nhập, khác với `role`
+  // (chức danh trên hồ sơ) bên dưới.
+  const isAdmin = authRole === "admin";
   const isSelf = Boolean(
     employee && (
       employee.id === currentUserId ||
@@ -180,7 +195,9 @@ export default function EmployeeDetailModal({
       setSaveError("Vui lòng nhập họ và tên nhân viên");
       return;
     }
-    if (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    // Email bị khóa với người gọi không phải admin (server bỏ field này khỏi payload
+    // PUT), nên không bắt buộc nhập lại email hợp lệ — tránh kẹt không lưu được hồ sơ.
+    if (isAdmin && (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {
       setSaveError("Vui lòng nhập địa chỉ email hợp lệ");
       return;
     }
@@ -286,6 +303,16 @@ export default function EmployeeDetailModal({
     }
   };
 
+  // Đổi slug chi nhánh thành tên hiển thị (cùng cách resolve với khối header);
+  // không map được thì fallback về giá trị gốc.
+  const getBranchDisplayName = (slugOrValue?: string) => {
+    const target = slugOrValue || "";
+    const matched = branches.find(
+      (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target.toLowerCase().replace(/-/g, "")
+    );
+    return matched ? matched.name : target;
+  };
+
   const fullAddress = (
     isEditing
       ? [street, ward, province]
@@ -303,11 +330,23 @@ export default function EmployeeDetailModal({
       footer={
         isEditing ? (
           <>
+            {onLock && employee && !isSelf && employee.status !== "vô hiệu hóa" && (
+              <Button
+                type="button"
+                variant="white"
+                className="mr-auto"
+                disabled={saving}
+                title="Vô hiệu hóa nhân viên"
+                onClick={() => onLock(employee)}
+              >
+                <FontAwesomeIcon icon={faLock} className="mr-1.5" />
+                Vô hiệu hóa
+              </Button>
+            )}
             {onDelete && !isManager && employee && !isSelf && (
               <Button
                 type="button"
                 variant="danger"
-                className="mr-auto"
                 disabled={saving}
                 title="Xóa nhân viên"
                 onClick={() => onDelete(employee)}
@@ -326,11 +365,22 @@ export default function EmployeeDetailModal({
           </>
         ) : (
           <>
+            {onLock && employee && !isSelf && employee.status !== "vô hiệu hóa" && (
+              <Button
+                type="button"
+                variant="white"
+                className="mr-auto"
+                title="Vô hiệu hóa nhân viên"
+                onClick={() => onLock(employee)}
+              >
+                <FontAwesomeIcon icon={faLock} className="mr-1.5" />
+                Vô hiệu hóa
+              </Button>
+            )}
             {onDelete && !isManager && employee && !isSelf && (
               <Button
                 type="button"
                 variant="danger"
-                className="mr-auto"
                 title="Xóa nhân viên"
                 onClick={() => onDelete(employee)}
               >
@@ -679,12 +729,13 @@ export default function EmployeeDetailModal({
                       placeholder="0912345678"
                     />
                   </Field>
-                  <Field label="Email công việc" required>
+                  <Field label="Email công việc" required hint={isAdmin ? undefined : ADMIN_ONLY_FIELD_HINT}>
                     <Input
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="user@company.com"
+                      disabled={!isAdmin}
                     />
                   </Field>
                 </div>
@@ -745,7 +796,7 @@ export default function EmployeeDetailModal({
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Chi nhánh làm việc:</span>
                       <span className="font-semibold text-primary text-xs">
-                        {employee.branch}
+                        {getBranchDisplayName(employee.branch)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
@@ -800,15 +851,8 @@ export default function EmployeeDetailModal({
                   <h5 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-2">
                     <FontAwesomeIcon icon={faBuilding} /> Vị trí công tác
                   </h5>
-                  <Field label="Chi nhánh làm việc" required>
-                    {isManager ? (
-                      <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-                        <span>{managerBranch}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                          Cố định theo quản lý
-                        </span>
-                      </div>
-                    ) : (
+                  {isAdmin && (
+                    <Field label="Chi nhánh làm việc" required>
                       <Select value={branch} onChange={(e) => setBranch(e.target.value)}>
                         <option value="">— Chọn chi nhánh —</option>
                         {branch && !branches.some((b) => b.slug.toUpperCase() === branch) && (
@@ -820,8 +864,8 @@ export default function EmployeeDetailModal({
                           </option>
                         ))}
                       </Select>
-                    )}
-                  </Field>
+                    </Field>
+                  )}
 
                   <Field label="Phòng ban trực thuộc" required>
                     <Select value={department} onChange={(e) => setDepartment(e.target.value)}>
@@ -850,11 +894,11 @@ export default function EmployeeDetailModal({
                   <h5 className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-2">
                     <FontAwesomeIcon icon={faShieldHalved} /> Quyền hạn & Trạng thái
                   </h5>
-                  <Field label="Cấp vai trò hệ thống" required>
+                  <Field label="Cấp vai trò hệ thống" required hint={isAdmin ? undefined : ADMIN_ONLY_FIELD_HINT}>
                     <Select
                       value={systemRole}
                       onChange={(e) => setSystemRole(e.target.value as UserRole)}
-                      disabled={isManager}
+                      disabled={!isAdmin}
                     >
                       <option value="staff">Nhân viên</option>
                       <option value="manager">Quản lý Chi nhánh</option>
@@ -1008,12 +1052,17 @@ export default function EmployeeDetailModal({
                       </p>
                     </Field>
                   ) : (
-                    <Field label="Mức lương cơ bản tháng (VNĐ/tháng)" required>
+                    <Field
+                      label="Mức lương cơ bản tháng (VNĐ/tháng)"
+                      required
+                      hint={isAdmin ? undefined : ADMIN_ONLY_FIELD_HINT}
+                    >
                       <Input
                         type="number"
                         value={baseSalary}
                         onChange={(e) => setBaseSalary(Number(e.target.value))}
                         placeholder="8500000"
+                        disabled={!isAdmin}
                       />
                     </Field>
                   )}

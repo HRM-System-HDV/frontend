@@ -10,6 +10,7 @@ import RegulationSection from "@/features/regulations/RegulationList";
 import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import { formatDate, getTodayVN } from "@/lib/utils";
 
 function todayStr(): string {
@@ -17,6 +18,10 @@ function todayStr(): string {
 }
 
 export default function RegulationsManagementPage() {
+  const { role } = useCurrentUser();
+  // WRITE /api/regulations = manager + admin; nhân viên chỉ đọc văn bản.
+  const canWriteRegulations = role !== "staff";
+
   const [items, setItems] = useState<Regulation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -154,14 +159,16 @@ export default function RegulationsManagementPage() {
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={handleOpenCreateModal}
-              className="flex items-center gap-1.5"
-            >
-              <FontAwesomeIcon icon={faPlus} fontSize={18} />
-              Tạo văn bản nội quy mới
-            </Button>
+            {canWriteRegulations && (
+              <Button
+                variant="primary"
+                onClick={handleOpenCreateModal}
+                className="flex items-center gap-1.5"
+              >
+                <FontAwesomeIcon icon={faPlus} fontSize={18} />
+                Tạo văn bản nội quy mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -186,19 +193,18 @@ export default function RegulationsManagementPage() {
         <RegulationSection
           items={items}
           onView={setViewingItem}
-          onEdit={handleOpenEditModal}
-          onDelete={handleDeleteItem}
-          onTogglePin={handleTogglePin}
+          onEdit={canWriteRegulations ? handleOpenEditModal : undefined}
+          onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
         />
       )}
 
-      {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH */}
+      {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH — chỗ duy nhất có nút xóa */}
       <RegulationDetailModal
         item={viewingItem}
         onClose={() => setViewingItem(null)}
-        onEdit={handleEditFromView}
-        onDelete={handleDeleteItem}
-        onTogglePin={handleTogglePin}
+        onEdit={canWriteRegulations ? handleEditFromView : undefined}
+        onDelete={canWriteRegulations ? handleDeleteItem : undefined}
+        onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
       />
 
       {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}

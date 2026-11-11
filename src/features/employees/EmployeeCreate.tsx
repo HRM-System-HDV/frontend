@@ -61,18 +61,8 @@ export default function CreateEmployeeModal({
         <Field label="Mật khẩu" required>
           <Input type="password" placeholder="Mật khẩu ban đầu" />
         </Field>
-        <Field label="Gán chi nhánh" required>
-          {isManager ? (
-            <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-              <span>
-                {branches.find((b) => b.slug.toLowerCase() === fixedBranch.toLowerCase())?.name ??
-                  `Chi nhánh ${fixedBranch.toUpperCase()}`}
-              </span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                Cố định
-              </span>
-            </div>
-          ) : (
+        {!isManager && (
+          <Field label="Gán chi nhánh" required>
             <Select defaultValue={fixedBranch.toLowerCase()} disabled={false}>
               {branches.map((b) => (
                 <option key={b.id} value={b.slug}>
@@ -80,13 +70,8 @@ export default function CreateEmployeeModal({
                 </option>
               ))}
             </Select>
-          )}
-          {isManager && (
-            <p className="text-[11px] text-gray-400 mt-1">
-              Tài khoản Manager chỉ tạo nhân viên cho chi nhánh phụ trách
-            </p>
-          )}
-        </Field>
+          </Field>
+        )}
         <Field label="Phòng ban" required>
           <Select defaultValue={departments[1]?.name ?? "Phòng Kinh Doanh"}>
             {departments.map((d) => (

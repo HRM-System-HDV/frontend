@@ -12,8 +12,11 @@ interface RequestDetailModalProps {
   open: boolean;
   onClose: () => void;
   request: ShiftRequest | null;
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  /** Không truyền = vai trò này không duyệt đơn (nhân viên chỉ xem đơn của mình). */
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
+  /** Đổi slug chi nhánh thành tên hiển thị; thiếu thì hiện slug gốc. */
+  branchLabel?: (slug: string) => string;
 }
 
 export default function RequestDetailModal({
@@ -22,19 +25,23 @@ export default function RequestDetailModal({
   request,
   onApprove,
   onReject,
+  branchLabel,
 }: RequestDetailModalProps) {
   if (!request) return null;
 
   const isPending = request.status === "chờ duyệt";
   const isApproved = request.status === "đã duyệt";
   const isRejected = request.status === "từ chối";
+  const canReview = Boolean(onApprove || onReject);
 
   const handleConfirmApprove = () => {
+    if (!onApprove) return;
     onApprove(request.id);
     onClose();
   };
 
   const handleConfirmReject = () => {
+    if (!onReject) return;
     onReject(request.id);
     onClose();
   };
@@ -99,7 +106,7 @@ export default function RequestDetailModal({
             Đóng
           </Button>
 
-          {isPending ? (
+          {isPending && canReview ? (
             <div className="flex items-center gap-2">
               <Button
                 variant="danger"
@@ -157,7 +164,7 @@ export default function RequestDetailModal({
                 <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
                   <FontAwesomeIcon icon={faStore} fontSize={13} className="text-gray-400" />
                   <span>Chi nhánh: </span>
-                  <Badge tone="gray">{request.branch}</Badge>
+                  <Badge tone="gray">{branchLabel ? branchLabel(request.branch) : request.branch}</Badge>
                 </div>
               </div>
             </div>

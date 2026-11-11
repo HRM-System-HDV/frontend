@@ -10,9 +10,14 @@ import NewsSection from "@/features/news/NewsList";
 import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import { getTodayVN } from "@/lib/utils";
 
 export default function NewsPage() {
+  const { role } = useCurrentUser();
+  // Đăng/ghim/xóa tin là WRITE /api/news = manager + admin; nhân viên chỉ đọc.
+  const canWriteNews = role !== "staff";
+
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -118,14 +123,16 @@ export default function NewsPage() {
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={handleOpenCreate}
-              className="flex items-center gap-1.5"
-            >
-              <FontAwesomeIcon icon={faPlus} fontSize={18} />
-              Đăng thông báo mới
-            </Button>
+            {canWriteNews && (
+              <Button
+                variant="primary"
+                onClick={handleOpenCreate}
+                className="flex items-center gap-1.5"
+              >
+                <FontAwesomeIcon icon={faPlus} fontSize={18} />
+                Đăng thông báo mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -150,19 +157,18 @@ export default function NewsPage() {
         <NewsSection
           items={newsList}
           onSelect={setSelectedNews}
-          onEdit={handleOpenEdit}
-          onDelete={handleDeleteNews}
-          onTogglePin={handleTogglePin}
+          onEdit={canWriteNews ? handleOpenEdit : undefined}
+          onTogglePin={canWriteNews ? handleTogglePin : undefined}
         />
       )}
 
-      {/* Modal xem chi tiết thông báo */}
+      {/* Modal xem chi tiết thông báo — chỗ duy nhất có nút xóa */}
       <NewsDetailModal
         item={selectedNews}
         onClose={() => setSelectedNews(null)}
-        onEdit={handleOpenEdit}
-        onDelete={handleDeleteNews}
-        onTogglePin={handleTogglePin}
+        onEdit={canWriteNews ? handleOpenEdit : undefined}
+        onDelete={canWriteNews ? handleDeleteNews : undefined}
+        onTogglePin={canWriteNews ? handleTogglePin : undefined}
       />
 
       {/* Modal tạo/sửa thông báo */}

@@ -2,7 +2,9 @@
 
 import { useState, useMemo } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
+import {
+  faMagnifyingGlass,
+} from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -12,8 +14,6 @@ import type { Branch } from "@/types";
 interface Props {
   branches: Branch[];
   onEdit: (b: Branch) => void;
-  onLock?: (b: Branch) => void;
-  onDelete?: (b: Branch) => void;
 }
 
 export default function BranchSection({ branches, onEdit }: Props) {
@@ -53,13 +53,16 @@ export default function BranchSection({ branches, onEdit }: Props) {
       key: "actions",
       header: "Thao tác",
       render: (b) => (
-        <button
-          type="button"
-          onClick={() => onEdit(b)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-        >
-          Chi tiết
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Khóa/Xóa chỉ có trong modal chi tiết (BranchForm). */}
+          <button
+            type="button"
+            onClick={() => onEdit(b)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+        </div>
       ),
     },
   ];

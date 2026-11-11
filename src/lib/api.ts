@@ -89,8 +89,6 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
       targetName = "Bản ghi lưu trữ";
     } else if (path.includes("/run")) {
       actionLabel = "Thực hiện lưu trữ";
-    } else if (path.includes("/preview")) {
-      actionLabel = "Xem trước lưu trữ";
     }
   } else if (path.includes("/shifts/templates") || path.includes("/shift-templates")) {
     moduleName = "Khung ca mẫu";
@@ -169,12 +167,43 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
   }).catch(() => {});
 }
 
+let refreshInFlight: Promise<boolean> | null = null;
+
+/**
+ * Access token chỉ sống 15 phút; phiên dài hạn nằm ở cookie refresh (httpOnly,
+ * JS không đọc được). Nhiều request 401 cùng lúc chỉ được đổi token MỘT lần,
+ * nếu không mỗi tab/lỗi sẽ đốt thêm một vòng xoay vòng refresh token.
+ */
+async function tryRefreshSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = fetch(`${GATEWAY_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((res) => res.ok)
+      .catch(() => false)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+/** fetch qua gateway, tự thử lại đúng một lần sau khi cấp lại token. */
+async function gatewayFetch(path: string, init: RequestInit): Promise<Response> {
+  const res = await fetch(`${GATEWAY_URL}${path}`, init);
+  // /api/auth/* trả 401 là kết quả đăng nhập sai, không phải phiên hết hạn.
+  if (res.status !== 401 || path.startsWith("/api/auth/")) return res;
+  const refreshed = await tryRefreshSession();
+  if (!refreshed) return res;
+  return fetch(`${GATEWAY_URL}${path}`, init);
+}
+
 /**
  * Khi gateway trả 401 (hết phiên làm việc giữa chừng): đánh dấu cờ vào
  * sessionStorage để trang login hiển thị toast, rồi đá về /login giữ ?from=.
  */
-export function markSessionExpiredAndRedirect() {
-  if (typeof window === "undefined") return;
+export function markSessionExpiredAndRedirect() {  if (typeof window === "undefined") return;
   try {
     sessionStorage.setItem("hrm_session_expired", "1");
     const next = window.location.pathname + window.location.search;
@@ -188,7 +217,7 @@ export async function apiGet<T>(path: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
+    const res = await gatewayFetch(path, {
       credentials: "include",
       signal: controller.signal,
     });
@@ -202,7 +231,7 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
+    const res = await gatewayFetch(path, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -221,7 +250,7 @@ export async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
+    const res = await gatewayFetch(path, {
       method: "PUT",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -240,7 +269,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
+    const res = await gatewayFetch(path, {
       method: "DELETE",
       credentials: "include",
       signal: controller.signal,
@@ -271,7 +300,7 @@ export async function postSoapPayroll(xmlBody: string): Promise<string> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${GATEWAY_URL}/soap/payroll`, {
+    const res = await gatewayFetch("/soap/payroll", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "text/xml; charset=utf-8" },

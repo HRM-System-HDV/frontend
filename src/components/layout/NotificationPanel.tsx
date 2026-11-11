@@ -3,14 +3,16 @@
 import { useState, useEffect } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBell, faCheckDouble, faXmark } from "@fortawesome/free-solid-svg-icons";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTime } from "@/lib/utils";
 
+// Trường đúng với bản ghi notification mà integration-service trả về qua gateway:
+// body / createdAt / isRead (không phải content / time / read).
 interface NotificationItem {
   id: string;
   title: string;
-  content: string;
-  time: string;
-  read: boolean;
+  body: string;
+  createdAt: string;
+  isRead: boolean;
   tone?: string;
 }
 
@@ -60,16 +62,16 @@ export default function NotificationPanel({
 
   if (!open) return null;
 
-  const list = tab === "all" ? items : items.filter((n) => !n.read);
-  const unreadCount = items.filter((n) => !n.read).length;
+  const list = tab === "all" ? items : items.filter((n) => !n.isRead);
+  const unreadCount = items.filter((n) => !n.isRead).length;
 
   const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
     onMarkAllRead?.();
   };
 
   const markRead = (id: string) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
     onMarkRead?.(id);
   };
 
@@ -153,7 +155,7 @@ export default function NotificationPanel({
                 onClick={() => markRead(n.id)}
                 className={cn(
                   "w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer block",
-                  !n.read ? "bg-primary-50/30" : "bg-white"
+                  !n.isRead ? "bg-primary-50/30" : "bg-white"
                 )}
               >
                 <div className="flex items-start justify-between gap-2.5">
@@ -162,13 +164,15 @@ export default function NotificationPanel({
                       <span
                         className={cn(
                           "w-2 h-2 rounded-full shrink-0",
-                          n.read ? "bg-gray-300" : toneDot[n.tone ?? "primary"]
+                          n.isRead ? "bg-gray-300" : toneDot[n.tone ?? "primary"]
                         )}
                       />
                       <div className="text-xs font-semibold text-gray-900 truncate">{n.title}</div>
                     </div>
-                    <p className="text-[11px] text-gray-600 leading-normal line-clamp-2">{n.content}</p>
-                    <div className="text-[10px] text-gray-400 mt-1">{n.time}</div>
+                    <p className="text-[11px] text-gray-600 leading-normal line-clamp-2">{n.body}</p>
+                    <div className="text-[10px] text-gray-400 mt-1">
+                      {formatDateTime(n.createdAt) || n.createdAt}
+                    </div>
                   </div>
                 </div>
               </button>

@@ -13,7 +13,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select, Input } from "@/components/ui/Form";
 import { formatDateTime, formatVND } from "@/lib/utils";
-import { apiGet, createPayout, GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiGet, apiPut, createPayout, GatewayError } from "@/lib/api";
 import type { BankPartner, SoapTransaction } from "./types";
 
 interface PayslipRecord {
@@ -180,16 +180,12 @@ export default function CreatePayrollDisbursementModal({
         deduped?: boolean;
       };
 
-      // Gắn payoutId cho các phiếu lương vừa được chi trả
+      // Gắn payoutId cho các phiếu lương vừa được chi trả (qua apiPut để dùng chung
+      // cơ chế phiên + gateway envelope và tự ghi nhật ký thao tác vào backlog)
       if (res.id && targetSlips.length > 0) {
         await Promise.allSettled(
           targetSlips.map((s) =>
-            fetch(`${GATEWAY_URL}/api/payroll/payslips/${s.id}`, {
-              method: "PUT",
-              credentials: "include",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ payoutId: res.id }),
-            })
+            apiPut(`/api/payroll/payslips/${encodeURIComponent(s.id)}`, { payoutId: res.id })
           )
         );
       }

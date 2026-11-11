@@ -13,9 +13,10 @@ interface Props {
   employees?: Employee[];
   onSave: (data: Omit<Branch, "id"> & { id?: string }) => void;
   onDelete?: (branch: Branch) => void;
+  onLock?: (branch: Branch) => void;
 }
 
-export default function BranchModal({ open, onClose, branch, employees = [], onSave, onDelete }: Props) {
+export default function BranchModal({ open, onClose, branch, employees = [], onSave, onDelete, onLock }: Props) {
   const [name, setName] = useState(branch?.name || "");
   const [address, setAddress] = useState(branch?.address || "");
   const [manager, setManager] = useState(
@@ -38,15 +39,26 @@ export default function BranchModal({ open, onClose, branch, employees = [], onS
       size="lg"
       footer={
         <>
-          {branch && onDelete && (
-            <Button
-              type="button"
-              variant="danger"
-              className="mr-auto"
-              onClick={() => onDelete(branch)}
-            >
-              Xóa
-            </Button>
+          {branch && (onDelete || onLock) && (
+            <div className="mr-auto flex items-center gap-2">
+              {/* Trang cha chỉ khóa một chiều (PUT status = "vô hiệu hóa"),
+                  nên ẩn nút khi chi nhánh đã khóa; mở khóa qua ô Trạng thái. */}
+              {onLock && branch.status === "hoạt động" && (
+                <Button
+                  type="button"
+                  variant="white"
+                  className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                  onClick={() => onLock(branch)}
+                >
+                  Khóa
+                </Button>
+              )}
+              {onDelete && (
+                <Button type="button" variant="danger" onClick={() => onDelete(branch)}>
+                  Xóa
+                </Button>
+              )}
+            </div>
           )}
           <Button variant="white" onClick={onClose}>Hủy</Button>
           <Button onClick={handleSave}>{branch ? "Lưu" : "Tạo"}</Button>

@@ -7,18 +7,17 @@ import {
   faTriangleExclamation,
   faCircleCheck,
   faFilter,
-  faClock,
-  faCheck,
-  faXmark,
-  faListCheck,
+  faMagnifyingGlass,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/Form";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { ShiftRequest, Employee, Branch } from "@/types";
 import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { useCurrentUser } from "@/context/AuthContext";
+import { roleLabel } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
@@ -67,7 +66,7 @@ function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
   return {
     id: r.id,
     employee: empName,
-    branch: r.branchSlug || r.branch || "HN-1",
+    branch: r.branchSlug || r.branch || "",
     type,
     title: r.title,
     amount,
@@ -83,6 +82,9 @@ export default function RequestsPage() {
   const { role, branchSlug, name: currentUserRealName } = useCurrentUser();
   const isAdmin = role === "admin";
   const isManager = role === "manager";
+  // Duyệt/từ chối đơn và cấu hình chấm công là nghiệp vụ quản lý (MANAGERS ở
+  // gateway) — nhân viên chỉ xem đơn của mình nên control không được render.
+  const canReviewRequests = role !== "staff";
   const managerBranch = branchSlug.toUpperCase();
 
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
@@ -100,12 +102,15 @@ export default function RequestsPage() {
   );
   const [typeFilter, setTypeFilter] = useLocalStorageState<string>("hrm_requests_type_filter", "all");
   const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_requests_branch_filter", "all");
-  const branchFilter = isManager ? managerBranch : savedBranchFilter;
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_requests_search", "");
+  // Chỉ admin được chọn chi nhánh; manager và staff bị ghim chi nhánh của token
+  // nên không gửi branchSlug do người dùng chọn (gateway đã suy ra từ token).
+  const branchFilter = isAdmin ? savedBranchFilter : managerBranch;
   const setBranchFilter = useCallback(
     (b: string) => {
-      if (!isManager) setSavedBranchFilter(b);
+      if (isAdmin) setSavedBranchFilter(b);
     },
-    [isManager, setSavedBranchFilter]
+    [isAdmin, setSavedBranchFilter]
   );
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
@@ -144,7 +149,7 @@ export default function RequestsPage() {
       setLoading(true);
       setError(null);
 
-      const effectiveBranch = isManager ? managerBranch : (branchFilter === "all" ? "" : branchFilter);
+      const effectiveBranch = branchFilter === "all" ? "" : branchFilter;
       const queryParams = new URLSearchParams();
       if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
       if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -215,7 +220,7 @@ export default function RequestsPage() {
 
   useEffect(() => {
     let ignore = false;
-    const effectiveBranch = isManager ? managerBranch : (branchFilter === "all" ? "" : branchFilter);
+    const effectiveBranch = branchFilter === "all" ? "" : branchFilter;
     const queryParams = new URLSearchParams();
     if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
     if (statusFilter !== "all") queryParams.set("status", statusFilter);
@@ -294,11 +299,14 @@ export default function RequestsPage() {
 
   // Lọc hiển thị theo chi nhánh & trạng thái
   const filteredRequests = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return requests.filter((r) => {
-      // Chi nhánh
+      // Chi nhánh (manager không xác định được chi nhánh trong token -> xem toàn công ty)
       if (isManager) {
-        const match = r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "") || r.branch === "HN-1";
-        if (!match) return false;
+        if (branchSlug) {
+          const match = r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "");
+          if (!match) return false;
+        }
       } else if (branchFilter !== "all") {
         if (r.branch.toLowerCase().replace("-", "") !== branchFilter.toLowerCase().replace("-", "")) return false;
       }
@@ -314,15 +322,27 @@ export default function RequestsPage() {
       if (typeFilter === "work_supplement" && r.type !== "bổ sung công") return false;
       if (typeFilter === "advance" && r.type !== "tạm ứng") return false;
 
+      // Tìm kiếm tự do trên các trường hiển thị ở bảng
+      if (q) {
+        const haystack = [r.employee, r.branch, r.type, r.title, r.reason, r.from, r.to, r.status, r.amount]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
       return true;
     });
-  }, [requests, isManager, branchSlug, branchFilter, statusFilter, typeFilter]);
+  }, [requests, isManager, branchSlug, branchFilter, statusFilter, typeFilter, searchQuery]);
 
   // Bộ đếm
   const counts = useMemo(() => {
-    const list = isManager
-      ? requests.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "") || r.branch === "HN-1")
-      : requests;
+    const list =
+      isManager && branchSlug
+        ? requests.filter(
+            (r) => r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "")
+          )
+        : requests;
     return {
       all: list.length,
       pending: list.filter((r) => r.status === "chờ duyệt").length,
@@ -333,10 +353,8 @@ export default function RequestsPage() {
 
   const currentUserName =
     currentUserRealName && currentUserRealName !== "Đang tải..."
-      ? `${currentUserRealName} (${isAdmin ? "Admin" : "Quản lý"})`
-      : isAdmin
-        ? "Quản trị viên"
-        : "Quản lý chi nhánh";
+      ? `${currentUserRealName} (${roleLabel(role)})`
+      : roleLabel(role);
 
   // Duyệt yêu cầu (PUT /api/requests/:id/approve)
   const handleApprove = async (id: string, note?: string) => {
@@ -440,7 +458,7 @@ export default function RequestsPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phê duyệt yêu cầu" }]}
         actions={
-          !isManager ? (
+          canReviewRequests ? (
             <div className="flex items-center gap-2">
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
@@ -463,60 +481,54 @@ export default function RequestsPage() {
         </div>
       )}
 
-      {/* Thanh lọc trạng thái, loại yêu cầu & chi nhánh */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        {/* Bộ lọc trạng thái */}
-        <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "all" ? "bg-white text-primary shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faListCheck} fontSize={14} />
-            <span>Tất cả ({counts.all})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("pending")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "pending" ? "bg-white text-amber-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faClock} fontSize={14} />
-            <span>Chờ duyệt ({counts.pending})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("approved")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "approved" ? "bg-white text-emerald-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faCheck} fontSize={14} />
-            <span>Đã duyệt ({counts.approved})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("rejected")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "rejected" ? "bg-white text-red-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faXmark} fontSize={14} />
-            <span>Từ chối ({counts.rejected})</span>
-          </button>
-        </div>
+      {/* Thanh tìm kiếm & bộ lọc: trạng thái, loại yêu cầu, chi nhánh */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          {/* Tìm kiếm tự do, khớp cách làm ở danh sách Phòng ban & Chi nhánh */}
+          <div className="relative w-64 min-w-0">
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              fontSize={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <Input
+              placeholder="Tìm theo nhân viên, lý do, thời gian..."
+              className="pl-8 pr-7 py-1.5 text-xs"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                title="Xóa tìm kiếm"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {/* Bộ lọc trạng thái (gộp từ 4 tab Tất cả/Chờ duyệt/Đã duyệt/Từ chối) */}
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "all" | "pending" | "approved" | "rejected")
+              }
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+            >
+              <option value="all">Tất cả trạng thái ({counts.all})</option>
+              <option value="pending">Chờ duyệt ({counts.pending})</option>
+              <option value="approved">Đã duyệt ({counts.approved})</option>
+              <option value="rejected">Từ chối ({counts.rejected})</option>
+            </select>
+          </div>
 
-        {/* Lọc loại yêu cầu & Chi nhánh */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500">Loại đơn:</span>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
             >
               <option value="all">Tất cả loại đơn</option>
               <option value="shift_swap">Đổi ca</option>
@@ -526,13 +538,12 @@ export default function RequestsPage() {
             </select>
           </div>
 
-          {!isManager && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-500">Chi nhánh:</span>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+                className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
@@ -562,8 +573,16 @@ export default function RequestsPage() {
       ) : (
         <ShiftRequestSection
           requests={filteredRequests}
-          onApprove={handleApprove}
-          onReject={handleReject}
+          onApprove={canReviewRequests ? handleApprove : undefined}
+          onReject={canReviewRequests ? handleReject : undefined}
+          branchLabel={(slug) =>
+            branches.find((b) => b.slug.toLowerCase() === slug.toLowerCase())?.name || slug || "—"
+          }
+          emptyMessage={
+            searchQuery.trim()
+              ? `Không tìm thấy yêu cầu phù hợp với "${searchQuery.trim()}"`
+              : "Không có yêu cầu nào"
+          }
         />
       )}
 

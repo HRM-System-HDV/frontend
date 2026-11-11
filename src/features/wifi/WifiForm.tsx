@@ -26,7 +26,7 @@ export default function WifiFormModal({ open, onClose, initial, saving, onSubmit
   const isEdit = Boolean(initial);
   const [ssid, setSsid] = useState(initial?.ssid || "");
   const [bssid, setBssid] = useState(initial?.bssid || "");
-  const [branch, setBranch] = useState(initial?.branch || "HN-1");
+  const [branch, setBranch] = useState(initial?.branch || "");
   const [status, setStatus] = useState(initial?.status || "hoạt động");
   const [branches, setBranches] = useState<Branch[]>([]);
 

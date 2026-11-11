@@ -13,7 +13,7 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { formatDate, formatDateTime, formatVND, getTodayVN } from "@/lib/utils";
-import { GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiDelete, apiGet, GatewayError } from "@/lib/api";
 import type { Employee, Branch, Department } from "@/types";
 import ExcelJS from "exceljs";
 
@@ -112,18 +112,15 @@ export default function EmployeeDeleteModal({
     setDownloading(true);
     setError(null);
     try {
-      // 1. Tải dữ liệu phiếu lương
+      // 1. Tải dữ liệu phiếu lương (qua client @/lib/api để dùng chung phiên + envelope)
       let payslips: PayslipData[] = [];
       try {
-        const payslipRes = await fetch(
-          `${GATEWAY_URL}/api/payroll/payslips?employeeId=${encodeURIComponent(employee.id)}`,
-          { credentials: "include" }
+        const list = await apiGet<PayslipData[]>(
+          `/api/payroll/payslips?employeeId=${encodeURIComponent(employee.id)}`
         );
-        if (payslipRes.ok) {
-          const json = await payslipRes.json();
-          const list = Array.isArray(json) ? json : json.data || [];
-          payslips = list.filter((p: any) => p.employeeId === employee.id);
-        }
+        payslips = (Array.isArray(list) ? list : []).filter(
+          (p) => p.employeeId === employee.id
+        );
       } catch (e) {
         console.warn("Không thể tải phiếu lương chi tiết:", e);
       }
@@ -131,17 +128,12 @@ export default function EmployeeDeleteModal({
       // 2. Tải dữ liệu ca làm việc
       let shifts: ShiftData[] = [];
       try {
-        const shiftRes = await fetch(
-          `${GATEWAY_URL}/api/shifts?employeeId=${encodeURIComponent(employee.id)}`,
-          { credentials: "include" }
+        const list = await apiGet<ShiftData[]>(
+          `/api/shifts?employeeId=${encodeURIComponent(employee.id)}`
         );
-        if (shiftRes.ok) {
-          const json = await shiftRes.json();
-          const list = Array.isArray(json) ? json : json.data || [];
-          shifts = list.filter(
-            (s: any) => s.employeeId === employee.id || (s.employee && s.employee === employee.name)
-          );
-        }
+        shifts = (Array.isArray(list) ? list : []).filter(
+          (s) => s.employeeId === employee.id || (s.employee && s.employee === employee.name)
+        );
       } catch (e) {
         console.warn("Không thể tải ca làm việc:", e);
       }
@@ -649,19 +641,9 @@ export default function EmployeeDeleteModal({
     setDeleting(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/employees/${employee.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        let msg = `Lỗi xóa nhân sự (${res.status})`;
-        try {
-          const body = await res.json();
-          if (body?.error?.message) msg = body.error.message;
-        } catch (_) {}
-        throw new Error(msg);
-      }
+      // apiDelete ném GatewayError (kèm message thật từ service) khi request lỗi,
+      // đồng thời tự ghi nhật ký xóa vào backlog như mọi thao tác ghi khác.
+      await apiDelete(`/api/employees/${encodeURIComponent(employee.id)}`);
 
       onDeleted(employee);
       onClose();

@@ -13,7 +13,10 @@ interface TaskDetailModalProps {
   onClose: () => void;
   task: TaskItem | null;
   onComplete: (taskId: string, photoUrl?: string) => void;
-  onDelete: (taskId: string) => void;
+  /** Không truyền = người dùng không được xóa nhiệm vụ (nhân viên). */
+  onDelete?: (taskId: string) => void;
+  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
+  branchLabel?: (slug: string) => string;
 }
 
 export default function TaskDetailModal({
@@ -22,6 +25,7 @@ export default function TaskDetailModal({
   task,
   onComplete,
   onDelete,
+  branchLabel,
 }: TaskDetailModalProps) {
   const [photoUrl, setPhotoUrl] = useState<string | null>(task?.proofPhotoUrl || null);
   const [zoomOpen, setZoomOpen] = useState(false);
@@ -46,6 +50,7 @@ export default function TaskDetailModal({
   };
 
   const handleDelete = () => {
+    if (!onDelete) return;
     if (confirm(`Bạn có chắc chắn muốn xóa nhiệm vụ "${task.title}"?`)) {
       onDelete(task.id);
       onClose();
@@ -61,9 +66,13 @@ export default function TaskDetailModal({
         size="lg"
         footer={
           <div className="flex items-center justify-between w-full">
-            <Button variant="danger" onClick={handleDelete} className="min-w-[80px]">
-              Xóa
-            </Button>
+            {onDelete ? (
+              <Button variant="danger" onClick={handleDelete} className="min-w-[80px]">
+                Xóa
+              </Button>
+            ) : (
+              <span />
+            )}
 
             <div className="flex items-center gap-2">
               <Button variant="white" onClick={onClose} className="min-w-[80px]">
@@ -237,7 +246,13 @@ export default function TaskDetailModal({
                       <FontAwesomeIcon icon={faLocationDot} fontSize={14} className="text-gray-400 shrink-0" />
                       <span>
                         Chi nhánh:{" "}
-                        <strong className="text-gray-800">{task.branch || "—"}</strong>
+                        <strong className="text-gray-800">
+                          {task.branch
+                            ? branchLabel
+                              ? branchLabel(task.branch)
+                              : task.branch
+                            : "—"}
+                        </strong>
                       </span>
                     </div>
                   </div>

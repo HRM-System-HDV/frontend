@@ -21,8 +21,8 @@ import WeeklyRegistrationSection from "@/features/shifts/WeekWishes";
 import RegistrationHistorySection from "@/features/shifts/RegistrationHistory";
 import TemplateModal from "@/features/shifts/TemplateForm";
 import AssignShiftModal from "@/features/shifts/ShiftAssign";
-import ExportModal from "@/features/shifts/ShiftExport";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime, parseDate, getTodayVN } from "@/lib/utils";
 
@@ -41,9 +41,8 @@ function resolveBranchDisplay(
   if (found) {
     return { branchName: found.name, branchSlug: found.slug };
   }
-  if (raw.startsWith("c") && raw.length >= 20) {
-    return { branchName: "Quận 1", branchSlug: "CN01" };
-  }
+  // Không map được slug vào /api/branches -> fallback giá trị gốc,
+  // bỏ heuristic giả "UUID dài => Quận 1/CN-0001".
   return { branchName: raw, branchSlug: raw };
 }
 
@@ -568,7 +567,6 @@ export default function ShiftsPage() {
     ? registrationRecords.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
     : registrationRecords;
 
-  const [exportOpen, setExportOpen] = useState(false);
   const [addTemplateOpen, setAddTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplate | null>(null);
   const [assignShiftOpen, setAssignShiftOpen] = useState(false);
@@ -698,6 +696,47 @@ export default function ShiftsPage() {
   };
 
 
+  // Chấm công thật cho nhân sự (POST /api/attendance/checkin | /checkout).
+  // work-service bắt buộc employeeId; shiftId là id bản ghi Shift để service đồng
+  // bộ ngược checkIn/checkOut lên ca làm việc. Trước đây nút "Chấm công" chỉ ghi
+  // state tạm trong ScheduleOverview nên không bao giờ xuống DB.
+  const handleCheckIn = async (employeeId: string, shiftId: string) => {
+    if (!employeeId) {
+      showToast("Không xác định được nhân sự để chấm công (thiếu employeeId)", "danger");
+      return;
+    }
+    try {
+      setActionInProgress(true);
+      await apiPost("/api/attendance/checkin", { employeeId, shiftId });
+      await fetchData();
+      showToast("Đã chấm công vào cho nhân sự", "success");
+    } catch (e: any) {
+      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi chấm công vào";
+      showToast(msg, "danger");
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const handleCheckOut = async (employeeId: string, shiftId: string) => {
+    if (!employeeId) {
+      showToast("Không xác định được nhân sự để chấm công ra (thiếu employeeId)", "danger");
+      return;
+    }
+    try {
+      setActionInProgress(true);
+      await apiPost("/api/attendance/checkout", { employeeId, shiftId });
+      await fetchData();
+      showToast("Đã chấm công ra cho nhân sự", "success");
+    } catch (e: any) {
+      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi chấm công ra";
+      showToast(msg, "danger");
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+
   // Tạo & phân ca mới (POST /api/shifts)
   const handleAssignShift = async () => {
     const targetBranch = currentAssignBranch;
@@ -735,6 +774,12 @@ export default function ShiftsPage() {
     }
   };
 
+  // Phân ca là tính năng quản lý (WRITE /api/shifts* = manager + admin) nên
+  // nhân viên không vào trang này; luồng đăng ký ca của họ dành cho app.
+  if (!canAccessPath(role, "/dashboard/shifts")) {
+    return <NoAccessNotice description="Phân ca làm việc chỉ dành cho Quản trị viên và Quản lý Chi nhánh." />;
+  }
+
   return (
     <div className="space-y-4">
       {/* Toast thông báo nổi */}
@@ -764,10 +809,9 @@ export default function ShiftsPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Lịch ca" }]}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="white" size="sm" onClick={() => setExportOpen(true)}>
-              Xuất báo cáo
-            </Button>
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
+            {/* Bỏ border ngoài: p-1 (8px) + pill 28px đã đúng 36px, thêm border
+                1px mỗi bên sẽ đẩy khối tab lên 38px, lệch với các nút header. */}
+            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setActiveTab("scheduling")}
@@ -857,6 +901,8 @@ export default function ShiftsPage() {
                 selectedBranch={sharedBranch}
                 onBranchChange={setSharedBranch}
                 onDeleteShift={handleRemoveShift}
+                onCheckIn={handleCheckIn}
+                onCheckOut={handleCheckOut}
                 onOpenAssignModal={(templateId, date, branch) => {
                   const effectiveBranch = isManager
                     ? managerBranch
@@ -872,6 +918,7 @@ export default function ShiftsPage() {
               {/* Bảng danh sách chi tiết phân công */}
               <WorkShiftSection
                 workShifts={displayedWorkShifts}
+                isManager={isManager}
                 onDelete={handleRemoveShift}
                 onAddShift={() => {
                   const effectiveBranch = isManager ? managerBranch : "";
@@ -909,7 +956,6 @@ export default function ShiftsPage() {
                 registrationRecords={displayedRegistrationRecords}
                 weeklyRegistrations={displayedRegistrations}
                 branches={branches}
-                onDelete={handleDeleteRegistration}
                 onAssignFromRegistration={(rec) => {
                   const matchedEmp = empList.find((e) => e.name === rec.employeeName || e.id === rec.employeeId);
                   if (matchedEmp) setAssignEmployee(matchedEmp.name);
@@ -979,8 +1025,6 @@ export default function ShiftsPage() {
         onRecurringChange={setAssignIsRecurring}
         onSave={handleAssignShift}
       />
-
-      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} workShifts={displayedWorkShifts} />
     </div>
   );
 }

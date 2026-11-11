@@ -68,7 +68,7 @@ interface DashboardShellProps {
   groups: SidebarGroup[];
   userName: string;
   userRole: string;
-  notifications?: { id: string; title: string; content: string; time: string; read: boolean; tone?: string }[];
+  notifications?: { id: string; title: string; body: string; createdAt: string; isRead: boolean; tone?: string }[];
   logoutHref: string;
   onLogout?: () => void;
   sidebarFooter?: { icon: React.ReactNode; text: string };

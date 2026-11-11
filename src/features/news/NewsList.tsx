@@ -12,6 +12,7 @@ import {
 import { Card, CardBody } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 import { getTagColor } from "./helpers";
@@ -29,6 +30,8 @@ export default function NewsSection({
   items,
   onSelect,
 }: Props) {
+  const { role, branchSlug } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_news_search", "");
   const [tagFilter, setTagFilter] = useLocalStorageState<string>("hrm_news_tag_filter", "all");
   const [pinnedFilter, setPinnedFilter] = useLocalStorageState<string>("hrm_news_pinned_filter", "all");
@@ -40,6 +43,14 @@ export default function NewsSection({
       .then((d) => setBranches(d || []))
       .catch(() => {});
   }, []);
+
+  // Đổi slug chi nhánh thành tên hiển thị; không map được thì hiện giá trị gốc.
+  const getBranchDisplayName = (slug?: string) =>
+    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
+
+  // Tài khoản bị ghim không còn control: phạm vi chốt theo session, vẫn kèm tin toàn công ty.
+  const sameBranchSlug = (a?: string, b?: string) =>
+    (a || "").toUpperCase() === (b || "").toUpperCase();
 
   const filteredNews = items.filter((item) => {
     const matchSearch =
@@ -54,7 +65,9 @@ export default function NewsSection({
       (pinnedFilter === "pinned" ? item.pinned : !item.pinned);
 
     const itemBranch = item.branch || "Toàn công ty";
-    const matchBranch = branchFilter === "all" || itemBranch === branchFilter;
+    const matchBranch = isAdmin
+      ? branchFilter === "all" || itemBranch === branchFilter
+      : itemBranch === "Toàn công ty" || sameBranchSlug(itemBranch, branchSlug);
 
     return matchSearch && matchTag && matchPinned && matchBranch;
   });
@@ -113,21 +126,23 @@ export default function NewsSection({
               </select>
             </div>
 
-            <div>
-              <select
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-              >
-                <option value="all">Tất cả chi nhánh</option>
-                <option value="Toàn công ty">Toàn công ty</option>
-                {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                >
+                  <option value="all">Tất cả chi nhánh</option>
+                  <option value="Toàn công ty">Toàn công ty</option>
+                  {branches.map((b) => (
+                    <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
+                      Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -178,7 +193,7 @@ export default function NewsSection({
                         </span>
                       )}
                       <span className="text-xs text-slate-500 font-medium">
-                        Phạm vi: <strong className="text-slate-700">{item.branch || "Toàn công ty"}</strong>
+                        Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.branch) || "Toàn công ty"}</strong>
                       </span>
                     </div>
 

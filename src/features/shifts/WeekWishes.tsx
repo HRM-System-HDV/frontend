@@ -13,9 +13,10 @@ import { formatDateTime } from "@/lib/utils";
 interface Props {
   registrations: WeeklyRegistration[];
   onAssignFromRegistration?: (registration: WeeklyRegistration) => void;
+  isManager?: boolean;
 }
 
-export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration }: Props) {
+export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration, isManager = false }: Props) {
   const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter", "all");
 
   const filteredRegistrations = useMemo(() => {
@@ -28,7 +29,9 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
   const branches = useMemo(() => {
     const set = new Set<string>();
     for (const r of registrations) {
-      if (r.branch && r.branch !== "—") set.add(r.branch.toUpperCase());
+      // r.branch là TÊN chi nhánh (trang cha đã map slug -> tên qua /api/branches);
+      // giữ nguyên hoa/thường để in tên bình thường, không uppercase.
+      if (r.branch && r.branch !== "—") set.add(r.branch);
     }
     return Array.from(set);
   }, [registrations]);
@@ -41,7 +44,7 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
         <div>
           <span className="font-semibold text-gray-800">{r.employeeName}</span>
           <span className="block text-xs text-gray-400">
-            {r.role} • Chi nhánh {r.branch && r.branch.startsWith("c") && r.branch.length >= 20 ? "Quận 1" : r.branch}
+            {r.role} • Chi nhánh {r.branch || "—"}
           </span>
         </div>
       ),
@@ -92,14 +95,14 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
         <div>
           <CardTitle>Bảng tổng hợp đăng ký ca làm việc trong tuần</CardTitle>
         </div>
-        <div className="flex items-center gap-2">
-          {branches.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {!isManager && branches.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs">
               <FontAwesomeIcon icon={faStore} fontSize={13} className="text-primary" />
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-transparent border-none text-xs font-medium text-gray-800 focus:outline-hidden cursor-pointer"
+                className="min-w-0 max-w-full bg-transparent border-none text-xs font-medium text-gray-800 focus:outline-hidden cursor-pointer"
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (

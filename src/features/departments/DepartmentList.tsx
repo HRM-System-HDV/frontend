@@ -4,9 +4,6 @@ import { useState, useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faLock,
-  faPencil,
-  faTrashCan,
   faMagnifyingGlass,
 } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
@@ -19,8 +16,6 @@ interface Props {
   departments: Department[];
   employees: Employee[];
   onEdit: (d: Department) => void;
-  onLock?: (d: Department) => void;
-  onDelete?: (d: Department) => void;
   isManager?: boolean;
 }
 
@@ -28,8 +23,6 @@ export default function DepartmentList({
   departments,
   employees,
   onEdit,
-  onLock,
-  onDelete,
   isManager = false,
 }: Props) {
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_departments_search", "");
@@ -53,7 +46,9 @@ export default function DepartmentList({
       (d) =>
         d.name.toLowerCase().includes(q) ||
         d.code.toLowerCase().includes(q) ||
-        d.manager.toLowerCase().includes(q)
+        // `manager` có thể null (phòng ban chưa bổ nhiệm người phụ trách) —
+        // bắt buộc chặn null trước khi toLowerCase, giống cột "Phụ trách" bên dưới.
+        Boolean(d.manager && d.manager.toLowerCase().includes(q))
     );
   }, [departments, searchQuery]);
 
@@ -99,13 +94,16 @@ export default function DepartmentList({
             key: "actions" as keyof Department,
             header: "Thao tác",
             render: (d: Department) => (
-              <button
-                type="button"
-                onClick={() => onEdit(d)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-              >
-                Chi tiết
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Khóa/Xóa chỉ có trong modal chi tiết (DepartmentForm). */}
+                <button
+                  type="button"
+                  onClick={() => onEdit(d)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+                >
+                  Chi tiết
+                </button>
+              </div>
             ),
           },
         ]

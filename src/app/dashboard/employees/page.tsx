@@ -20,6 +20,7 @@ import DisableEmployeeDialog from "@/features/employees/EmployeeDisable";
 import EmployeeDeleteModal from "@/features/employees/EmployeeDeleteModal";
 import EmployeeDetailModal from "@/features/employees/EmployeeDetailModal";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 
 // Chuẩn hoá mã chi nhánh để so sánh (bỏ dấu gạch, không phân biệt hoa/thường).
@@ -45,6 +46,8 @@ interface CreateModalProps {
   onClose: () => void;
   onSubmit: (payload: Partial<Employee>) => Promise<void>;
   isManager: boolean;
+  /** Chỉ admin được cấp "Cấp vai trò hệ thống"; service cũng buộc systemRole = staff khi manager tạo hồ sơ. */
+  isAdmin: boolean;
   managerBranch: string;
   branches: Branch[];
   departments: Department[];
@@ -56,6 +59,7 @@ function CreateEmployeeDialog({
   onClose,
   onSubmit,
   isManager,
+  isAdmin,
   managerBranch,
   branches,
   departments,
@@ -195,43 +199,45 @@ function CreateEmployeeDialog({
             placeholder="Mật khẩu ban đầu"
           />
         </Field>
-        <Field label="Gán chi nhánh" required>
-          {(() => {
-            const isFilterLocked = !isManager && selectedFilterBranch && selectedFilterBranch !== "all";
-            const effectiveBranch = isManager ? managerBranch : (isFilterLocked ? selectedFilterBranch : branch);
-            const matchedBranch = branches.find(
-              (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === (effectiveBranch || "").toLowerCase().replace(/-/g, "")
-            );
-            const displayBranchName = matchedBranch ? matchedBranch.name : `Chi nhánh ${effectiveBranch?.toUpperCase()}`;
-
-            if (isManager || isFilterLocked) {
-              return (
-                <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-                  <span>{displayBranchName}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                    {isManager ? "Cố định" : "Theo bộ lọc"}
-                  </span>
-                </div>
+        {isAdmin && (
+          <Field label="Gán chi nhánh" required>
+            {(() => {
+              const isFilterLocked = !!selectedFilterBranch && selectedFilterBranch !== "all";
+              const effectiveBranch = isFilterLocked ? selectedFilterBranch : branch;
+              const matchedBranch = branches.find(
+                (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === (effectiveBranch || "").toLowerCase().replace(/-/g, "")
               );
-            }
-            return null;
-          })() || (branches.length === 0 ? (
-            <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
-              Chưa có chi nhánh nào. Vui lòng tạo chi nhánh trước.
-            </div>
-          ) : (
-            <Select
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.slug}>
-                  {b.name}
-                </option>
-              ))}
-            </Select>
-          ))}
-        </Field>
+              const displayBranchName = matchedBranch ? matchedBranch.name : `Chi nhánh ${effectiveBranch?.toUpperCase()}`;
+
+              if (isFilterLocked) {
+                return (
+                  <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
+                    <span>{displayBranchName}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
+                      Theo bộ lọc
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })() || (branches.length === 0 ? (
+              <div className="px-3 py-2 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-700">
+                Chưa có chi nhánh nào. Vui lòng tạo chi nhánh trước.
+              </div>
+            ) : (
+              <Select
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.slug}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
+            ))}
+          </Field>
+        )}
         <Field label="Phòng ban" required>
           <Select
             value={department}
@@ -244,24 +250,33 @@ function CreateEmployeeDialog({
             ))}
           </Select>
         </Field>
-        <Field label="Vai trò" required>
-          <Select
-            value={role}
-            onChange={(e) => {
-              const val = e.target.value;
-              setRole(val);
-              if (val === "Quản trị viên") setSystemRole("admin");
-              else if (val === "Quản lý") setSystemRole("manager");
-              else setSystemRole("staff");
-            }}
-          >
+        <Field label="Vị trí / Chức vụ" required>
+          <Select value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="Nhân viên">Nhân viên</option>
             <option value="Trưởng nhóm">Trưởng nhóm</option>
             <option value="Quản lý">Quản lý</option>
             <option value="Nhân sự">Nhân sự</option>
             <option value="Kế toán">Kế toán</option>
-            <option value="Quản trị viên">Quản trị viên</option>
           </Select>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Chỉ là nhãn chức vụ trên hồ sơ, không quyết định quyền hệ thống
+          </p>
+        </Field>
+        <Field label="Cấp vai trò hệ thống" required>
+          <Select
+            value={systemRole}
+            onChange={(e) => setSystemRole(e.target.value as "admin" | "manager" | "staff")}
+            disabled={!isAdmin}
+          >
+            <option value="staff">Nhân viên</option>
+            <option value="manager">Quản lý Chi nhánh</option>
+            <option value="admin">Quản trị viên</option>
+          </Select>
+          {!isAdmin && (
+            <p className="text-[11px] text-gray-400 mt-1">
+              Quản trị viên mới được cấp quyền hệ thống cho tài khoản
+            </p>
+          )}
         </Field>
         <Field label="Hình thức tính lương" required>
           <Select
@@ -313,6 +328,12 @@ export default function EmployeesPage() {
   const userId = user?.userId;
   const email = user?.email;
   const isManager = role === "manager";
+  // 4 trường systemRole / branchSlug / email / baseSalary chỉ admin ghi được
+  // (service lọc khỏi payload PUT của các vai trò khác).
+  const isAdmin = role === "admin";
+  // Ghi hồ sơ nhân sự (POST/PUT/DELETE /api/employees, reset mật khẩu) chỉ
+  // manager + admin; nhân viên tự sửa hồ sơ của mình qua màn hình khác.
+  const canWriteHr = role !== "staff";
 
   const [rawEmployees, setRawEmployees] = useState<Employee[]>([]);
   const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>(
@@ -402,10 +423,6 @@ export default function EmployeesPage() {
     ? rawEmployees.filter((e) => normalizeSlug(e.branch) === normalizeSlug(branchSlug))
     : rawEmployees;
 
-  const currentBranchName = branches.find(
-    (b) => normalizeSlug(b.slug) === normalizeSlug(branchSlug)
-  )?.name;
-
   const handleCreateEmployee = async (payload: Partial<Employee>) => {
     const targetBranch = (payload.branch || (isManager ? branchSlug : ""))
       .trim()
@@ -438,25 +455,33 @@ export default function EmployeesPage() {
   const handleSaveEmployee = async (updated: Employee): Promise<Employee> => {
     try {
       setActionInProgress(true);
+      // organization-service bỏ im lặng systemRole / branchSlug / email / baseSalary
+      // khỏi payload sửa hồ sơ khi header x-user-role không phải admin
+      // (utils/employeeAccess.js - omitPrivilegedFields). Không gửi lên để tránh
+      // manager bấm "Lưu" mà tưởng đã đổi được lương / vai trò / chi nhánh / email.
+      const privilegedFields = isAdmin
+        ? {
+            email: updated.email,
+            branchSlug: updated.branch ? updated.branch.toUpperCase() : null,
+            systemRole: updated.systemRole,
+            baseSalary: updated.baseSalary,
+          }
+        : {};
       // Chỉ gửi các field nghiệp vụ; bỏ các field chỉ đọc (id, createdAt, updatedAt...).
       const saved = await apiPut<any>(`/api/employees/${encodeURIComponent(updated.id)}`, {
         name: updated.name,
         phone: updated.phone,
-        email: updated.email,
         gender: updated.gender,
         birthDate: updated.birthDate ? formatDate(updated.birthDate) : undefined,
         province: updated.province,
         ward: updated.ward,
         street: updated.street,
-        branchSlug: updated.branch ? updated.branch.toUpperCase() : null,
         department: updated.department,
         role: updated.role,
-        systemRole: updated.systemRole,
         status: updated.status,
         joinDate: updated.joinDate ? formatDate(updated.joinDate) : undefined,
         salaryType: updated.salaryType,
         hourlySalary: updated.hourlySalary,
-        baseSalary: updated.baseSalary,
         bankName: updated.bankName,
         bankAccountNumber: updated.bankAccountNumber,
         bankAccountName: updated.bankAccountName,
@@ -466,6 +491,7 @@ export default function EmployeesPage() {
         cccdFront: typeof updated.cccdFront === "string" ? updated.cccdFront : "",
         cccdBack: typeof updated.cccdBack === "string" ? updated.cccdBack : "",
         avatar: typeof updated.avatar === "string" ? updated.avatar : "",
+        ...privilegedFields,
       });
 
       const normalized = normalizeEmployee(saved || updated);
@@ -519,19 +545,6 @@ export default function EmployeesPage() {
     }
   };
 
-  const handleInitiateDelete = (emp: Employee) => {
-    const isSelf =
-      emp.id === userId ||
-      (email && emp.email && emp.email.toLowerCase() === email.toLowerCase());
-
-    if (isSelf) {
-      showToast("Không được phép xóa tài khoản của chính bạn đang đăng nhập!", "danger");
-      return;
-    }
-
-    setDeleteTarget(emp);
-  };
-
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
@@ -547,6 +560,10 @@ export default function EmployeesPage() {
       setDeleteTarget(null);
     }
   };
+
+  if (!canAccessPath(role, "/dashboard/employees")) {
+    return <NoAccessNotice description="Trang nhân sự chỉ dành cho Quản trị viên và Quản lý Chi nhánh." />;
+  }
 
   return (
     <div className="space-y-4">
@@ -577,9 +594,11 @@ export default function EmployeesPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Nhân sự" }]}
         actions={
           <div className="flex items-center gap-2">
-            <Button onClick={() => setCreateOpen(true)} disabled={actionInProgress}>
-              <FontAwesomeIcon icon={faPlus} fontSize={18} /> Thêm nhân viên mới
-            </Button>
+            {canWriteHr && (
+              <Button onClick={() => setCreateOpen(true)} disabled={actionInProgress}>
+                <FontAwesomeIcon icon={faPlus} fontSize={18} /> Thêm nhân viên mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -616,8 +635,6 @@ export default function EmployeesPage() {
           branches={branches}
           departments={departments}
           onOpenDetail={handleOpenDetail}
-          onLock={setLockTarget}
-          onDelete={handleInitiateDelete}
           isManager={isManager}
           managerBranch={branchSlug.toUpperCase()}
         />
@@ -635,10 +652,15 @@ export default function EmployeesPage() {
           branches={branches}
           departments={departments}
           onSave={handleSaveEmployee}
-          onDelete={!isManager ? (emp) => {
+          onDelete={canWriteHr ? (emp) => {
             setDetailOpen(false);
             setSelectedEmployee(null);
             setDeleteTarget(emp);
+          } : undefined}
+          onLock={canWriteHr ? (emp) => {
+            setDetailOpen(false);
+            setSelectedEmployee(null);
+            setLockTarget(emp);
           } : undefined}
           isManager={isManager}
           managerBranch={branchSlug.toUpperCase()}
@@ -652,6 +674,7 @@ export default function EmployeesPage() {
           onClose={() => setCreateOpen(false)}
           onSubmit={handleCreateEmployee}
           isManager={isManager}
+          isAdmin={isAdmin}
           managerBranch={branchSlug.toUpperCase()}
           selectedFilterBranch={activeBranchFilter}
           branches={branches}
