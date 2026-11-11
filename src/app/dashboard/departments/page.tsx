@@ -10,66 +10,12 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { Department, Employee } from "@/types";
 import DepartmentList from "@/features/departments/DepartmentList";
 import DepartmentModal from "@/features/departments/DepartmentForm";
 import { useCurrentUser } from "@/context/AuthContext";
 import { getTodayVN } from "@/lib/utils";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export default function DepartmentsPage() {
   const { role } = useCurrentUser();
@@ -102,7 +48,7 @@ export default function DepartmentsPage() {
         apiGet<Department[]>("/api/departments"),
         apiGet<Employee[]>("/api/employees").catch(() => []),
       ]);
-      const normalizedDepts = (deptData || []).map((d: any) => ({
+      const normalizedDepts = (deptData || []).map((d) => ({
         ...d,
         status: d.status || "hoạt động",
         staff: d.staff ?? 0,
@@ -110,8 +56,8 @@ export default function DepartmentsPage() {
       }));
       setDeptList(normalizedDepts);
       setEmpList(empData || []);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách phòng ban";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách phòng ban";
       setError(msg);
       showToast(msg, "danger");
     } finally {
@@ -120,8 +66,36 @@ export default function DepartmentsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    Promise.all([
+      apiGet<Department[]>("/api/departments"),
+      apiGet<Employee[]>("/api/employees").catch(() => []),
+    ])
+      .then(([deptData, empData]) => {
+        if (!ignore) {
+          const normalizedDepts = (deptData || []).map((d) => ({
+            ...d,
+            status: d.status || "hoạt động",
+            staff: d.staff ?? 0,
+            createdAt: d.createdAt || getTodayVN(),
+          }));
+          setDeptList(normalizedDepts);
+          setEmpList(empData || []);
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách phòng ban";
+          setError(msg);
+          showToast(msg, "danger");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleSave = async (data: Omit<Department, "id"> & { id?: string }) => {
     try {
@@ -287,21 +261,24 @@ export default function DepartmentsPage() {
         />
       )}
 
-      <DepartmentModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
-        department={editing}
-        employees={empList}
-        onSave={handleSave}
-        onDelete={!isManager ? (d) => {
-          setModalOpen(false);
-          setEditing(null);
-          setDeleteTarget(d);
-        } : undefined}
-      />
+      {modalOpen && (
+        <DepartmentModal
+          key={editing?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditing(null);
+          }}
+          department={editing}
+          employees={empList}
+          onSave={handleSave}
+          onDelete={!isManager ? (d) => {
+            setModalOpen(false);
+            setEditing(null);
+            setDeleteTarget(d);
+          } : undefined}
+        />
+      )}
 
       {/* Confirm Lock / Toggle status */}
       <ConfirmDialog

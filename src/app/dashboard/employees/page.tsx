@@ -12,7 +12,7 @@ import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
-import { apiGet, apiPost, apiPut, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import { formatDate, getTodayVN } from "@/lib/utils";
 import type { Employee, Branch, Department } from "@/types";
 import EmployeeSection from "@/features/employees/EmployeeList";
@@ -40,43 +40,6 @@ const normalizeEmployee = (e: any): Employee => ({
   avatar: typeof e?.avatar === "string" ? e.avatar : "",
 });
 
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 interface CreateModalProps {
   open: boolean;
   onClose: () => void;
@@ -98,12 +61,17 @@ function CreateEmployeeDialog({
   departments,
   selectedFilterBranch = "all",
 }: CreateModalProps) {
+  const initialBranch = isManager
+    ? (managerBranch || "")
+    : (selectedFilterBranch && selectedFilterBranch !== "all" ? selectedFilterBranch : (branches[0]?.slug || ""));
+  const initialDept = departments[0]?.name || "Phòng Kinh Doanh";
+
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [branch, setBranch] = useState(managerBranch || "");
-  const [department, setDepartment] = useState("Phòng Kinh Doanh");
+  const [branch, setBranch] = useState(initialBranch);
+  const [department, setDepartment] = useState(initialDept);
   const [role, setRole] = useState("Nhân viên");
   const [systemRole, setSystemRole] = useState<"admin" | "manager" | "staff">("staff");
   const [salaryType, setSalaryType] = useState<"hourly" | "monthly">("monthly");
@@ -113,27 +81,6 @@ function CreateEmployeeDialog({
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
-
-  useEffect(() => {
-    if (open) {
-      // Manager: cố định chi nhánh phụ trách. Admin: mặc định chi nhánh đầu tiên,
-      // không tự gán cứng khi chưa có chi nhánh nào.
-      if (isManager) {
-        setBranch(managerBranch || "");
-      } else if (selectedFilterBranch && selectedFilterBranch !== "all") {
-        setBranch(selectedFilterBranch);
-      } else {
-        setBranch(branches[0]?.slug || "");
-      }
-      // Mặc định phòng ban đầu tiên từ API thay vì tên cứng.
-      setDepartment((prev) =>
-        departments.some((d) => d.name === prev)
-          ? prev
-          : departments[0]?.name || ""
-      );
-      setErrorMsg("");
-    }
-  }, [open, isManager, managerBranch, branches, departments]);
 
   const handleCreate = async () => {
     if (!name.trim()) {
@@ -422,8 +369,33 @@ export default function EmployeesPage() {
   }, [isManager, branchSlug]);
 
   useEffect(() => {
-    fetchEmployees();
-  }, [fetchEmployees]);
+    let ignore = false;
+    const queryParam = isManager && branchSlug ? `?branchSlug=${encodeURIComponent(branchSlug.toUpperCase())}` : "";
+    Promise.all([
+      apiGet<Employee[]>(`/api/employees${queryParam}`),
+      apiGet<Branch[]>("/api/branches").catch(() => [] as Branch[]),
+      apiGet<Department[]>("/api/departments").catch(() => [] as Department[]),
+    ])
+      .then(([data, branchesData, departmentsData]) => {
+        if (!ignore) {
+          setBranches(branchesData || []);
+          setDepartments(departmentsData || []);
+          setRawEmployees((data || []).map(normalizeEmployee));
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : (e as any)?.message || "Không thể tải danh sách nhân sự từ server";
+          setError(msg);
+          showToast(msg, "danger");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [isManager, branchSlug]);
 
   // Nếu là Manager, lọc thêm ở client để đảm bảo chuẩn an toàn hiển thị
   const filteredEmployees = isManager
@@ -651,35 +623,41 @@ export default function EmployeesPage() {
         />
       )}
 
-      <EmployeeDetailModal
-        open={detailOpen}
-        onClose={() => {
-          setDetailOpen(false);
-          setSelectedEmployee(null);
-        }}
-        employee={selectedEmployee}
-        branches={branches}
-        departments={departments}
-        onSave={handleSaveEmployee}
-        onDelete={!isManager ? (emp) => {
-          setDetailOpen(false);
-          setSelectedEmployee(null);
-          setDeleteTarget(emp);
-        } : undefined}
-        isManager={isManager}
-        managerBranch={branchSlug.toUpperCase()}
-      />
+      {detailOpen && selectedEmployee && (
+        <EmployeeDetailModal
+          key={selectedEmployee.id}
+          open={detailOpen}
+          onClose={() => {
+            setDetailOpen(false);
+            setSelectedEmployee(null);
+          }}
+          employee={selectedEmployee}
+          branches={branches}
+          departments={departments}
+          onSave={handleSaveEmployee}
+          onDelete={!isManager ? (emp) => {
+            setDetailOpen(false);
+            setSelectedEmployee(null);
+            setDeleteTarget(emp);
+          } : undefined}
+          isManager={isManager}
+          managerBranch={branchSlug.toUpperCase()}
+        />
+      )}
 
-      <CreateEmployeeDialog
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        onSubmit={handleCreateEmployee}
-        isManager={isManager}
-        managerBranch={branchSlug.toUpperCase()}
-        selectedFilterBranch={activeBranchFilter}
-        branches={branches}
-        departments={departments}
-      />
+      {createOpen && (
+        <CreateEmployeeDialog
+          key={createOpen ? "create-open" : "create-closed"}
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          onSubmit={handleCreateEmployee}
+          isManager={isManager}
+          managerBranch={branchSlug.toUpperCase()}
+          selectedFilterBranch={activeBranchFilter}
+          branches={branches}
+          departments={departments}
+        />
+      )}
 
       <DisableEmployeeDialog
         employee={lockTarget}

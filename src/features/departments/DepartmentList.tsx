@@ -60,11 +60,6 @@ export default function DepartmentList({
 
   const columns: Column<Department>[] = [
     {
-      key: "code",
-      header: "Mã phòng ban",
-      render: (d) => <span className="text-sm text-gray-700">{d.code}</span>,
-    },
-    {
       key: "name",
       header: "Phòng ban",
       render: (d) => (
@@ -131,7 +126,7 @@ export default function DepartmentList({
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <Input
-              placeholder="Tìm theo tên, mã, người phụ trách..."
+              placeholder="Tìm theo tên, người phụ trách..."
               className="pl-8 py-1.5 text-xs"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

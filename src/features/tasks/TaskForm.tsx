@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import type { TaskItem, TaskPriority, TaskSourceType } from "./types";
@@ -61,26 +61,6 @@ export default function CreateTaskModal({
     d.setHours(d.getHours() + 4);
     return toInputDateTime(d);
   });
-
-  // Đồng bộ khi modal mở hoặc danh sách khung ca/chi nhánh được nạp từ DB
-  useEffect(() => {
-    if (open) {
-      if (currentBranch) {
-        setTargetBranch(currentBranch);
-      } else if (branches.length > 0) {
-        setTargetBranch(branches[0].slug.toUpperCase());
-      }
-      if (shiftTemplates.length > 0) {
-        const found = shiftTemplates.some((t) => getTemplateLabel(t) === shiftName);
-        if (!found) {
-          setShiftName(getTemplateLabel(shiftTemplates[0]));
-        }
-      }
-      if (employees.length > 0 && !employees.some((e) => e.email === assignedToEmail)) {
-        setAssignedToEmail(employees[0].email);
-      }
-    }
-  }, [open, currentBranch, branches, shiftTemplates, employees]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

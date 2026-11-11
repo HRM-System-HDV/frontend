@@ -51,7 +51,7 @@ export default function ArchiveDetailModal({
   record,
   onRestored,
 }: ArchiveDetailModalProps) {
-  const [detail, setDetail] = useState<ArchivedRecord | null>(null);
+  const [detail, setDetail] = useState<ArchivedRecord | null>(record);
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
@@ -68,11 +68,7 @@ export default function ArchiveDetailModal({
 
   useEffect(() => {
     if (!open || !record) return;
-    setDetail(record);
-    setConfirmRestore(false);
-    setError("");
     let cancelled = false;
-    setLoading(true);
     getArchived(resolvedType, record.id)
       .then((fresh) => {
         if (!cancelled) setDetail({ ...fresh, archiveType: resolvedType });

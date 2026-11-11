@@ -9,58 +9,8 @@ import type { NewsItem } from "@/features/news/types";
 import NewsSection from "@/features/news/NewsList";
 import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import { getTodayVN } from "@/lib/utils";
-
-async function parseEnvelope<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: T }).data;
-  }
-  return body as T;
-}
-
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export default function NewsPage() {
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
@@ -85,8 +35,24 @@ export default function NewsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    apiGet<NewsItem[]>("/api/news")
+      .then((data) => {
+        if (!ignore) {
+          setNewsList(data || []);
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          setError(e instanceof GatewayError ? e.message : "Lỗi tải bảng tin");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleOpenCreate = () => {
     setEditingItem(null);
@@ -200,16 +166,19 @@ export default function NewsPage() {
       />
 
       {/* Modal tạo/sửa thông báo */}
-      <CreateNewsModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditingItem(null);
-        }}
-        initial={editingItem}
-        saving={saving}
-        onSubmit={handleSubmit}
-      />
+      {modalOpen && (
+        <CreateNewsModal
+          key={editingItem?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditingItem(null);
+          }}
+          initial={editingItem}
+          saving={saving}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }

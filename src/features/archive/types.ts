@@ -22,11 +22,6 @@ export interface ArchiveSelection {
 
 export type ArchiveCounts = Partial<Record<ArchiveType, number>>;
 
-export interface ArchivePreview {
-  cutoffDate: string;
-  counts: ArchiveCounts;
-}
-
 export interface ArchiveRunResult {
   batchId: string;
   cutoffDate: string;

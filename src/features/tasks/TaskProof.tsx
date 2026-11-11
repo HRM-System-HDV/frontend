@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -26,11 +26,6 @@ export default function PhotoProofModal({
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setSelectedPhoto(task?.proofPhotoUrl || "");
-    setUploadError("");
-  }, [task?.id, task?.proofPhotoUrl, open]);
 
   if (!task) return null;
 

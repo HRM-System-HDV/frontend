@@ -24,21 +24,17 @@ interface Props {
 
 export default function WifiFormModal({ open, onClose, initial, saving, onSubmit }: Props) {
   const isEdit = Boolean(initial);
-  const [ssid, setSsid] = useState("");
-  const [bssid, setBssid] = useState("");
-  const [branch, setBranch] = useState("HN-1");
-  const [status, setStatus] = useState("hoạt động");
+  const [ssid, setSsid] = useState(initial?.ssid || "");
+  const [bssid, setBssid] = useState(initial?.bssid || "");
+  const [branch, setBranch] = useState(initial?.branch || "HN-1");
+  const [status, setStatus] = useState(initial?.status || "hoạt động");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
     if (open) {
-      setSsid(initial?.ssid || "");
-      setBssid(initial?.bssid || "");
-      setBranch(initial?.branch || "HN-1");
-      setStatus(initial?.status || "hoạt động");
       apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
     }
-  }, [open, initial]);
+  }, [open]);
 
   const handleSubmit = () => {
     if (!ssid.trim() || !bssid.trim() || !branch.trim()) return;

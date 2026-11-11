@@ -1,17 +1,71 @@
 "use client";
 
+import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faWifi } from "@fortawesome/free-solid-svg-icons";
+import { faEye, faTrashCan, faWifi } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
+import Button from "@/components/ui/Button";
+import Modal from "@/components/ui/Modal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import type { WifiConfig } from "@/types";
+
+interface WifiDetailModalProps {
+  config: WifiConfig | null;
+  open: boolean;
+  onClose: () => void;
+}
+
+export function WifiDetailModal({ config, open, onClose }: WifiDetailModalProps) {
+  if (!config) return null;
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="Chi tiết Wi-Fi chấm công"
+      size="md"
+      footer={
+        <Button variant="white" onClick={onClose}>
+          Đóng
+        </Button>
+      }
+    >
+      <div className="space-y-3 text-sm">
+        <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
+          <span className="text-gray-500 font-medium">Tên Wi-Fi (SSID):</span>
+          <span className="col-span-2 font-mono font-semibold text-gray-800">{config.ssid}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
+          <span className="text-gray-500 font-medium">BSSID (Địa chỉ MAC):</span>
+          <span className="col-span-2 font-mono text-gray-700">{config.bssid}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
+          <span className="text-gray-500 font-medium">Chi nhánh:</span>
+          <span className="col-span-2">
+            <Badge tone="gray">{config.branch}</Badge>
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 py-2 border-b border-gray-100">
+          <span className="text-gray-500 font-medium">Trạng thái:</span>
+          <span className="col-span-2">
+            <StatusBadge status={config.status} />
+          </span>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 interface Props {
   configs: WifiConfig[];
+  onDelete?: (id: string) => void | Promise<void>;
 }
 
-export default function WifiTableSection({ configs }: Props) {
+export default function WifiTableSection({ configs, onDelete }: Props) {
+  const [viewingConfig, setViewingConfig] = useState<WifiConfig | null>(null);
+  const [deletingConfig, setDeletingConfig] = useState<WifiConfig | null>(null);
+
   const columns: Column<WifiConfig>[] = [
     {
       key: "ssid",
@@ -40,17 +94,76 @@ export default function WifiTableSection({ configs }: Props) {
       header: "Trạng thái",
       render: (w) => <StatusBadge status={w.status} />,
     },
+    {
+      key: "actions",
+      header: "Thao tác",
+      render: (w) => (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1"
+            onClick={() => setViewingConfig(w)}
+          >
+            <FontAwesomeIcon icon={faEye} className="mr-1" />
+            Xem
+          </Button>
+          {onDelete && (
+            <Button
+              variant="ghost"
+              className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1"
+              onClick={() => setDeletingConfig(w)}
+            >
+              <FontAwesomeIcon icon={faTrashCan} className="mr-1" />
+              Xóa
+            </Button>
+          )}
+        </div>
+      ),
+    },
   ];
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Danh sách Wi-Fi chấm công</CardTitle>
-        <Badge tone="gray">{configs.length} cấu hình</Badge>
-      </CardHeader>
-      <CardBody className="pt-2">
-        <Table columns={columns} data={configs} rowKey={(w) => w.id} emptyMessage="Chưa có Wi-Fi nào được cấu hình" />
-      </CardBody>
-    </Card>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Danh sách Wi-Fi chấm công</CardTitle>
+          <Badge tone="gray">{configs.length} cấu hình</Badge>
+        </CardHeader>
+        <CardBody className="pt-2">
+          <Table
+            columns={columns}
+            data={configs}
+            rowKey={(w) => w.id}
+            emptyMessage="Chưa có Wi-Fi nào được cấu hình"
+          />
+        </CardBody>
+      </Card>
+
+      {viewingConfig && (
+        <WifiDetailModal
+          config={viewingConfig}
+          open={!!viewingConfig}
+          onClose={() => setViewingConfig(null)}
+        />
+      )}
+
+      {deletingConfig && (
+        <ConfirmDialog
+          open={!!deletingConfig}
+          title="Xác nhận xóa Wi-Fi"
+          message={`Xác nhận xóa cấu hình Wi-Fi "${deletingConfig.ssid}" khỏi chi nhánh ${deletingConfig.branch}?`}
+          confirmLabel="Xóa"
+          cancelLabel="Hủy"
+          tone="danger"
+          onConfirm={async () => {
+            if (onDelete && deletingConfig) {
+              await onDelete(deletingConfig.id);
+            }
+            setDeletingConfig(null);
+          }}
+          onCancel={() => setDeletingConfig(null)}
+        />
+      )}
+    </>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
@@ -16,24 +16,14 @@ interface Props {
 }
 
 export default function BranchModal({ open, onClose, branch, employees = [], onSave, onDelete }: Props) {
-  const [name, setName] = useState("");
-  const [address, setAddress] = useState("");
-  const [manager, setManager] = useState("");
-  const [status, setStatus] = useState<"hoạt động" | "vô hiệu hóa">("hoạt động");
-
-  useEffect(() => {
-    if (branch) {
-      setName(branch.name || "");
-      setAddress(branch.address || "");
-      setManager(branch.manager ? branch.manager.split(/—|-|\(/)[0].trim() : "");
-      setStatus(branch.status || "hoạt động");
-    } else {
-      setName("");
-      setAddress("");
-      setManager("");
-      setStatus("hoạt động");
-    }
-  }, [branch, open]);
+  const [name, setName] = useState(branch?.name || "");
+  const [address, setAddress] = useState(branch?.address || "");
+  const [manager, setManager] = useState(
+    branch?.manager ? branch.manager.split(/—|-|\(/)[0].trim() : ""
+  );
+  const [status, setStatus] = useState<"hoạt động" | "vô hiệu hóa">(
+    branch?.status || "hoạt động"
+  );
 
   const handleSave = () => {
     if (!name) return;

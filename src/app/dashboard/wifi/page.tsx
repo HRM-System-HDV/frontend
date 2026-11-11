@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import type { WifiConfig } from "@/types";
 import WifiTableSection from "@/features/wifi/WifiList";
 import { useCurrentUser } from "@/context/AuthContext";
-import { apiGet, GatewayError } from "@/lib/api";
+import { apiGet, apiDelete, GatewayError } from "@/lib/api";
 
 export default function WifiPage() {
   const { role, branchSlug } = useCurrentUser();
@@ -15,22 +15,48 @@ export default function WifiPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await apiGet<WifiConfig[]>("/api/wifi-configs");
-      setConfigs(data || []);
-    } catch (e) {
-      setError(e instanceof GatewayError ? e.message : "Lỗi tải cấu hình Wi-Fi");
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    let ignore = false;
+    apiGet<WifiConfig[]>("/api/wifi-configs")
+      .then((data) => {
+        if (!ignore) {
+          setConfigs(data || []);
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        if (!ignore) {
+          setError(e instanceof GatewayError ? e.message : "Lỗi tải cấu hình Wi-Fi");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  const handleRefetch = () => {
+    setLoading(true);
+    setError(null);
+    apiGet<WifiConfig[]>("/api/wifi-configs")
+      .then((data) => {
+        setConfigs(data || []);
+        setLoading(false);
+      })
+      .catch((e) => {
+        setError(e instanceof GatewayError ? e.message : "Lỗi tải cấu hình Wi-Fi");
+        setLoading(false);
+      });
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await apiDelete(`/api/wifi-configs/${id}`);
+      setConfigs((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không thể xóa Wi-Fi");
+    }
+  };
 
   const filteredConfigs = useMemo(
     () => (isManager ? configs.filter((c) => c.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", "")) : configs),
@@ -46,7 +72,7 @@ export default function WifiPage() {
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center justify-between gap-3">
           <span>{error}</span>
-          <Button variant="white" onClick={fetchData} className="text-xs shrink-0">
+          <Button variant="white" onClick={handleRefetch} className="text-xs shrink-0">
             Thử lại
           </Button>
         </div>
@@ -60,7 +86,7 @@ export default function WifiPage() {
             <div className="text-xs text-gray-500">Đang tải cấu hình Wi-Fi qua Gateway...</div>
           </div>
         ) : (
-          <WifiTableSection configs={filteredConfigs} />
+          <WifiTableSection configs={filteredConfigs} onDelete={handleDelete} />
         )}
       </div>
     </div>

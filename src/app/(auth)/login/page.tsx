@@ -38,27 +38,32 @@ export default function LoginPage() {
   }, [loading, authenticated, router]);
 
   // Toast "Phiên làm việc đã hết hạn" — thumbnail ngang góc phải trên, tự ẩn sau ~6s.
-  const [expToast, setExpToast] = useState(false);
-  const [expToastExit, setExpToastExit] = useState(false);
-  useEffect(() => {
+  const [expToast, setExpToast] = useState(() => {
+    if (typeof window === "undefined") return false;
     try {
-      if (sessionStorage.getItem("hrm_session_expired") === "1") {
+      const expired = sessionStorage.getItem("hrm_session_expired") === "1";
+      if (expired) {
         sessionStorage.removeItem("hrm_session_expired");
-        setExpToast(true);
-        const t1 = setTimeout(() => setExpToastExit(true), 5700);
-        const t2 = setTimeout(() => {
-          setExpToast(false);
-          setExpToastExit(false);
-        }, 6000);
-        return () => {
-          clearTimeout(t1);
-          clearTimeout(t2);
-        };
+        return true;
       }
     } catch {
       /* ignore */
     }
-  }, []);
+    return false;
+  });
+  const [expToastExit, setExpToastExit] = useState(false);
+  useEffect(() => {
+    if (!expToast) return;
+    const t1 = setTimeout(() => setExpToastExit(true), 5700);
+    const t2 = setTimeout(() => {
+      setExpToast(false);
+      setExpToastExit(false);
+    }, 6000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [expToast]);
 
   // Quên mật khẩu qua API thật
   const [forgotEmail, setForgotEmail] = useState("");

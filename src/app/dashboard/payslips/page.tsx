@@ -14,40 +14,7 @@ import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/sh
 import { EditPayslipModal, ConfirmClosePayslipDialog, PrintPayslipModal } from "@/features/payslips/PayslipEdit";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
-
-// api.ts dùng chung chưa có apiPut (quy tắc phân công: chỉ đọc, không sửa)
-// nên đặt helper PUT cục bộ trong trang, giống tiền lệ trang employees của Agent 1.
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let body: unknown = null;
-    try {
-      body = text ? JSON.parse(text) : null;
-    } catch {
-      body = null;
-    }
-    if (!res.ok) {
-      const err = (body as { error?: { code: string; message: string } } | null)?.error;
-      throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-    }
-    if (body !== null && typeof body === "object" && "data" in body) {
-      return (body as { data: T }).data;
-    }
-    return body as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { apiGet, apiPost, apiPut, GatewayError } from "@/lib/api";
 
 interface PayslipRow {
   id: string;
@@ -179,12 +146,84 @@ export default function PayslipsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData(selectedMonth);
-  }, [fetchData, selectedMonth]);
+    let ignore = false;
+    const query = selectedMonth ? `?month=${encodeURIComponent(selectedMonth)}` : "";
+    Promise.all([
+      apiGet<PayslipRow[]>(`/api/payroll/payslips${query}`),
+      apiGet<EmployeeRow[]>("/api/employees"),
+    ])
+      .then(([data, empList]) => {
+        if (!ignore) {
+          const empMap = new Map((empList || []).map((e) => [e.id, e]));
+          setEmployees(empList || []);
+          setSlips(
+            (data || []).map((r) => {
+              const emp = empMap.get(r.employeeId);
+              return {
+                id: r.id,
+                employee: emp?.name || r.employeeId,
+                branch: emp?.branch,
+                month: r.month,
+                days: 0,
+                salary: Number(r.baseSalary) || 0,
+                bonus: Number(r.bonus) || 0,
+                penalty: Number(r.totalPenalty) || 0,
+                total: Number(r.netSalary) || 0,
+                status: (r.status === "đã chốt" ? "đã chốt" : "chưa chốt") as Payslip["status"],
+              };
+            })
+          );
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          setError(e instanceof GatewayError ? e.message : "Lỗi tải phiếu lương");
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [selectedMonth]);
 
   useEffect(() => {
-    fetchConfig();
-  }, [fetchConfig]);
+    let ignore = false;
+    apiGet<any>("/api/attendance/config")
+      .then((c) => {
+        if (!ignore && c) {
+          const mapMode = (m?: string) => {
+            if (!m || m === "manual") return "Nhân viên tự xác nhận";
+            if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
+            return m;
+          };
+          const formatOption = (val: any, fallback: string) => {
+            if (val === 0) return "Không giới hạn";
+            if (val != null) return `${val} lần`;
+            return fallback;
+          };
+          setAttConfig((prev) => ({
+            ...prev,
+            gracePeriod: String(c.gracePeriodMinutes ?? c.gracePeriod ?? prev.gracePeriod),
+            shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
+            requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
+            allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
+            latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
+            earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
+            earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
+            maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
+            deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
+            maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
+            maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // Manager chỉ thấy phiếu của chi nhánh mình (lọc theo branch của employee).
   const visibleSlips = useMemo(() => {
@@ -436,32 +475,38 @@ export default function PayslipsPage() {
         />
       )}
 
-      <BulkClosePayslipModal
-        open={closeSlipOpen}
-        onClose={() => setCloseSlipOpen(false)}
-        defaultMonth={selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")}
-        months={monthOptions}
-        pendingCount={pendingOfMonth(selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")).length}
-        saving={bulkSaving}
-        onConfirm={handleBulkClose}
-      />
-      <GeneratePayslipModal
-        open={generateOpen}
-        onClose={() => {
-          setGenerateOpen(false);
-          setGenerateError(null);
-        }}
-        employees={employees.map((e) => ({
-          id: e.id,
-          name: e.name,
-          baseSalary: e.baseSalary,
-          status: e.status,
-        }))}
-        defaultMonth={selectedMonth !== "all" ? selectedMonth : "10-2026"}
-        saving={generateSaving}
-        error={generateError}
-        onConfirm={handleGenerate}
-      />
+      {closeSlipOpen && (
+        <BulkClosePayslipModal
+          key="bulk-close-modal"
+          open={closeSlipOpen}
+          onClose={() => setCloseSlipOpen(false)}
+          defaultMonth={selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")}
+          months={monthOptions}
+          pendingCount={pendingOfMonth(selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")).length}
+          saving={bulkSaving}
+          onConfirm={handleBulkClose}
+        />
+      )}
+      {generateOpen && (
+        <GeneratePayslipModal
+          key="generate-modal"
+          open={generateOpen}
+          onClose={() => {
+            setGenerateOpen(false);
+            setGenerateError(null);
+          }}
+          employees={employees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            baseSalary: e.baseSalary,
+            status: e.status,
+          }))}
+          defaultMonth={selectedMonth !== "all" ? selectedMonth : "10-2026"}
+          saving={generateSaving}
+          error={generateError}
+          onConfirm={handleGenerate}
+        />
+      )}
       <AttendanceConfigModal
         open={attendanceOpen}
         onClose={() => setAttendanceOpen(false)}

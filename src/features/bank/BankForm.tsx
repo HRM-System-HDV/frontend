@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBuildingColumns,
@@ -12,7 +12,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { formatDate, formatVND } from "@/lib/utils";
-import { GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiDelete, apiPut, apiPost, GatewayError } from "@/lib/api";
 import type { BankPartner } from "./types";
 
 interface Props {
@@ -23,20 +23,11 @@ interface Props {
 }
 
 export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }: Props) {
-  const [accountName, setAccountName] = useState("");
-  const [branch, setBranch] = useState("");
-  const [status, setStatus] = useState("hoạt động");
+  const [accountName, setAccountName] = useState(partner?.accountName || "");
+  const [branch, setBranch] = useState(partner?.branch || "");
+  const [status, setStatus] = useState(partner?.status === "active" ? "hoạt động" : "vô hiệu hóa");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (partner) {
-      setAccountName(partner.accountName || "");
-      setBranch(partner.branch || "");
-      setStatus(partner.status === "active" ? "hoạt động" : "vô hiệu hóa");
-      setError(null);
-    }
-  }, [partner]);
 
   if (!partner) return null;
 
@@ -47,17 +38,11 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts/${partner.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error("Lỗi xóa tài khoản");
-      }
+      await apiDelete(`/api/payroll/bank-accounts/${partner.id}`);
       onDeleted?.(partner.id);
       onClose();
-    } catch (e: any) {
-      setError(e.message || "Lỗi xóa tài khoản.");
+    } catch (e: unknown) {
+      setError(e instanceof GatewayError ? e.message : "Lỗi xóa tài khoản.");
     } finally {
       setSaving(false);
     }
@@ -67,29 +52,15 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts/${partner.id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const data = await apiPut<{ accountName?: string; bankName?: string; branch?: string; balance?: number; status?: string }>(
+        `/api/payroll/bank-accounts/${partner.id}`,
+        {
           accountName: accountName.trim(),
           branch: branch.trim(),
           status,
-        }),
-      });
-      const text = await res.text();
-      let body: unknown = null;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = null;
-      }
-      if (!res.ok) {
-        const err = (body as { error?: { code: string; message: string } } | null)?.error;
-        throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-      }
-      const data = (body as { data: unknown } | null)?.data ?? body;
-      const row = data as { accountName?: string; bankName?: string; branch?: string; balance?: number; status?: string };
+        }
+      );
+      const row = data || {};
       onSaved?.({
         ...partner,
         accountName: row.accountName ?? accountName.trim() ?? partner.accountName,
@@ -245,19 +216,6 @@ export function CreateBankAccountModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setBankName("Vietcombank (VCB)");
-      setCustomBankName("");
-      setAccountNumber("");
-      setAccountName("CÔNG TY CỔ PHẦN HRM SYSTEM");
-      setBranch("Chi nhánh Ba Đình - Hà Nội");
-      setBalanceStr("500000000");
-      setIsPrimary(isFirstAccount);
-      setError(null);
-    }
-  }, [open, isFirstAccount]);
-
   const handleSubmit = async () => {
     const finalBank = bankName === "Khác" ? customBankName.trim() : bankName;
     if (!finalBank) {
@@ -281,33 +239,18 @@ export function CreateBankAccountModal({
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bankName: finalBank,
-          accountNumber: accountNumber.trim(),
-          accountName: accountName.trim(),
-          branch: branch.trim(),
-          balance: balanceNum,
-          isPrimary,
-        }),
+      await apiPost("/api/payroll/bank-accounts", {
+        bankName: finalBank,
+        accountNumber: accountNumber.trim(),
+        accountName: accountName.trim(),
+        branch: branch.trim(),
+        balance: balanceNum,
+        isPrimary,
       });
-      const text = await res.text();
-      let body: any = null;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = null;
-      }
-      if (!res.ok) {
-        throw new Error(body?.error?.message || `HTTP_${res.status}`);
-      }
       onCreated();
       onClose();
-    } catch (e: any) {
-      setError(e.message || "Lỗi tạo tài khoản ngân hàng");
+    } catch (e: unknown) {
+      setError(e instanceof GatewayError ? e.message : "Lỗi tạo tài khoản ngân hàng");
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -23,14 +23,8 @@ export default function TaskDetailModal({
   onComplete,
   onDelete,
 }: TaskDetailModalProps) {
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(task?.proofPhotoUrl || null);
   const [zoomOpen, setZoomOpen] = useState(false);
-
-  useEffect(() => {
-    if (task) {
-      setPhotoUrl(task.proofPhotoUrl || null);
-    }
-  }, [task]);
 
   if (!task) return null;
 

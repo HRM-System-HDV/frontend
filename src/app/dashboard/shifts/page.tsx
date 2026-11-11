@@ -11,7 +11,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { Employee, Branch } from "@/types";
 import type { ShiftTemplate, WorkShift, WeeklyRegistration, ShiftRegistrationRecord } from "@/features/shifts/types";
 import ShiftTemplateSection from "@/features/shifts/ShiftTemplates";
@@ -25,60 +25,6 @@ import ExportModal from "@/features/shifts/ShiftExport";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime, parseDate, getTodayVN } from "@/lib/utils";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function resolveBranchDisplay(
   branchRaw: string | undefined | null,
@@ -528,37 +474,88 @@ export default function ShiftsPage() {
   }, [isManager, managerBranch]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    const effectiveBranch = isManager ? managerBranch : "";
+    const queryParams = new URLSearchParams();
+    if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-  // Tự chọn nhân viên đầu tiên khi danh sách API về
-  useEffect(() => {
-    if (!assignEmployee && empList.length > 0) {
-      setAssignEmployee(empList[0].name);
-    }
-  }, [empList, assignEmployee]);
+    Promise.allSettled([
+      apiGet<any[]>(`/api/shifts${queryString}`),
+      apiGet<any[]>(`/api/shifts/registrations${queryString}`),
+      apiGet<Employee[]>("/api/employees"),
+      apiGet<any[]>(`/api/shift-templates`),
+      apiGet<Branch[]>("/api/branches"),
+    ])
+      .then(([shiftsRes, regRes, employeesRes, templatesRes, branchesRes]) => {
+        if (ignore) return;
+        let branchesData: Branch[] = [];
+        if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
+          branchesData = branchesRes.value;
+          setBranches(branchesData);
+        }
 
-  // Reset assignBranch nếu bị giữ lệnh chi nhánh không còn tồn tại trong DB.
-  // assignBranch rỗng = "chọn chi nhánh khi phân công", không tự gán.
+        let employeesData: Employee[] = [];
+        if (employeesRes.status === "fulfilled" && Array.isArray(employeesRes.value)) {
+          employeesData = employeesRes.value;
+        }
+        setEmpList(employeesData);
+
+        const currentEmpMap = new Map<string, string>();
+        const currentEmpPhoneMap = new Map<string, string>();
+        for (const e of employeesData) {
+          currentEmpMap.set(e.id, e.name);
+          if (e.phone) currentEmpPhoneMap.set(e.id, e.phone);
+        }
+
+        let templatesData: ShiftTemplate[] = [];
+        if (templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value)) {
+          templatesData = templatesRes.value;
+          setTemplates(templatesData);
+        }
+
+        if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
+          setWorkShiftList(
+            shiftsRes.value.map((s) =>
+              mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData)
+            )
+          );
+        }
+
+        if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
+          setWeeklyRegistrations(
+            parseBackendRegistrations(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
+          );
+          setRegistrationRecords(
+            mapToRegistrationRecords(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
+          );
+        }
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : "Không thể tải dữ liệu ca làm việc từ gateway";
+          setError(msg);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isManager, managerBranch]);
+
   const validBranchSlugs = useMemo(
     () => new Set(branches.map((b) => b.slug.toUpperCase())),
     [branches]
   );
-  useEffect(() => {
-    if (branches.length === 0) return;
-    const firstSlug = branches[0].slug.toUpperCase();
-    if (!isManager && assignBranch && !validBranchSlugs.has(assignBranch.toUpperCase())) {
-      setAssignBranch(firstSlug);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branches, isManager, validBranchSlugs]);
 
-  // Mặc định khung ca đầu tiên cho modal phân ca
-  useEffect(() => {
-    if (!assignTemplateId && templates.length > 0) {
-      setAssignTemplateId(templates[0].id);
-    }
-  }, [templates, assignTemplateId]);
+  const currentAssignEmployee = assignEmployee || empList[0]?.name || "";
+  const currentAssignBranch =
+    !isManager && assignBranch && !validBranchSlugs.has(assignBranch.toUpperCase())
+      ? branches[0]?.slug?.toUpperCase() || ""
+      : assignBranch;
+  const currentAssignTemplateId = assignTemplateId || templates[0]?.id || "";
 
   // Manager chỉ thấy dữ liệu chi nhánh mình
   const displayedWorkShifts = isManager
@@ -703,19 +700,20 @@ export default function ShiftsPage() {
 
   // Tạo & phân ca mới (POST /api/shifts)
   const handleAssignShift = async () => {
-    if (!assignBranch) {
+    const targetBranch = currentAssignBranch;
+    if (!targetBranch) {
       showToast("Vui lòng chọn chi nhánh cho ca làm việc", "danger");
       return;
     }
-    const template = templates.find((t) => t.id === assignTemplateId) || templates[0];
-    const matchedEmp = empList.find((e) => e.name === assignEmployee);
+    const template = templates.find((t) => t.id === currentAssignTemplateId) || templates[0];
+    const matchedEmp = empList.find((e) => e.name === currentAssignEmployee);
     const payload = {
-      employeeId: matchedEmp?.id || assignEmployee,
-      branchSlug: assignBranch,
+      employeeId: matchedEmp?.id || currentAssignEmployee,
+      branchSlug: targetBranch,
       date: formatDate(assignDate),
-      template: template.name,
-      scheduledStart: template.startTime,
-      scheduledEnd: template.endTime,
+      template: template?.name || "Ca trực",
+      scheduledStart: template?.startTime || "07:00",
+      scheduledEnd: template?.endTime || "14:00",
       status: "Chưa chấm công",
       note: assignNote,
       isRecurring: assignIsRecurring,
@@ -723,14 +721,14 @@ export default function ShiftsPage() {
 
     try {
       setActionInProgress(true);
-      const res = await apiPost<any>("/api/shifts", payload);
+      await apiPost("/api/shifts", payload);
       await fetchData();
-      showToast(`Đã phân công thành công cho "${assignEmployee}" (${template.name})`, "success");
+      showToast(`Đã phân công thành công cho "${currentAssignEmployee}" (${template?.name || "Ca trực"})`, "success");
       setAssignShiftOpen(false);
       setAssignNote("");
       setAssignIsRecurring(true);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi phân công ca làm việc";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Lỗi khi phân công ca làm việc";
       showToast(msg, "danger");
     } finally {
       setActionInProgress(false);
@@ -965,10 +963,10 @@ export default function ShiftsPage() {
         open={assignShiftOpen}
         onClose={() => setAssignShiftOpen(false)}
         templates={templates}
-        employee={assignEmployee}
-        branch={assignBranch}
+        employee={currentAssignEmployee}
+        branch={currentAssignBranch}
         date={assignDate}
-        templateId={assignTemplateId}
+        templateId={currentAssignTemplateId}
         note={assignNote}
         isRecurring={assignIsRecurring}
         isManager={isManager}

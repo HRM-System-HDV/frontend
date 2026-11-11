@@ -5,7 +5,6 @@ import type {
   ArchiveFilterType,
   ArchiveListParams,
   ArchivePage,
-  ArchivePreview,
   ArchiveRunResult,
   ArchiveSelection,
   ArchiveType,
@@ -31,17 +30,6 @@ const GROUPS: { base: string; types: ArchiveType[] }[] = [
 
 function sumCounts(counts: ArchiveCounts): number {
   return Object.values(counts).reduce((acc, n) => acc + (n || 0), 0);
-}
-
-export async function previewAll(selection: ArchiveSelection): Promise<ArchivePreview> {
-  const results = await Promise.all(
-    GROUPS.map((g) =>
-      apiPost<ArchivePreview>(`${g.base}/preview`, { ...selection, types: g.types })
-    )
-  );
-  const counts: ArchiveCounts = {};
-  for (const r of results) Object.assign(counts, r.counts);
-  return { cutoffDate: results[0].cutoffDate, counts };
 }
 
 export interface RunProgress {

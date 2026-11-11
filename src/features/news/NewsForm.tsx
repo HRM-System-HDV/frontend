@@ -41,30 +41,25 @@ export default function CreateNewsModal({
   onSubmit,
 }: Props) {
   const isEdit = Boolean(initial);
-  const [newTitle, setNewTitle] = useState("");
-  const [newTag, setNewTag] = useState("Thông báo");
-  const [newSummary, setNewSummary] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newPinned, setNewPinned] = useState(false);
-  const [newBranch, setNewBranch] = useState("Toàn công ty");
+  const [newTitle, setNewTitle] = useState(initial?.title || "");
+  const [newTag, setNewTag] = useState(initial?.tag || "Thông báo");
+  const [newSummary, setNewSummary] = useState(initial?.summary || "");
+  const [newContent, setNewContent] = useState(initial?.content || "");
+  const [newPinned, setNewPinned] = useState(Boolean(initial?.pinned));
+  const [newBranch, setNewBranch] = useState(initial?.branch || "Toàn công ty");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
+    let ignore = false;
     apiGet<Branch[]>("/api/branches")
-      .then((d) => setBranches(d || []))
+      .then((d) => {
+        if (!ignore) setBranches(d || []);
+      })
       .catch(() => {});
+    return () => {
+      ignore = true;
+    };
   }, []);
-
-  useEffect(() => {
-    if (open) {
-      setNewTitle(initial?.title || "");
-      setNewTag(initial?.tag || "Thông báo");
-      setNewSummary(initial?.summary || "");
-      setNewContent(initial?.content || "");
-      setNewPinned(Boolean(initial?.pinned));
-      setNewBranch(initial?.branch || "Toàn công ty");
-    }
-  }, [open, initial]);
 
   const handleSubmit = () => {
     if (!newTitle.trim() || !newContent.trim()) {

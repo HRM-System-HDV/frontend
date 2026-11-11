@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faMoneyBillTransfer,
-  faShieldHalved,
   faArrowsRotate,
   faCopy,
   faCheck,
@@ -60,7 +59,7 @@ export default function CreatePayrollDisbursementModal({
   const [selectedBankId, setSelectedBankId] = useState(
     partners.find((p) => p.isPrimary)?.id || partners[0]?.id || ""
   );
-  const [idempotencyKey, setIdempotencyKey] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newIdempotencyKey());
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,17 +73,14 @@ export default function CreatePayrollDisbursementModal({
 
   // Sinh idempotencyKey & tải các phiếu lương đã chốt mỗi khi mở modal
   useEffect(() => {
-    if (open) {
-      setSelectedBankId(partners.find((p) => p.isPrimary)?.id || partners[0]?.id || "");
-      setIdempotencyKey(newIdempotencyKey());
-      setError(null);
-      setFetchingSlips(true);
-
-      Promise.all([
-        apiGet<PayslipRecord[]>("/api/payroll/payslips"),
-        apiGet<EmployeeItem[]>("/api/employees"),
-      ])
-        .then(([slips, emps]) => {
+    if (!open) return;
+    let ignore = false;
+    Promise.all([
+      apiGet<PayslipRecord[]>("/api/payroll/payslips"),
+      apiGet<EmployeeItem[]>("/api/employees"),
+    ])
+      .then(([slips, emps]) => {
+        if (!ignore) {
           const map = new Map((emps || []).map((e) => [e.id, e.name]));
           setEmployeeMap(map);
 
@@ -103,15 +99,19 @@ export default function CreatePayrollDisbursementModal({
             setSelectedMonth("");
             setContent("Chi lương");
           }
-        })
-        .catch(() => {
-          setClosedSlips([]);
-        })
-        .finally(() => {
           setFetchingSlips(false);
-        });
-    }
-  }, [open, partners]);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setClosedSlips([]);
+          setFetchingSlips(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [open]);
 
   const availableMonths = useMemo(() => {
     return Array.from(new Set(closedSlips.map((s) => s.month)));

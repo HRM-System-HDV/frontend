@@ -10,65 +10,11 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { Branch, Employee } from "@/types";
 import BranchSection from "@/features/branches/BranchList";
 import BranchModal from "@/features/branches/BranchForm";
 import { useCurrentUser } from "@/context/AuthContext";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export default function BranchesPage() {
   const { role } = useCurrentUser();
@@ -101,15 +47,15 @@ export default function BranchesPage() {
         apiGet<Branch[]>("/api/branches"),
         apiGet<Employee[]>("/api/employees").catch(() => []),
       ]);
-      const normalized = (data || []).map((b: any) => ({
+      const normalized = (data || []).map((b) => ({
         ...b,
         status: b.status || "hoạt động",
         staff: b.staff ?? 0,
       }));
       setList(normalized);
       setEmpList(empData || []);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách chi nhánh";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách chi nhánh";
       setError(msg);
       showToast(msg, "danger");
     } finally {
@@ -118,8 +64,35 @@ export default function BranchesPage() {
   }, []);
 
   useEffect(() => {
-    fetchBranches();
-  }, [fetchBranches]);
+    let ignore = false;
+    Promise.all([
+      apiGet<Branch[]>("/api/branches"),
+      apiGet<Employee[]>("/api/employees").catch(() => []),
+    ])
+      .then(([data, empData]) => {
+        if (!ignore) {
+          const normalized = (data || []).map((b) => ({
+            ...b,
+            status: b.status || "hoạt động",
+            staff: b.staff ?? 0,
+          }));
+          setList(normalized);
+          setEmpList(empData || []);
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách chi nhánh";
+          setError(msg);
+          showToast(msg, "danger");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const handleSave = async (data: Omit<Branch, "id"> & { id?: string }) => {
     try {
@@ -283,21 +256,24 @@ export default function BranchesPage() {
         />
       )}
 
-      <BranchModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
-        branch={editing}
-        employees={empList}
-        onSave={handleSave}
-        onDelete={!isManager ? (b) => {
-          setModalOpen(false);
-          setEditing(null);
-          setDeleteTarget(b);
-        } : undefined}
-      />
+      {modalOpen && (
+        <BranchModal
+          key={editing?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditing(null);
+          }}
+          branch={editing}
+          employees={empList}
+          onSave={handleSave}
+          onDelete={!isManager ? (b) => {
+            setModalOpen(false);
+            setEditing(null);
+            setDeleteTarget(b);
+          } : undefined}
+        />
+      )}
 
       <ConfirmDialog
         open={!!lockTarget}

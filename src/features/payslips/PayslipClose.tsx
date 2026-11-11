@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Select } from "@/components/ui/Form";
@@ -17,10 +17,6 @@ interface Props {
 
 export default function BulkClosePayslipModal({ open, onClose, defaultMonth, months, pendingCount, saving, onConfirm }: Props) {
   const [month, setMonth] = useState(defaultMonth);
-
-  useEffect(() => {
-    if (open) setMonth(defaultMonth);
-  }, [open, defaultMonth]);
 
   return (
     <Modal

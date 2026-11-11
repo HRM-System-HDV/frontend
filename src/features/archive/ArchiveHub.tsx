@@ -2,20 +2,18 @@
 
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBoxArchive, faMagnifyingGlassChart } from "@fortawesome/free-solid-svg-icons";
+import { faBoxArchive } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import ArchiveRunPanel from "./ArchiveRunPanel";
 import ArchiveTable from "./ArchiveTable";
 import ArchiveDetailModal from "./ArchiveDetailModal";
-import { previewAll, runAll, type RunProgress } from "./archiveApi";
+import { runAll, type RunProgress } from "./archiveApi";
 import { formatDate } from "@/lib/utils";
 import {
-  formatDateTime,
   type ArchiveCounts,
   type ArchiveFilterType,
-  type ArchivePreview,
   type ArchiveSelection,
   type ArchivedRecord,
 } from "./types";
@@ -28,8 +26,6 @@ export default function ArchiveHub() {
 
   const [months, setMonths] = useState<number | "custom">(12);
   const [customDate, setCustomDate] = useState("");
-  const [preview, setPreview] = useState<ArchivePreview | null>(null);
-  const [previewing, setPreviewing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<RunProgress | null>(null);
@@ -39,28 +35,6 @@ export default function ArchiveHub() {
   const selection: ArchiveSelection =
     months === "custom" ? { cutoffDate: formatDate(customDate) } : { months };
   const selectionValid = months !== "custom" || Boolean(customDate);
-  const totalPreview = preview
-    ? Object.values(preview.counts).reduce((acc, n) => acc + (n || 0), 0)
-    : 0;
-
-  const resetPreview = () => {
-    setPreview(null);
-    setError("");
-  };
-
-  const handlePreview = async () => {
-    try {
-      setPreviewing(true);
-      setError("");
-      const result = await previewAll(selection);
-      setPreview(result);
-    } catch (e) {
-      setPreview(null);
-      setError(e instanceof Error ? e.message : "Không thể xem trước số lượng lưu trữ");
-    } finally {
-      setPreviewing(false);
-    }
-  };
 
   const showToast = (text: string, tone: "success" | "danger" = "success") => {
     setToast({ text, tone });
@@ -72,9 +46,8 @@ export default function ArchiveHub() {
     try {
       setRunning(true);
       setError("");
-      setProgress({ moved: {}, remaining: preview?.counts || {} });
+      setProgress({ moved: {}, remaining: {} });
       const moved: ArchiveCounts = await runAll(selection, (p) => setProgress(p));
-      setPreview(null);
       setProgress(null);
       const total = Object.values(moved).reduce((acc, n) => acc + (n || 0), 0);
       showToast(`Đã lưu trữ ${total} bản ghi vào kho lưu trữ`);
@@ -112,35 +85,25 @@ export default function ArchiveHub() {
         title="Lưu trữ"
         breadcrumb={[{ label: "Hệ thống", href: "#" }, { label: "Lưu trữ" }]}
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="white"
-              onClick={handlePreview}
-              disabled={!selectionValid || running || previewing}
-            >
-              <FontAwesomeIcon icon={faMagnifyingGlassChart} fontSize={14} />
-              {previewing ? "Đang đếm..." : "Xem trước số lượng"}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => setConfirmOpen(true)}
-              disabled={!preview || totalPreview === 0 || running || previewing}
-            >
-              <FontAwesomeIcon icon={faBoxArchive} fontSize={14} />
-              {running ? "Đang lưu trữ..." : "Thực hiện lưu trữ"}
-            </Button>
-          </div>
+          <Button
+            variant="primary"
+            onClick={() => setConfirmOpen(true)}
+            disabled={!selectionValid || running}
+          >
+            <FontAwesomeIcon icon={faBoxArchive} fontSize={14} />
+            {running ? "Đang lưu trữ..." : "Thực hiện lưu trữ"}
+          </Button>
         }
       />
 
       <ArchiveRunPanel
         running={running}
-        preview={preview}
         progress={progress}
         error={error}
       />
 
       <ArchiveTable
+        key={filterType}
         type={filterType}
         onTypeChange={setFilterType}
         refreshKey={refreshKey}
@@ -148,17 +111,12 @@ export default function ArchiveHub() {
         months={months}
         customDate={customDate}
         running={running}
-        onMonthsChange={(value) => {
-          setMonths(value);
-          resetPreview();
-        }}
-        onCustomDateChange={(value) => {
-          setCustomDate(value);
-          resetPreview();
-        }}
+        onMonthsChange={setMonths}
+        onCustomDateChange={setCustomDate}
       />
 
       <ArchiveDetailModal
+        key={detail?.id ?? "none"}
         open={detail !== null}
         onClose={() => setDetail(null)}
         record={detail}
@@ -178,11 +136,10 @@ export default function ArchiveHub() {
         }
       >
         <p className="text-sm text-gray-700">
-          Chuyển <strong>{totalPreview}</strong> bản ghi tạo trước{" "}
-          <strong>{formatDateTime(preview?.cutoffDate)}</strong> vào kho lưu trữ?
+          Chuyển các bản ghi cũ ({months === "custom" ? `tạo trước ${formatDate(customDate)}` : `cũ hơn ${months} tháng`}) vào kho lưu trữ?
         </p>
         <p className="text-xs text-gray-500 mt-2">
-          Dữ liệu sau khi lưu trữ sẽ không còn xuất hiện trong danh sách làm việc, nhưng vẫn xem lại
+          Dữ liệu sau khi lưu trữ sẽ không còn xuất hiện trong danh sách hoạt động, nhưng vẫn xem lại
           và khôi phục được tại trang này.
         </p>
       </Modal>

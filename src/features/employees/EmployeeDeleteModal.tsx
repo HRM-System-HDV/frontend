@@ -873,7 +873,7 @@ export default function EmployeeDeleteModal({
                 className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
               />
               <span className="text-xs text-gray-700 leading-relaxed">
-                Tôi xác nhận đã lưu trữ an toàn file Excel trên máy tính nội bộ và hoàn toàn hiểu rằng hành động xóa này sẽ <strong>xóa vĩnh viễn hồ sơ của nhân sự "{employee.name}"</strong> và không thể hoàn tác.
+                Tôi xác nhận đã lưu trữ an toàn file Excel trên máy tính nội bộ và hoàn toàn hiểu rằng hành động xóa này sẽ <strong>xóa vĩnh viễn hồ sơ của nhân sự &quot;{employee.name}&quot;</strong> và không thể hoàn tác.
               </span>
             </label>
           </div>

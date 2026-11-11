@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
+import { faBell, faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 import { cn } from "@/lib/utils";
+import NotificationPanel, { NotificationItem } from "./NotificationPanel";
+import { apiGet, apiPut } from "@/lib/api";
 
 interface TopbarProps {
   title?: string;
@@ -16,7 +18,7 @@ interface TopbarProps {
   resizing: boolean;
   onLogout?: () => void;
   logoutHref?: string;
-  rightExtra?: React.ReactNode; // vd: nút chuyển phân hệ (Web 2 R2)
+  rightExtra?: React.ReactNode;
 }
 
 export default function Topbar({
@@ -31,7 +33,45 @@ export default function Topbar({
   rightExtra,
 }: TopbarProps) {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const pathname = usePathname();
+
+  useEffect(() => {
+    let ignore = false;
+    apiGet<NotificationItem[]>("/api/notifications")
+      .then((data) => {
+        if (!ignore && Array.isArray(data)) {
+          setNotifications(data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      await apiPut(`/api/notifications/${id}/read`);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await apiPut("/api/notifications/read-all");
+      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
     <header
@@ -58,6 +98,27 @@ export default function Topbar({
               {headerActions}
             </div>
           )}
+
+          {/* Notifications button & popover */}
+          <div className="relative">
+            <button
+              onClick={() => setNotifOpen(!notifOpen)}
+              className="relative p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              aria-label="Thông báo"
+            >
+              <FontAwesomeIcon icon={faBell} fontSize={16} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />
+              )}
+            </button>
+            <NotificationPanel
+              open={notifOpen}
+              onClose={() => setNotifOpen(false)}
+              notifications={notifications}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
+            />
+          </div>
 
           {/* User menu */}
           <div className="relative">

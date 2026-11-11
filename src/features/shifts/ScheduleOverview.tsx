@@ -209,9 +209,8 @@ export default function GeneralScheduleSection({
       let endMin = toMinutes(endTime);
       // Ca kết thúc sau nửa đêm (VD: 22:00 - 00:00) -> cộng thêm 24h.
       if (endMin <= startMin) endMin += 1440;
-      const nowMin = new Date();
-      nowMin.setHours(0, 0, 0, 0);
-      const elapsed = (Date.now() - nowMin.getTime()) / 60000;
+      const now = new Date();
+      const elapsed = now.getHours() * 60 + now.getMinutes();
       if (elapsed >= endMin) return "completed";
       if (elapsed < startMin) return "upcoming";
       return "active";

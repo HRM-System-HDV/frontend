@@ -24,15 +24,21 @@ const toneDot: Record<string, string> = {
   success: "bg-success",
 };
 
+interface NotificationPanelProps {
+  open: boolean;
+  onClose: () => void;
+  notifications: NotificationItem[];
+  onMarkRead?: (id: string) => void;
+  onMarkAllRead?: () => void;
+}
+
 export default function NotificationPanel({
   open,
   onClose,
   notifications,
-}: {
-  open: boolean;
-  onClose: () => void;
-  notifications: NotificationItem[];
-}) {
+  onMarkRead,
+  onMarkAllRead,
+}: NotificationPanelProps) {
   const [items, setItems] = useState(notifications);
   const [tab, setTab] = useState<"all" | "unread">("all");
   const [prevNotifications, setPrevNotifications] = useState(notifications);
@@ -57,11 +63,15 @@ export default function NotificationPanel({
   const list = tab === "all" ? items : items.filter((n) => !n.read);
   const unreadCount = items.filter((n) => !n.read).length;
 
-  const markAllRead = () =>
+  const markAllRead = () => {
     setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    onMarkAllRead?.();
+  };
 
-  const markRead = (id: string) =>
+  const markRead = (id: string) => {
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    onMarkRead?.(id);
+  };
 
   return (
     <>

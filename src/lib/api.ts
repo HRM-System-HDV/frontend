@@ -54,7 +54,7 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
   if (typeof window === "undefined") return;
   if (path.startsWith("/api/backlog") || path.startsWith("/api/auth") || path === "/health") return;
 
-  let module = "Hệ thống";
+  let moduleName = "Hệ thống";
   let action: "CREATE" | "UPDATE" | "DELETE" = "UPDATE";
   let actionLabel = "Chỉnh sửa";
   let targetName = "Dữ liệu";
@@ -70,10 +70,19 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
     actionLabel = "Cập nhật";
   }
 
-  const pObj = payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
+  const pObj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+  const getString = (key: string): string | undefined => {
+    const val = pObj[key];
+    return typeof val === "string" && val.trim() ? val : undefined;
+  };
+
+  const nameVal = getString("name");
+  const titleVal = getString("title");
+  const templateVal = getString("template");
+  const ssidVal = getString("ssid");
 
   if (path.startsWith("/api/archive")) {
-    module = "Lưu trữ";
+    moduleName = "Lưu trữ";
     targetName = "Dữ liệu cũ";
     if (path.includes("/restore")) {
       actionLabel = "Khôi phục";
@@ -84,49 +93,49 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
       actionLabel = "Xem trước lưu trữ";
     }
   } else if (path.includes("/shifts/templates") || path.includes("/shift-templates")) {
-    module = "Khung ca mẫu";
-    targetName = pObj.name ? `Khung ca ${pObj.name}` : "Khung ca mẫu";
+    moduleName = "Khung ca mẫu";
+    targetName = nameVal ? `Khung ca ${nameVal}` : "Khung ca mẫu";
   } else if (path.includes("/shifts/register") || path.includes("/shifts/registrations")) {
-    module = "Đăng ký ca";
+    moduleName = "Đăng ký ca";
     targetName = "Đăng ký ca tuần";
   } else if (path.includes("/shifts")) {
-    module = "Phân ca làm việc";
-    targetName = pObj.template ? `Ca ${pObj.template}` : "Phân ca làm việc";
+    moduleName = "Phân ca làm việc";
+    targetName = templateVal ? `Ca ${templateVal}` : "Phân ca làm việc";
   } else if (path.includes("/attendance/config")) {
-    module = "Cấu hình chấm công";
+    moduleName = "Cấu hình chấm công";
     targetName = "Cấu hình phạt & đổi ca";
     actionLabel = "Lưu cấu hình";
   } else if (path.includes("/attendance")) {
-    module = "Chấm công";
+    moduleName = "Chấm công";
     targetName = "Dữ liệu chấm công";
   } else if (path.includes("/tasks")) {
-    module = "Giao việc & Nhiệm vụ";
-    targetName = pObj.title ? `Nhiệm vụ: ${pObj.title}` : "Nhiệm vụ";
+    moduleName = "Giao việc & Nhiệm vụ";
+    targetName = titleVal ? `Nhiệm vụ: ${titleVal}` : "Nhiệm vụ";
   } else if (path.includes("/employees")) {
-    module = "Nhân sự";
-    targetName = pObj.name ? `Nhân viên: ${pObj.name}` : "Hồ sơ nhân viên";
+    moduleName = "Nhân sự";
+    targetName = nameVal ? `Nhân viên: ${nameVal}` : "Hồ sơ nhân viên";
   } else if (path.includes("/branches")) {
-    module = "Chi nhánh";
-    targetName = pObj.name ? `Chi nhánh: ${pObj.name}` : "Chi nhánh";
+    moduleName = "Chi nhánh";
+    targetName = nameVal ? `Chi nhánh: ${nameVal}` : "Chi nhánh";
   } else if (path.includes("/departments")) {
-    module = "Phòng ban";
-    targetName = pObj.name ? `Phòng ban: ${pObj.name}` : "Phòng ban";
+    moduleName = "Phòng ban";
+    targetName = nameVal ? `Phòng ban: ${nameVal}` : "Phòng ban";
   } else if (path.includes("/requests")) {
-    module = "Phê duyệt yêu cầu";
+    moduleName = "Phê duyệt yêu cầu";
     targetName = "Yêu cầu / Đơn từ";
     if (path.includes("/approve")) actionLabel = "Phê duyệt";
     else if (path.includes("/reject")) actionLabel = "Từ chối";
   } else if (path.includes("/news")) {
-    module = "Bảng tin";
-    targetName = pObj.title ? `Bản tin: ${pObj.title}` : "Bản tin";
+    moduleName = "Bảng tin";
+    targetName = titleVal ? `Bản tin: ${titleVal}` : "Bản tin";
   } else if (path.includes("/regulations")) {
-    module = "Nội quy & Quy định";
-    targetName = pObj.title ? `Quy định: ${pObj.title}` : "Quy định";
+    moduleName = "Nội quy & Quy định";
+    targetName = titleVal ? `Quy định: ${titleVal}` : "Quy định";
   } else if (path.includes("/wifi")) {
-    module = "Cấu hình Wi-Fi";
-    targetName = pObj.ssid ? `Wi-Fi: ${pObj.ssid}` : "Cấu hình Wi-Fi";
+    moduleName = "Cấu hình Wi-Fi";
+    targetName = ssidVal ? `Wi-Fi: ${ssidVal}` : "Cấu hình Wi-Fi";
   } else if (path.includes("/payroll") || path.includes("/payslips")) {
-    module = "Phiếu lương";
+    moduleName = "Phiếu lương";
     targetName = "Bảng lương & Phiếu lương";
     if (path.includes("/generate")) actionLabel = "Tạo bảng lương";
   }
@@ -153,7 +162,7 @@ function autoLogBacklog(method: string, path: string, payload?: unknown) {
       userRole,
       action,
       actionLabel,
-      module,
+      module: moduleName,
       targetName,
       description: `${actionLabel} đối tượng ${targetName}`,
     }),

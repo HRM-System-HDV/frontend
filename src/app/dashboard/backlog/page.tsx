@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faClockRotateLeft,
@@ -26,25 +26,29 @@ export default function BacklogPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      const data = await fetchBacklogs({
-        action: actionFilter,
-        module: moduleFilter,
-        search: searchQuery,
-      });
-      setLogs(data);
-    } catch {
-      showToast("Không thể tải nhật ký thao tác", "danger");
-    } finally {
-      setLoading(false);
-    }
-  }, [actionFilter, moduleFilter, searchQuery]);
-
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let ignore = false;
+    fetchBacklogs({
+      action: actionFilter,
+      module: moduleFilter,
+      search: searchQuery,
+    })
+      .then((data) => {
+        if (!ignore) {
+          setLogs(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          showToast("Không thể tải nhật ký thao tác", "danger");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [actionFilter, moduleFilter, searchQuery]);
 
   // Danh sách các phân hệ duy nhất để lọc
   const moduleOptions = useMemo(() => {

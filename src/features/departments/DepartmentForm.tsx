@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
@@ -17,21 +17,13 @@ interface Props {
 }
 
 export default function DepartmentModal({ open, onClose, department, employees, onSave, onDelete }: Props) {
-  const [name, setName] = useState("");
-  const [manager, setManager] = useState("");
-  const [status, setStatus] = useState<"hoạt động" | "tạm dừng">("hoạt động");
-
-  useEffect(() => {
-    if (department) {
-      setName(department.name || "");
-      setManager(department.manager ? department.manager.split(/—|-|\(/)[0].trim() : "");
-      setStatus(department.status || "hoạt động");
-    } else {
-      setName("");
-      setManager("");
-      setStatus("hoạt động");
-    }
-  }, [department, employees, open]);
+  const [name, setName] = useState(department?.name || "");
+  const [manager, setManager] = useState(
+    department?.manager ? department.manager.split(/—|-|\(/)[0].trim() : ""
+  );
+  const [status, setStatus] = useState<"hoạt động" | "tạm dừng">(
+    department?.status || "hoạt động"
+  );
 
   const handleSave = () => {
     if (!name.trim()) return;

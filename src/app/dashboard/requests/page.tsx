@@ -14,67 +14,13 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { ShiftRequest, Employee, Branch } from "@/types";
 import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime } from "@/lib/utils";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
   const empName =
@@ -268,8 +214,83 @@ export default function RequestsPage() {
   }, [isManager, managerBranch, branchFilter, statusFilter, typeFilter]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    const effectiveBranch = isManager ? managerBranch : (branchFilter === "all" ? "" : branchFilter);
+    const queryParams = new URLSearchParams();
+    if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
+    if (statusFilter !== "all") queryParams.set("status", statusFilter);
+    if (typeFilter !== "all") queryParams.set("type", typeFilter);
+
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
+
+    Promise.allSettled([
+      apiGet<any[]>(`/api/requests${queryString}`),
+      apiGet<Employee[]>("/api/employees"),
+      apiGet<any>("/api/attendance/config"),
+      apiGet<Branch[]>("/api/branches"),
+    ])
+      .then(([requestsRes, employeesRes, configRes, branchesRes]) => {
+        if (!ignore) {
+          if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
+            setBranches(branchesRes.value);
+          }
+          let employeesData: Employee[] = [];
+          if (employeesRes.status === "fulfilled" && Array.isArray(employeesRes.value)) {
+            employeesData = employeesRes.value;
+          }
+          setEmpList(employeesData);
+
+          const currentEmpMap = new Map<string, string>();
+          for (const e of employeesData) {
+            currentEmpMap.set(e.id, e.name);
+          }
+
+          if (requestsRes.status === "fulfilled" && Array.isArray(requestsRes.value)) {
+            setRequests(requestsRes.value.map((r) => mapBackendRequest(r, currentEmpMap)));
+          }
+
+          if (configRes.status === "fulfilled" && configRes.value) {
+            const c = configRes.value;
+            const mapMode = (m?: string) => {
+              if (!m || m === "manual") return "Nhân viên tự xác nhận";
+              if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
+              return m;
+            };
+            const formatOption = (val: any, fallback: string) => {
+              if (val === 0) return "Không giới hạn";
+              if (val != null) return `${val} lần`;
+              return fallback;
+            };
+            setAttConfig((prev) => ({
+              ...prev,
+              gracePeriod: String(c.gracePeriodMinutes ?? prev.gracePeriod),
+              shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
+              requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
+              allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
+              latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
+              earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
+              earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
+              maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
+              deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
+              maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
+              maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
+            }));
+          }
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : (e as any)?.message || "Không thể tải danh sách yêu cầu từ gateway";
+          setError(msg);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isManager, managerBranch, branchFilter, statusFilter, typeFilter]);
 
   // Lọc hiển thị theo chi nhánh & trạng thái
   const filteredRequests = useMemo(() => {

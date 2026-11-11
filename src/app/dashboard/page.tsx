@@ -26,26 +26,26 @@ export default function DashboardOverviewPage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shiftsCount, setShiftsCount] = useState<number>(0);
 
-  const loadData = async () => {
-    try {
-      const [bData, dData, eData, sData] = await Promise.all([
-        apiGet<Branch[]>("/api/branches").catch(() => []),
-        apiGet<Department[]>("/api/departments").catch(() => []),
-        apiGet<Employee[]>("/api/employees").catch(() => []),
-        apiGet<any[]>("/api/shifts").catch(() => []),
-      ]);
-
-      setBranches(Array.isArray(bData) ? bData : []);
-      setDepartments(Array.isArray(dData) ? dData : []);
-      setEmployees(Array.isArray(eData) ? eData : []);
-      setShiftsCount(Array.isArray(sData) ? sData.length : 0);
-    } catch {
-      // ignore
-    }
-  };
-
   useEffect(() => {
-    loadData();
+    let ignore = false;
+    Promise.all([
+      apiGet<Branch[]>("/api/branches").catch(() => []),
+      apiGet<Department[]>("/api/departments").catch(() => []),
+      apiGet<Employee[]>("/api/employees").catch(() => []),
+      apiGet<any[]>("/api/shifts").catch(() => []),
+    ])
+      .then(([bData, dData, eData, sData]) => {
+        if (!ignore) {
+          setBranches(Array.isArray(bData) ? bData : []);
+          setDepartments(Array.isArray(dData) ? dData : []);
+          setEmployees(Array.isArray(eData) ? eData : []);
+          setShiftsCount(Array.isArray(sData) ? sData.length : 0);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   // Filter if manager

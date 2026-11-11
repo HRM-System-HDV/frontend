@@ -88,94 +88,50 @@ export default function EmployeeDetailModal({
   const [saveError, setSaveError] = useState("");
 
   // 1. Hồ sơ cá nhân & Liên hệ
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [gender, setGender] = useState("Nam");
-  const [birthDate, setBirthDate] = useState("");
+  const [name, setName] = useState(employee?.name || "");
+  const [phone, setPhone] = useState(employee?.phone || "");
+  const [email, setEmail] = useState(employee?.email || "");
+  const [gender, setGender] = useState(employee?.gender || "");
+  const [birthDate, setBirthDate] = useState(formatDate(employee?.birthDate));
 
   // 2. Địa chỉ hiện tại
-  const [province, setProvince] = useState("");
-  const [ward, setWard] = useState("");
-  const [street, setStreet] = useState("");
+  const [province, setProvince] = useState(employee?.province || "");
+  const [ward, setWard] = useState(employee?.ward || "");
+  const [street, setStreet] = useState(employee?.street || "");
 
   // 3. Công tác & Phân quyền
-  const [branch, setBranch] = useState("");
-  const [department, setDepartment] = useState("");
-  const [role, setRole] = useState("");
-  const [systemRole, setSystemRole] = useState<UserRole>("staff");
-  const [status, setStatus] = useState<"đang làm" | "vô hiệu hóa">("đang làm");
-  const [joinDate, setJoinDate] = useState("");
+  const [branch, setBranch] = useState((employee?.branch || "").toUpperCase());
+  const [department, setDepartment] = useState(employee?.department || "");
+  const [role, setRole] = useState(employee?.role || "");
+  const [systemRole, setSystemRole] = useState<UserRole>(employee?.systemRole || "staff");
+  const [status, setStatus] = useState<"đang làm" | "vô hiệu hóa">(employee?.status || "đang làm");
+  const [joinDate, setJoinDate] = useState(formatDate(employee?.joinDate));
 
   // 4. Tiền lương & Ngân hàng
-  const [salaryType, setSalaryType] = useState<"hourly" | "monthly">("monthly");
-  const [hourlySalary, setHourlySalary] = useState<number>(0);
-  const [baseSalary, setBaseSalary] = useState<number>(0);
-  const [bankName, setBankName] = useState("");
-  const [bankAccountNumber, setBankAccountNumber] = useState("");
-  const [bankAccountName, setBankAccountName] = useState("");
+  const [salaryType, setSalaryType] = useState<"hourly" | "monthly">(employee?.salaryType || "monthly");
+  const [hourlySalary, setHourlySalary] = useState<number>(employee?.hourlySalary ?? 0);
+  const [baseSalary, setBaseSalary] = useState<number>(employee?.baseSalary ?? 0);
+  const [bankName, setBankName] = useState(employee?.bankName || "");
+  const [bankAccountNumber, setBankAccountNumber] = useState(employee?.bankAccountNumber || "");
+  const [bankAccountName, setBankAccountName] = useState(employee?.bankAccountName || "");
 
   // 5. Thông tin CCCD
-  const [cccd, setCccd] = useState("");
-  const [issueDate, setIssueDate] = useState("");
-  const [issuePlace, setIssuePlace] = useState("");
-  const [cccdFront, setCccdFront] = useState("");
-  const [cccdBack, setCccdBack] = useState("");
+  const [cccd, setCccd] = useState(employee?.cccd || "");
+  const [issueDate, setIssueDate] = useState(formatDate(employee?.issueDate));
+  const [issuePlace, setIssuePlace] = useState(employee?.issuePlace || "");
+  const [cccdFront, setCccdFront] = useState(typeof employee?.cccdFront === "string" ? employee.cccdFront : "");
+  const [cccdBack, setCccdBack] = useState(typeof employee?.cccdBack === "string" ? employee.cccdBack : "");
   const [uploadingFront, setUploadingFront] = useState(false);
   const [uploadingBack, setUploadingBack] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
   // Avatar
-  const [avatar, setAvatar] = useState("");
+  const [avatar, setAvatar] = useState(employee?.avatar || "");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
-
-  // Đồng bộ dữ liệu khi mở modal hoặc thay đổi employee
-  useEffect(() => {
-    if (employee) {
-      setName(employee.name);
-      setPhone(employee.phone);
-      setEmail(employee.email);
-      setGender(employee.gender || "");
-      setBirthDate(formatDate(employee.birthDate));
-
-      setProvince(employee.province || "");
-      setWard(employee.ward || "");
-      setStreet(employee.street || "");
-
-      setBranch((employee.branch || "").toUpperCase());
-      setDepartment(employee.department || "");
-      setRole(employee.role);
-      setSystemRole(employee.systemRole || "staff");
-      setStatus(employee.status);
-      setJoinDate(formatDate(employee.joinDate));
-
-      setSalaryType(employee.salaryType || "monthly");
-      setHourlySalary(employee.hourlySalary ?? 0);
-      setBaseSalary(employee.baseSalary ?? 0);
-      setBankName(employee.bankName || "");
-      setBankAccountNumber(employee.bankAccountNumber || "");
-      setBankAccountName(employee.bankAccountName || "");
-
-      setCccd(employee.cccd || "");
-      setIssueDate(formatDate(employee.issueDate));
-      setIssuePlace(employee.issuePlace || "");
-      setCccdFront(typeof employee.cccdFront === "string" ? employee.cccdFront : "");
-      setCccdBack(typeof employee.cccdBack === "string" ? employee.cccdBack : "");
-      setAvatar(employee.avatar || "");
-      setUploadingFront(false);
-      setUploadingBack(false);
-      setUploadingAvatar(false);
-      setPreviewImage(null);
-
-      setIsEditing(false);
-      setActiveTab("profile");
-      setSaveError("");
-    }
-  }, [employee, open]);
 
   if (!employee) return null;
 
@@ -1047,8 +1003,8 @@ export default function EmployeeDetailModal({
                         onChange={(e) => setHourlySalary(Number(e.target.value))}
                         placeholder="35000"
                       />
-                      <p className="text-[11px] text-amber-700 mt-1">
-                        * Khi checkout, tiền công ca sẽ bằng: <strong>Số giờ làm × {Number(hourlySalary || 0).toLocaleString()} ₫</strong>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        * Mức lương theo giờ dùng để tổng kết lương tháng. Khi checkout hệ thống ghi nhận công và khấu trừ phạt vi phạm nếu có.
                       </p>
                     </Field>
                   ) : (

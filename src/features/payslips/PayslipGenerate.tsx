@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
@@ -35,15 +35,6 @@ export default function GeneratePayslipModal({ open, onClose, employees, default
   const [month, setMonth] = useState(defaultMonth);
   const [baseSalaryStr, setBaseSalaryStr] = useState("8500000");
   const [bonusStr, setBonusStr] = useState("0");
-
-  useEffect(() => {
-    if (open) {
-      setEmployeeId("all");
-      setMonth(defaultMonth);
-      setBaseSalaryStr("8500000");
-      setBonusStr("0");
-    }
-  }, [open, defaultMonth]);
 
   const handleEmployeeChange = (id: string) => {
     setEmployeeId(id);

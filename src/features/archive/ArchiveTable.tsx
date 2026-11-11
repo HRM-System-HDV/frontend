@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBoxArchive, faEye, faMagnifyingGlass } from "@fortawesome/free-solid-svg-icons";
 import Button from "@/components/ui/Button";
@@ -80,27 +80,24 @@ export default function ArchiveTable({
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setPage(1);
-    setQuery("");
-    setSearchInput("");
-  }, [type]);
-
-  const load = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError("");
-      const result = await listArchive(type, { all: true, q: query });
-      setData(result);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể tải danh sách lưu trữ");
-    } finally {
-      setLoading(false);
-    }
-  }, [type, query]);
-
-  useEffect(() => {
-    load();
-  }, [load, refreshKey]);
+    let ignore = false;
+    listArchive(type, { all: true, q: query })
+      .then((result) => {
+        if (!ignore) {
+          setData(result);
+          setLoading(false);
+        }
+      })
+      .catch((e) => {
+        if (!ignore) {
+          setError(e instanceof Error ? e.message : "Không thể tải danh sách lưu trữ");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [type, query, refreshKey]);
 
   const allItems = data?.items || [];
   const totalPages = Math.max(1, Math.ceil(allItems.length / PAGE_SIZE));

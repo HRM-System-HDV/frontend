@@ -9,60 +9,8 @@ import type { Regulation } from "@/types";
 import RegulationSection from "@/features/regulations/RegulationList";
 import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import { formatDate, getTodayVN } from "@/lib/utils";
-
-// api.ts dùng chung chưa có apiPut/apiDelete (quy tắc phân công: chỉ đọc, không sửa)
-// nên đặt helper cục bộ trong trang, giống tiền lệ các trang employees/payslips/news.
-async function parseEnvelope<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: T }).data;
-  }
-  return body as T;
-}
-
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function todayStr(): string {
   return getTodayVN();
@@ -95,8 +43,24 @@ export default function RegulationsManagementPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    apiGet<Regulation[]>("/api/regulations")
+      .then((data) => {
+        if (!ignore) {
+          setItems(data || []);
+          setLoading(false);
+        }
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          setError(e instanceof GatewayError ? e.message : "Lỗi tải nội quy");
+          setLoading(false);
+        }
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   // Mở modal tạo mới
   const handleOpenCreateModal = () => {
@@ -240,6 +204,7 @@ export default function RegulationsManagementPage() {
       {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}
       {isEditModalOpen && (
         <RegulationFormModal
+          key={editingItem?.id ?? "new"}
           initial={editingItem}
           onClose={() => {
             setIsEditModalOpen(false);

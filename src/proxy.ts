@@ -22,7 +22,7 @@ function isTokenValid(token?: string): boolean {
   }
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const sessionCookie = request.cookies.get("hrm-session");
   const token = sessionCookie?.value;
