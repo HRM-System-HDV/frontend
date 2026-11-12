@@ -12,7 +12,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
-import { Field, Input, Checkbox } from "@/components/ui/Form";
+import { Field, Input } from "@/components/ui/Form";
 import { useCurrentUser } from "@/context/AuthContext";
 import { apiPost } from "@/lib/api";
 
@@ -183,7 +183,7 @@ export default function LoginPage() {
             </Field>
 
             <div className="flex items-center justify-between mb-5">
-              <Checkbox label="Ghi nhớ đăng nhập" defaultChecked />
+              <span className="text-xs text-gray-500">Dành cho quản lý và quản trị viên</span>
               <button
                 type="button"
                 onClick={() => setForgotOpen(true)}
