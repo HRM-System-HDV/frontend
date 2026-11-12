@@ -14,7 +14,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role, branchSlug, logout } = useCurrentUser();
+  const { user, role, branchSlug, logout, loading } = useCurrentUser();
   const groups = buildMenuItems(role);
   const label = roleLabel(role);
   // identity-service đặt roleTitle đúng bằng nhãn quyền khi tài khoản là
@@ -62,7 +62,15 @@ export default function DashboardLayout({
           : undefined
       }
     >
-      {children}
+      {/* Chờ xác định phiên: chưa render nội dung trang để không nháy
+          "Không có quyền truy cập" khi role còn là placeholder. */}
+      {loading ? (
+        <div className="flex items-center justify-center py-24 text-sm text-gray-500">
+          Đang tải dữ liệu phiên làm việc...
+        </div>
+      ) : (
+        children
+      )}
     </DashboardShell>
   );
 }

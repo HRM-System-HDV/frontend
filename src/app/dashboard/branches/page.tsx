@@ -43,6 +43,10 @@ export default function BranchesPage() {
   };
 
   const fetchBranches = useCallback(async () => {
+    if (!canAccessPath(role, "/dashboard/branches")) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -68,6 +72,12 @@ export default function BranchesPage() {
 
   useEffect(() => {
     let ignore = false;
+    // Trang chi nhánh chỉ dành cho admin: kiểm tra TRƯỚC khi gọi API để
+    // manager/staff không bắn 2 request rồi mới thấy thông báo không có quyền.
+    if (!canAccessPath(role, "/dashboard/branches")) {
+      setLoading(false);
+      return;
+    }
     Promise.all([
       apiGet<Branch[]>("/api/branches"),
       apiGet<Employee[]>("/api/employees").catch(() => []),

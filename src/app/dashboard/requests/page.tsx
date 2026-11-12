@@ -50,8 +50,9 @@ function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
   }
 
   const createdDate = r.createdAt ? formatDate(r.createdAt) : "—";
-  const from = r.from || `${createdDate} 08:00`;
-  const to = r.to || `${createdDate} 17:30`;
+  // Đơn không có cột from/to trong model nên không được bịa khung giờ 08:00-17:30.
+  const from = r.from || "—";
+  const to = r.to || "—";
 
   let amount: string | undefined;
   if (r.amount) {
@@ -152,8 +153,9 @@ export default function RequestsPage() {
       const effectiveBranch = branchFilter === "all" ? "" : branchFilter;
       const queryParams = new URLSearchParams();
       if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
-      if (statusFilter !== "all") queryParams.set("status", statusFilter);
-      if (typeFilter !== "all") queryParams.set("type", typeFilter);
+      // Không lọc status/type ở server: mảng trả về phải chứa đủ đơn để badge
+      // đếm đúng (trước đây server lọc trước nên badge "Đã duyệt" luôn 0).
+      // Việc lọc hiển thị vẫn thực hiện ở client (filteredRequests).
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
@@ -181,6 +183,13 @@ export default function RequestsPage() {
 
       if (requestsRes.status === "fulfilled" && Array.isArray(requestsRes.value)) {
         setRequests(requestsRes.value.map((r) => mapBackendRequest(r, currentEmpMap)));
+      } else if (requestsRes.status === "rejected") {
+        // Lỗi mạng/403 không được hiển thị như "không có yêu cầu nào".
+        setError(
+          requestsRes.reason instanceof GatewayError
+            ? requestsRes.reason.message
+            : "Không thể tải danh sách yêu cầu từ gateway"
+        );
       }
 
       if (configRes.status === "fulfilled" && configRes.value) {
@@ -223,8 +232,8 @@ export default function RequestsPage() {
     const effectiveBranch = branchFilter === "all" ? "" : branchFilter;
     const queryParams = new URLSearchParams();
     if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
-    if (statusFilter !== "all") queryParams.set("status", statusFilter);
-    if (typeFilter !== "all") queryParams.set("type", typeFilter);
+    // Xem lý do ở fetchData: lấy đủ đơn (không lọc status/type ở server) để
+    // badge đếm đúng và lọc hiển thị thực hiện ở client.
 
     const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
@@ -252,6 +261,12 @@ export default function RequestsPage() {
 
           if (requestsRes.status === "fulfilled" && Array.isArray(requestsRes.value)) {
             setRequests(requestsRes.value.map((r) => mapBackendRequest(r, currentEmpMap)));
+          } else if (requestsRes.status === "rejected") {
+            setError(
+              requestsRes.reason instanceof GatewayError
+                ? requestsRes.reason.message
+                : "Không thể tải danh sách yêu cầu từ gateway"
+            );
           }
 
           if (configRes.status === "fulfilled" && configRes.value) {

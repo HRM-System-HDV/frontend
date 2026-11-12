@@ -15,6 +15,10 @@ export interface TaskItem {
   priority: TaskPriority;
   assignedToEmail: string;
   assignedToName: string;
+  // Mã nhân viên được giao (id). Backend lưu id để đối chiếu với x-user-id của
+  // người đăng nhập; tên chỉ dùng để hiển thị. Task theo ca (sourceType "shift")
+  // giao cho cả ca nên assignedToId = null.
+  assignedToId?: string | null;
   completedAt?: string;
   createdAt: string;
   requirePhoto?: boolean; // Quản trị viên yêu cầu chụp ảnh kết quả khi hoàn thành

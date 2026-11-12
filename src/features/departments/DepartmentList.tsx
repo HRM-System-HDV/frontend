@@ -88,26 +88,25 @@ export default function DepartmentList({
         <StatusBadge status={d.status === "hoạt động" ? "Hoạt động" : "Bị khóa"} />
       ),
     },
-    ...(!isManager
-      ? [
-          {
-            key: "actions" as keyof Department,
-            header: "Thao tác",
-            render: (d: Department) => (
-              <div className="flex items-center gap-2">
-                {/* Khóa/Xóa chỉ có trong modal chi tiết (DepartmentForm). */}
-                <button
-                  type="button"
-                  onClick={() => onEdit(d)}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-                >
-                  Chi tiết
-                </button>
-              </div>
-            ),
-          },
-        ]
-      : []),
+    // Quản lý cũng mở được "Chi tiết" phòng ban: backend cho quản lý ghi
+    // phòng ban (authorize.js: departments -> MANAGERS), ẩn nút ở đây khiến
+    // quản lý không sửa/khóa/xoá được phòng ban.
+    {
+      key: "actions" as keyof Department,
+      header: "Thao tác",
+      render: (d: Department) => (
+        <div className="flex items-center gap-2">
+          {/* Khóa/Xóa chỉ có trong modal chi tiết (DepartmentForm). */}
+          <button
+            type="button"
+            onClick={() => onEdit(d)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (

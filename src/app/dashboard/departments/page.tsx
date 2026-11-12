@@ -150,6 +150,8 @@ export default function DepartmentsPage() {
       setDeptList((prev) =>
         prev.map((d) => (d.id === lockTarget.id ? { ...d, status: nextStatus as "hoạt động" | "tạm dừng" } : d))
       );
+      // Đồng bộ lại danh sách từ server (số nhân sự/phòng ban có thể đã đổi).
+      await fetchData();
       showToast(
         `Đã chuyển trạng thái "${lockTarget.name}" sang ${nextStatus === "hoạt động" ? "Hoạt động" : "Tạm dừng"}`,
         "success"
@@ -169,6 +171,7 @@ export default function DepartmentsPage() {
       setActionInProgress(true);
       await apiDelete(`/api/departments/${encodeURIComponent(deleteTarget.id)}`);
       setDeptList((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+      await fetchData();
       showToast(`Đã xóa vĩnh viễn phòng ban "${deleteTarget.name}"`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa phòng ban";

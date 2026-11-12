@@ -51,6 +51,8 @@ function toSession(me: AuthMeResponse): UserSession {
 
 // Placeholder khi chưa có phiên. Middleware server-side đã chặn /dashboard
 // khi thiếu cookie nên placeholder này không bao giờ hiện menu thật.
+// Trong lúc `loading` còn true, layout dashboard không render nội dung trang
+// nên trang nào cũng chưa kịp hiện "Không có quyền truy cập" nháy lên.
 const ANONYMOUS_USER: UserSession = {
   userId: "",
   name: "Đang tải...",
@@ -84,12 +86,17 @@ const AuthContext = createContext<AuthContextType>({
   logout: async () => {},
 });
 
-// Staff chỉ dùng app di động: cookie do gateway set khi đăng nhập phải bị xoá
-// ngay để web không còn phiên nửa vời.
-function clearWebSessionCookies() {
-  const expired = "Thu, 01 Jan 1970 00:00:00 GMT";
-  document.cookie = `hrm-session=; path=/; expires=${expired}`;
-  document.cookie = `hrm-refresh=; path=/; expires=${expired}`;
+// Staff chỉ dùng app di động: cookie phiên do gateway set khi đăng nhập phải
+// được vô hiệu hoá ở server (cookie là httpOnly nên JS không xoá được).
+async function clearWebSession() {
+  try {
+    await fetch(`${GATEWAY_URL}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } catch {
+    // Mất mạng: phiên server còn hiệu lực nhưng web vẫn không dùng được.
+  }
 }
 
 async function fetchMe(): Promise<UserSession | null> {
@@ -105,7 +112,8 @@ async function fetchMe(): Promise<UserSession | null> {
     if (!body || typeof body !== "object" || !("data" in body)) return null;
     const session = toSession(body.data as AuthMeResponse);
     if (session.role === "staff") {
-      clearWebSessionCookies();
+      // Cookie là httpOnly nên phải gọi API logout để server xoá phiên.
+      await clearWebSession();
       return null;
     }
     return session;
@@ -191,7 +199,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!data?.user) throw new GatewayError("UNKNOWN", "Phản hồi máy chủ không hợp lệ", 500);
       const session = toSession(data.user);
       if (session.role === "staff") {
-        clearWebSessionCookies();
+        // Cookie là httpOnly nên phải gọi API logout để server xoá phiên.
+        await clearWebSession();
         throw new GatewayError(
           "STAFF_WEB_FORBIDDEN",
           "Tài khoản nhân viên chỉ đăng nhập được trên ứng dụng di động.",

@@ -42,6 +42,7 @@ export interface ShiftRegistrationRecord {
   employeeName: string;
   role: string;
   branch: string;
+  branchSlug?: string;
   date: string;
   templateName: string;
   scheduled: string;

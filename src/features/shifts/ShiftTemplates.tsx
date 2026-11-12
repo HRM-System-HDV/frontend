@@ -36,13 +36,23 @@ export default function ShiftTemplateSection({ templates, onAdd, onEdit, onDelet
       key: "actions",
       header: "Thao tác",
       render: (t) => (
-        <button
-          type="button"
-          onClick={() => onEdit(t)}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-        >
-          Chi tiết
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(t)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(t.id)}
+            title="Xóa khung ca"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-500 hover:text-white transition-all cursor-pointer"
+          >
+            <FontAwesomeIcon icon={faTrashCan} fontSize={13} />
+          </button>
+        </div>
       ),
     },
   ];

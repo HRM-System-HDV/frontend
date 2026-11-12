@@ -30,6 +30,8 @@ export default function DashboardOverviewPage() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [shiftsCount, setShiftsCount] = useState<number>(0);
+  // Lỗi tải dữ liệu: hiển thị rõ thay vì báo "0 nhân sự" như thật.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -40,14 +42,24 @@ export default function DashboardOverviewPage() {
       apiGet<any[]>("/api/shifts").catch(() => []),
     ])
       .then(([bData, dData, eData, sData]) => {
-        if (!ignore) {
-          setBranches(Array.isArray(bData) ? bData : []);
-          setDepartments(Array.isArray(dData) ? dData : []);
-          setEmployees(Array.isArray(eData) ? eData : []);
-          setShiftsCount(Array.isArray(sData) ? sData.length : 0);
+        if (ignore) return;
+        setBranches(Array.isArray(bData) ? bData : []);
+        setDepartments(Array.isArray(dData) ? dData : []);
+        setEmployees(Array.isArray(eData) ? eData : []);
+        setShiftsCount(Array.isArray(sData) ? sData.length : 0);
+        // Danh sách nhân sự rỗng kèm lỗi tải là dấu hiệu mạng/403, không phải
+        // công ty không có người: báo lỗi thay vì hiện "0 nhân sự".
+        if (!Array.isArray(eData)) {
+          setLoadError("Không tải được danh sách nhân sự. Kiểm tra kết nối hoặc quyền truy cập.");
+        } else {
+          setLoadError(null);
         }
       })
-      .catch(() => {});
+      .catch((e: any) => {
+        if (!ignore) {
+          setLoadError(e?.message || "Không tải được dữ liệu bảng điều khiển");
+        }
+      });
     return () => {
       ignore = true;
     };
@@ -101,6 +113,13 @@ export default function DashboardOverviewPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Bảng điều khiển" }]}
       />
+
+      {/* Lỗi tải dữ liệu: không được hiển thị "0 nhân sự" như thật */}
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {loadError}
+        </div>
+      )}
 
       {/* 4 Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

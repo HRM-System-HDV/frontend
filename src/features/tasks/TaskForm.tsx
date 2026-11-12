@@ -72,6 +72,10 @@ export default function CreateTaskModal({
       ? `Tất cả nhân sự trực ${shiftName.split("(")[0].trim()}`
       : (selectedEmployee ? selectedEmployee.name : "Nhân viên");
     const empEmail = isShift ? "shift_all" : assignedToEmail;
+    // Task theo ca giao cho cả ca nên không có một người nhận cụ thể.
+    // Task thường giao theo MÃ nhân viên (id) để backend đối chiếu được với
+    // x-user-id của người đăng nhập; tên chỉ dùng để hiển thị.
+    const empId = isShift ? null : (selectedEmployee ? selectedEmployee.id : null);
     
     // Chi nhánh thực hiện: ưu tiên chọn từ dropdown chi nhánh, hoặc theo nhân viên, hoặc chi nhánh hiện tại
     const finalBranch = isShift
@@ -91,6 +95,7 @@ export default function CreateTaskModal({
       priority,
       assignedToEmail: empEmail,
       assignedToName: empName,
+      assignedToId: empId,
       createdAt: formatDateTime(new Date()),
       requirePhoto,
     };

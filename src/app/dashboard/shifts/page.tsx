@@ -21,10 +21,19 @@ import WeeklyRegistrationSection from "@/features/shifts/WeekWishes";
 import RegistrationHistorySection from "@/features/shifts/RegistrationHistory";
 import TemplateModal from "@/features/shifts/TemplateForm";
 import AssignShiftModal from "@/features/shifts/ShiftAssign";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/context/AuthContext";
 import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime, parseDate, getTodayVN } from "@/lib/utils";
+
+// Thông điệp lỗi cho người dùng: lỗi mạng/403 không được biến thành danh sách
+// rỗng (màn sẽ hiện "không có dữ liệu" như thật).
+function errorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof GatewayError) return reason.message;
+  if (reason instanceof Error && reason.message) return reason.message;
+  return fallback;
+}
 
 function resolveBranchDisplay(
   branchRaw: string | undefined | null,
@@ -306,7 +315,7 @@ function mapToRegistrationRecords(
       const empObj = empList.find((e) => e.id === empId || e.name === empId);
       const empName = empMap.get(empId) || empObj?.name || r.employeeName || empId || "Nhân sự";
       const rawBranch = r.branchSlug || r.branch || empObj?.branch || "—";
-      const { branchName } = resolveBranchDisplay(rawBranch, branchesList);
+      const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
       const role = empObj?.role || r.role || "Nhân viên";
 
       const wishStr = r.wish || r.preference || r.week || "";
@@ -334,6 +343,7 @@ function mapToRegistrationRecords(
         employeeName: empName,
         role,
         branch: branchName,
+        branchSlug,
         date: dateFormatted,
         templateName,
         scheduled,
@@ -454,6 +464,9 @@ export default function ShiftsPage() {
 
       if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
         setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData)));
+      } else if (shiftsRes.status === "rejected") {
+        // Lỗi mạng/403 không được hiển thị như "không có ca nào".
+        setError(errorMessage(shiftsRes.reason, "Không thể tải dữ liệu ca làm việc từ gateway"));
       }
 
       if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
@@ -519,6 +532,8 @@ export default function ShiftsPage() {
               mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData)
             )
           );
+        } else if (shiftsRes.status === "rejected") {
+          setError(errorMessage(shiftsRes.reason, "Không thể tải dữ liệu ca làm việc từ gateway"));
         }
 
         if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
@@ -556,19 +571,24 @@ export default function ShiftsPage() {
       : assignBranch;
   const currentAssignTemplateId = assignTemplateId || templates[0]?.id || "";
 
-  // Manager chỉ thấy dữ liệu chi nhánh mình
+  // Manager chỉ thấy dữ liệu chi nhánh mình: so bằng SLUG (định danh),
+  // tên chi nhánh chỉ để hiển thị.
+  const sameBranch = (a?: string | null, b?: string | null) =>
+    (a || "").toLowerCase().replace(/-/g, "") === (b || "").toLowerCase().replace(/-/g, "");
   const displayedWorkShifts = isManager
-    ? workShiftList.filter((s) => s.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? workShiftList.filter((s) => sameBranch(s.branchSlug || s.branch, branchSlug))
     : workShiftList;
   const displayedRegistrations = isManager
-    ? weeklyRegistrations.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? weeklyRegistrations.filter((r) => sameBranch(r.branchSlug || r.branch, branchSlug))
     : weeklyRegistrations;
   const displayedRegistrationRecords = isManager
-    ? registrationRecords.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? registrationRecords.filter((r) => sameBranch(r.branchSlug || r.branch, branchSlug))
     : registrationRecords;
 
   const [addTemplateOpen, setAddTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplate | null>(null);
+  // Khung ca đang chờ xác nhận xoá (xoá khung ca là thao tác không hoàn tác được).
+  const [pendingTemplateDelete, setPendingTemplateDelete] = useState<ShiftTemplate | null>(null);
   const [assignShiftOpen, setAssignShiftOpen] = useState(false);
 
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -662,39 +682,6 @@ export default function ShiftsPage() {
       setActionInProgress(false);
     }
   };
-
-  // Cập nhật phân công ca (PUT /api/shifts/:id)
-  const handleUpdateShift = async (shiftId: string, payload: Partial<WorkShift>) => {
-    try {
-      setActionInProgress(true);
-      await apiPut(`/api/shifts/${encodeURIComponent(shiftId)}`, payload);
-      setWorkShiftList((prev) =>
-        prev.map((s) => (s.id === shiftId ? { ...s, ...payload } : s))
-      );
-      showToast("Đã cập nhật ca làm việc", "success");
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi cập nhật ca";
-      showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
-    }
-  };
-
-  // Phân công ca trực tiếp cho nhân sự (POST /api/shifts/:id/assign)
-  const handleAssignEmployeeToShift = async (shiftId: string, employeeId: string) => {
-    try {
-      setActionInProgress(true);
-      await apiPost(`/api/shifts/${encodeURIComponent(shiftId)}/assign`, { employeeId });
-      await fetchData();
-      showToast("Đã phân công nhân sự vào ca thành công", "success");
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi phân công nhân sự";
-      showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
-    }
-  };
-
 
   // Chấm công thật cho nhân sự (POST /api/attendance/checkin | /checkout).
   // work-service bắt buộc employeeId; shiftId là id bản ghi Shift để service đồng
@@ -977,20 +964,36 @@ export default function ShiftsPage() {
                 onAdd={openAddTemplate}
                 onEdit={openEditTemplate}
                 onDelete={async (id) => {
-                  try {
-                    await apiDelete(`/api/shift-templates/${encodeURIComponent(id)}`);
-                    setTemplates((prev) => prev.filter((t) => t.id !== id));
-                    showToast("Đã xóa khung ca mẫu", "success");
-                  } catch (e: any) {
-                    const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa khung ca mẫu";
-                    showToast(msg, "danger");
-                  }
+                  const target = templates.find((t) => t.id === id);
+                  setPendingTemplateDelete(target || null);
                 }}
               />
             </div>
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!pendingTemplateDelete}
+        title="Xóa khung ca mẫu"
+        message={`Xóa khung ca "${pendingTemplateDelete?.name || ""}"? Các ca đã phân công theo khung này không bị xóa.`}
+        confirmLabel="Xóa"
+        tone="danger"
+        onCancel={() => setPendingTemplateDelete(null)}
+        onConfirm={async () => {
+          const target = pendingTemplateDelete;
+          setPendingTemplateDelete(null);
+          if (!target) return;
+          try {
+            await apiDelete(`/api/shift-templates/${encodeURIComponent(target.id)}`);
+            setTemplates((prev) => prev.filter((t) => t.id !== target.id));
+            showToast("Đã xóa khung ca mẫu", "success");
+          } catch (e: any) {
+            const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa khung ca mẫu";
+            showToast(msg, "danger");
+          }
+        }}
+      />
 
       <TemplateModal
         open={addTemplateOpen}

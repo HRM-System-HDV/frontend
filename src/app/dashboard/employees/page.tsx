@@ -9,7 +9,6 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
@@ -535,6 +534,8 @@ export default function EmployeesPage() {
           e.id === lockTarget.id ? { ...e, status: "vô hiệu hóa" as const } : e
         )
       );
+      // Đồng bộ lại danh sách từ server (số liệu tổng đã bị backend tính lại).
+      await fetchEmployees();
       showToast(`Đã vô hiệu hóa nhân viên "${lockTarget.name}"`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi vô hiệu hóa nhân viên";
@@ -542,22 +543,6 @@ export default function EmployeesPage() {
     } finally {
       setActionInProgress(false);
       setLockTarget(null);
-    }
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!deleteTarget) return;
-    try {
-      setActionInProgress(true);
-      await apiDelete(`/api/employees/${deleteTarget.id}`);
-      setRawEmployees((prev) => prev.filter((e) => e.id !== deleteTarget.id));
-      showToast(`Đã xóa vĩnh viễn nhân viên "${deleteTarget.name}"`, "success");
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa nhân viên";
-      showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
-      setDeleteTarget(null);
     }
   };
 
@@ -700,6 +685,8 @@ export default function EmployeesPage() {
           setRawEmployees((prev) => prev.filter((e) => e.id !== emp.id));
           showToast(`Đã xóa vĩnh viễn nhân viên "${emp.name}"`, "success");
           setDeleteTarget(null);
+          // Đồng bộ lại danh sách từ server.
+          fetchEmployees();
         }}
       />
     </div>

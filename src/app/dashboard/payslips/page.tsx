@@ -154,7 +154,7 @@ export default function PayslipsPage() {
 
   useEffect(() => {
     let ignore = false;
-    const query = selectedMonth ? `?month=${encodeURIComponent(selectedMonth)}` : "";
+    const query = selectedMonth && selectedMonth !== "all" ? `?month=${encodeURIComponent(selectedMonth)}` : "";
     Promise.all([
       apiGet<PayslipRow[]>(`/api/payroll/payslips${query}`),
       apiGet<EmployeeRow[]>("/api/employees"),
@@ -233,10 +233,11 @@ export default function PayslipsPage() {
   }, []);
 
   // Manager chỉ thấy phiếu của chi nhánh mình (lọc theo branch của employee).
+  // Phiếu không xác định được chi nhánh thì không hiển thị cho manager.
   const visibleSlips = useMemo(() => {
     if (!isManager) return slips;
     const norm = (s: string) => s.toLowerCase().replace("-", "");
-    return slips.filter((p) => !p.branch || norm(p.branch) === norm(branchSlug));
+    return slips.filter((p) => p.branch && norm(p.branch) === norm(branchSlug));
   }, [slips, isManager, branchSlug]);
 
   // Danh sách chi nhánh để map slug -> tên cho nhãn hiển thị (selector, Excel).

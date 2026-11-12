@@ -20,6 +20,14 @@ import { roleLabel } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDateTime, parseDate } from "@/lib/utils";
 
+// Thông điệp lỗi hiển thị cho người dùng: ưu tiên message của gateway,
+// không bao giờ biến lỗi mạng/403 thành danh sách rỗng.
+function errorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof GatewayError) return reason.message;
+  if (reason instanceof Error && reason.message) return reason.message;
+  return fallback;
+}
+
 function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): TaskItem {
   let status: TaskStatus = "pending";
   if (raw.status === "done" || raw.status === "completed") {
@@ -37,7 +45,7 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
     }
   }
 
-  let assignedToName = raw.assignedToName || raw.assignedTo || "Tất cả nhân sự";
+  let assignedToName = raw.assignedToName || "Tất cả nhân sự";
   let assignedToEmail = raw.assignedToEmail || "shift_all";
   let branch = raw.branchSlug || raw.branch || "";
   if (raw.assignedTo && empMap?.has(raw.assignedTo)) {
@@ -151,7 +159,9 @@ export default function TasksPage() {
 
       let employeesData: Employee[] = [];
       if (empRes.status === "fulfilled" && Array.isArray(empRes.value)) {
-        employeesData = empRes.value;
+        // API trả `branchSlug`; các màn khác đọc `branch` nên chuẩn hoá tại đây
+        // để bộ lọc chi nhánh không bị rỗng.
+        employeesData = empRes.value.map((e) => ({ ...e, branch: e.branchSlug ?? e.branch ?? "" }));
       }
       setEmpList(employeesData);
 
@@ -164,6 +174,9 @@ export default function TasksPage() {
 
       if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
         setTasks(tasksRes.value.map((t) => mapBackendTaskToTaskItem(t, currentEmpMap)));
+      } else if (tasksRes.status === "rejected") {
+        // Lỗi mạng/403 không được hiển thị như "không có nhiệm vụ nào".
+        setError(errorMessage(tasksRes.reason, "Không thể tải danh sách nhiệm vụ từ gateway"));
       }
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách nhiệm vụ từ gateway";
@@ -203,7 +216,7 @@ export default function TasksPage() {
         }
         let employeesData: Employee[] = [];
         if (empRes.status === "fulfilled" && Array.isArray(empRes.value)) {
-          employeesData = empRes.value;
+          employeesData = empRes.value.map((e) => ({ ...e, branch: e.branchSlug ?? e.branch ?? "" }));
         }
         setEmpList(employeesData);
 
@@ -216,6 +229,8 @@ export default function TasksPage() {
 
         if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
           setTasks(tasksRes.value.map((t) => mapBackendTaskToTaskItem(t, currentEmpMap)));
+        } else if (tasksRes.status === "rejected") {
+          setError(errorMessage(tasksRes.reason, "Không thể tải danh sách nhiệm vụ từ gateway"));
         }
         setLoading(false);
       })
@@ -310,6 +325,9 @@ export default function TasksPage() {
           return t;
         })
       );
+      // Đồng bộ lại danh sách từ server (nhiệm vụ theo ca giao cho cả ca nên
+      // trạng thái hiển thị phải theo nguồn thật).
+      await fetchData();
       showToast("Đã duyệt hoàn thành nhiệm vụ thành công", "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi duyệt hoàn thành";
@@ -325,6 +343,7 @@ export default function TasksPage() {
       setActionInProgress(true);
       await apiDelete(`/api/tasks/${encodeURIComponent(taskId)}`);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      await fetchData();
       showToast("Đã xóa nhiệm vụ thành công", "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa nhiệm vụ";
@@ -339,7 +358,9 @@ export default function TasksPage() {
     const payload = {
       title: newTask.title,
       description: newTask.description,
-      assignedTo: newTask.assignedToName,
+      // Backend đối chiếu assignedTo với x-user-id nên phải gửi MÃ nhân viên.
+      // Task theo ca không có một người nhận cụ thể nên gửi null.
+      assignedTo: newTask.assignedToId ?? null,
       branchSlug: newTask.branch,
       dueDate: formatDateTime(newTask.dueDate),
       status: "pending",
