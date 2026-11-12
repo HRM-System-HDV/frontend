@@ -1,164 +1,76 @@
-// ============================================================
-// Types cho hệ thống quản lý Nhân sự nội bộ (HRM System - On-Premises)
-// ============================================================
-
+// Hợp đồng DTO của BE; tiền giữ dạng chuỗi Decimal, ngày YYYY-MM-DD và timestamp ISO.
 export type UserRole = "admin" | "manager" | "staff";
-
+export type Money = string;
+export type SalaryType = "hourly" | "monthly";
+export interface UserAccount { id: string; employeeId: string | null; name: string; email: string; systemRole: UserRole; role: UserRole; branchId: string | null }
 export interface Employee {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  gender?: "Nam" | "Nữ" | "Khác" | string;
-  birthDate?: string; // e.g. "15/03/1998"
-
-  // Địa chỉ hiện tại (đồng bộ mobile)
-  province?: string;  // Tỉnh / Thành phố
-  ward?: string;      // Phường
-  street?: string;    // Số nhà / Tên đường
-
-  // Thông tin CCCD / Định danh (đồng bộ mobile)
-  cccd?: string;        // Số CCCD (12 chữ số)
-  issueDate?: string;   // Ngày cấp
-  issuePlace?: string;  // Nơi cấp
-  cccdFront?: string | boolean; // Trạng thái ảnh mặt trước
-  cccdBack?: string | boolean;  // Trạng thái ảnh mặt sau
-  avatar?: string;              // Đường dẫn ảnh đại diện
-
-  // Công tác & Phân quyền
-  branch: string;
-  branchSlug?: string;
-  department: string;
-  role: "Quản trị viên" | "Quản lý" | "Nhân sự" | "Kế toán" | "Lễ tân" | "Kỹ thuật" | string;
-  systemRole: UserRole;
-  status: "đang làm" | "vô hiệu hóa";
-  joinDate?: string;
-
-  // Tiền lương & Ngân hàng
-  baseSalary?: number;
-  salaryType?: "hourly" | "monthly";
-  hourlySalary?: number;
-  bankName?: string;
-  bankAccountNumber?: string;
-  bankAccountName?: string;
+  id: string; employeeCode: string; name: string; email: string;
+  phone?: string | null; gender?: string | null; birthDate?: string | null;
+  province?: string | null; ward?: string | null; street?: string | null;
+  cccd?: string | null; issueDate?: string | null; issuePlace?: string | null;
+  cccdFront?: string | null; cccdBack?: string | null; avatar?: string | null;
+  branchId: string | null; departmentId: string | null; positionId: string | null;
+  status: string; resignedAt?: string | null; joinDate?: string | null;
+  salaryType: SalaryType; salary: Money; standardWorkDays: number | null;
+  bankName?: string | null; bankAccountNumber?: string | null; bankAccountName?: string | null; createdAt?: string;
 }
-
-export interface ShiftRequest {
-  id: string;
-  employee: string;
-  branch: string;
-  type: "đổi ca" | "nghỉ phép" | "bổ sung công" | "tạm ứng";
-  title?: string;
-  amount?: string;
-  from: string;
-  to: string;
-  reason: string;
-  status: "chờ duyệt" | "đã duyệt" | "từ chối";
-  createdAt?: string;
-}
-
-export interface Payslip {
-  id: string;
-  employee: string;
-  branch?: string;
-  month: string;
-  days: number;
-  salary: number;
-  bonus: number;
-  penalty: number;
-  total: number;
-  status: "chưa chốt" | "đã chốt";
-  reason?: string;
-}
-
+export interface Branch { id: string; branchCode: string; name: string; address?: string | null; managerId?: string | null; status: string; createdAt?: string }
+export interface Department { id: string; departmentCode: string; name: string; managerId?: string | null; status: string; createdAt?: string }
+export interface Position { id: string; positionCode: string; name: string; departmentId?: string | null; status: string; createdAt?: string }
+export interface ShiftTemplate { id: string; templateCode: string; name: string; startTime: string; endTime: string; createdAt?: string }
 export interface Shift {
-  id: string;
-  employee: string;
-  branch: string;
-  date: string;
-  template: string;
-  scheduled: string;
-  checkIn?: string;
-  checkOut?: string;
-  status: "hoàn thành" | "đang làm" | "vắng" | "trễ";
+  id: string; employeeId: string; workDate: string; templateId: string;
+  scheduledStart: string; scheduledEnd: string; note?: string | null;
+  status: "đang làm" | "đã hủy"; createdAt?: string; attendance?: Attendance | null;
 }
-
-export interface WifiConfig {
-  id: string;
-  ssid: string;
-  bssid: string;
-  branch: string;
-  status: string;
+export interface ShiftRegistration { id: string; employeeId: string; branchId?: string | null; registerDate: string; templateId: string; createdAt?: string }
+export interface Attendance {
+  id: string; employeeId: string; shiftId: string; workDate: string;
+  checkIn: string | null; checkOut: string | null; penaltyAmount: Money;
+  penaltyNote?: string | null; status: string; createdAt?: string; shift?: Shift;
+  complete?: boolean; workedSeconds?: number; earnedSalary?: Money;
 }
-
-export interface Branch {
-  id: string;
-  name: string;
-  slug: string;
-  address: string;
-  manager: string;
-  status: "hoạt động" | "vô hiệu hóa";
-  staff: number;
+export interface AttendanceConfig {
+  id?: string;
+  gracePeriodMinutes: number; earlyCheckinMinutes: number; checkoutWindowMinutes: number;
+  latePenaltyPct: number; earlyLeavePenaltyPct: number; allowDoubleCheckin: boolean;
+  doubleCheckinEarlyMinutes: number; doubleCheckinLateMinutes: number;
+  shiftSwapMode: "manager_approval" | "mutual_acceptance"; requireReasonSwap: boolean;
 }
-
-export interface Department {
-  id: string;
-  name: string;
-  /** Mã phòng ban do hệ thống tự sinh (PB-0001), client không tự nhập. */
-  code: string;
-  manager: string;
-  status: "hoạt động" | "tạm dừng";
-  staff?: number;
-  createdAt?: string;
+export interface Task {
+  id: string; title: string; description?: string | null; assignedTo: string | null;
+  branchId?: string | null; workDate?: string | null; templateId?: string | null; dueDate?: string | null;
+  assignedBy?: string | null; assignedByName?: string | null; assignedToName?: string | null; shiftName?: string | null;
+  status: "pending" | "in_progress" | "done"; priority?: string | null;
+  requirePhoto: boolean; proofPhotoUrl?: string | null; photoSubmittedBy?: string | null;
+  photoSubmittedAt?: string | null; completedAt?: string | null; createdAt?: string;
 }
-
-export interface Notification {
-  id: string;
-  title: string;
-  /** Tên trường thật của API integration-service (không phải `content`). */
-  body: string;
-  /** ISO/định dạng gốc server trả về (không phải `time`). */
-  createdAt: string;
-  /** Cờ đã đọc theo schema DB (không phải `read`). */
-  isRead: boolean;
-  icon?: string;
-  tone?: "primary" | "info" | "danger" | "warning" | "success";
+export type RequestType = "leave" | "advance" | "shift_swap" | "work_supplement";
+export interface RequestRecord {
+  id: string; type: RequestType; employeeId: string; targetEmployeeId?: string | null; branchId: string | null;
+  title: string; content: string; attachmentUrl?: string | null;
+  leaveStartDate?: string | null; leaveEndDate?: string | null; advanceAmount?: Money | null;
+  requestedCheckIn?: string | null; requestedCheckOut?: string | null;
+  status: "pending" | "approved" | "rejected"; reviewedBy?: string | null;
+  reviewedByName?: string | null; reviewedAt?: string | null; reviewNote?: string | null;
+  sourceShiftId?: string | null; targetShiftId?: string | null;
+  shiftSwapMode?: "manager_approval" | "mutual_acceptance" | null; createdAt: string;
 }
-
-export interface Announcement {
-  id: string;
-  title: string;
-  summary: string;
-  content: string;
-  date: string;
-  tag: string;
+export type PayslipStatus = "pending_confirmation" | "confirmed" | "paid";
+export interface Payslip {
+  id: string; employeeId: string; branchId: string | null; month: string;
+  baseSalary: Money; bonus: Money; totalPenalty: Money; netSalary: Money;
+  salaryType: SalaryType; salaryRate: Money; workedHours?: Money | null;
+  status: PayslipStatus; confirmedBy?: string | null; confirmedAt?: string | null;
+  payoutId?: string | null; issuedAt: string;
 }
-
-export type RegulationCategory =
-  | "Nội quy lao động"
-  | "An toàn lao động"
-  | "Chấm công & Kỷ luật"
-  | "Thưởng & Kỷ luật"
-  | "Bảo mật & Dữ liệu"
-  | "Vận hành chung"
-  | string;
-
+export interface BankAccount { id: string; accountNumber: string; accountName?: string | null; bankName?: string | null; branchId?: string | null; balance: Money; isPrimary: boolean; createdAt?: string }
+export interface Payout { id: string; bankReference: string; debitAccountId: string | null; debitAccountNumber?: string | null; totalAmount: Money; beneficiaryCount: number; content?: string | null; idempotencyKey: string; status: string; createdAt: string; payslips?: { id: string }[]; deduped?: boolean }
+export interface SoapGatewayConfig { id?: string; endpointUrl: string; wsdlUrl: string; serviceName: string; securityMode: string; status: string; lastPingTime?: string | null; avgResponseTime?: string | null; certExpiry?: string | null }
+export interface Notification { id: string; targetEmployeeId: string; branchId: string | null; title: string; body: string; isRead: boolean; createdAt: string; requestId?: string | null; requestType?: RequestType | null; metadata?: Record<string, unknown> | null; senderName?: string | null }
+export interface News { id: string; title: string; summary: string; content: string; publishDate: string; tag: string; pinned: boolean; branchId: string | null; authorId?: string | null; authorName?: string | null; createdAt?: string }
+export type RegulationCategory = string;
 export type RegulationStatus = "hiệu lực" | "dự thảo" | "hết hiệu lực";
-
-export interface Regulation {
-  id: string;
-  code: string;
-  title: string;
-  category: RegulationCategory;
-  summary: string;
-  content: string;
-  status: RegulationStatus;
-  scope: string; // "Toàn công ty" | "HN-1" | "HN-2" ...
-  effectiveDate: string; // dd/mm/yyyy
-  expiryDate?: string;
-  createdAt: string;
-  updatedAt: string;
-  version: string;
-  pinned?: boolean;
-  attachments?: number;
-}
+export interface FileAsset { id: string; publicId: string; folder: string; storagePath: string; mime: string; bytes: number; regulationId?: string | null; createdAt?: string; url?: string }
+export interface Regulation { id: string; regulationCode: string; title: string; category: string; summary: string; content: string; status: RegulationStatus; scopeBranchId: string | null; effectiveDate: string; expiryDate?: string | null; version: string; pinned: boolean; createdAt?: string; files?: FileAsset[] }
+export interface WifiConfig { id: string; ssid: string; bssid: string; branchId: string; status: "hoạt động" | "vô hiệu hóa"; createdAt?: string }

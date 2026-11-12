@@ -1,190 +1,44 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import type { NewsItem } from "@/features/news/types";
-import NewsSection from "@/features/news/NewsList";
-import NewsDetailModal from "@/features/news/NewsDetail";
-import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
-import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import Modal from "@/components/ui/Modal";
+import { Input, Select } from "@/components/ui/Form";
 import { useCurrentUser } from "@/context/AuthContext";
-import { getTodayVN } from "@/lib/utils";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import NewsForm, { type NewsPayload } from "@/features/news/NewsForm";
+import NewsList from "@/features/news/NewsList";
+import NewsDetail from "@/features/news/NewsDetail";
+import type { News, Branch } from "@/types";
 
 export default function NewsPage() {
-  const { role } = useCurrentUser();
-  // Đăng/ghim/xóa tin là WRITE /api/news = manager + admin; nhân viên chỉ đọc.
-  const canWriteNews = role !== "staff";
-
-  const [newsList, setNewsList] = useState<NewsItem[]>([]);
+  const { role, branchId } = useCurrentUser();
+  const [items, setItems] = useState<News[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<NewsItem | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await apiGet<NewsItem[]>("/api/news");
-      setNewsList(data || []);
-    } catch (e) {
-      setError(e instanceof GatewayError ? e.message : "Lỗi tải bảng tin");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-    apiGet<NewsItem[]>("/api/news")
-      .then((data) => {
-        if (!ignore) {
-          setNewsList(data || []);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          setError(e instanceof GatewayError ? e.message : "Lỗi tải bảng tin");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const handleOpenCreate = () => {
-    setEditingItem(null);
-    setModalOpen(true);
-  };
-
-  const handleOpenEdit = (item: NewsItem) => {
-    setSelectedNews(null);
-    setEditingItem(item);
-    setModalOpen(true);
-  };
-
-  const handleSubmit = async (payload: NewsFormPayload) => {
-    setSaving(true);
-    try {
-      if (editingItem) {
-        const updated = await apiPut<NewsItem>(`/api/news/${editingItem.id}`, payload);
-        setNewsList((prev) => prev.map((n) => (n.id === editingItem.id ? updated : n)));
-        if (selectedNews?.id === editingItem.id) setSelectedNews(updated);
-      } else {
-        const created = await apiPost<NewsItem>("/api/news", {
-          ...payload,
-          date: getTodayVN(),
-        });
-        setNewsList((prev) => [created, ...prev]);
-      }
-      setModalOpen(false);
-      setEditingItem(null);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi lưu thông báo.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleTogglePin = async (id: string) => {
-    const target = newsList.find((n) => n.id === id);
-    if (!target) return;
-    try {
-      const updated = await apiPut<NewsItem>(`/api/news/${id}`, { pinned: !target.pinned });
-      setNewsList((prev) => prev.map((n) => (n.id === id ? updated : n)));
-      if (selectedNews?.id === id) setSelectedNews(updated);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi ghim thông báo.");
-    }
-  };
-
-  const handleDeleteNews = async (id: string, title?: string) => {
-    const target = newsList.find((n) => n.id === id);
-    const displayTitle = title || target?.title || "";
-    if (!confirm(`Bạn có chắc chắn muốn xóa thông báo "${displayTitle}" không?`)) return;
-    try {
-      await apiDelete(`/api/news/${id}`);
-      setNewsList((prev) => prev.filter((n) => n.id !== id));
-      if (selectedNews?.id === id) setSelectedNews(null);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi xóa thông báo.");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        actions={
-          <div className="flex items-center gap-2">
-            {canWriteNews && (
-              <Button
-                variant="primary"
-                onClick={handleOpenCreate}
-                className="flex items-center gap-1.5"
-              >
-                <FontAwesomeIcon icon={faPlus} fontSize={18} />
-                Đăng thông báo mới
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center justify-between gap-3">
-          <span>{error}</span>
-          <Button variant="white" onClick={fetchData} className="text-xs shrink-0">
-            Thử lại
-          </Button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 animate-pulse space-y-3">
-          <div className="h-4 bg-gray-100 rounded w-1/3" />
-          <div className="h-8 bg-gray-100 rounded w-full" />
-          <div className="h-8 bg-gray-100 rounded w-full" />
-          <div className="text-xs text-gray-500">Đang tải bảng tin qua Gateway...</div>
-        </div>
-      ) : (
-        <NewsSection
-          items={newsList}
-          onSelect={setSelectedNews}
-          onEdit={canWriteNews ? handleOpenEdit : undefined}
-          onTogglePin={canWriteNews ? handleTogglePin : undefined}
-        />
-      )}
-
-      {/* Modal xem chi tiết thông báo — chỗ duy nhất có nút xóa */}
-      <NewsDetailModal
-        item={selectedNews}
-        onClose={() => setSelectedNews(null)}
-        onEdit={canWriteNews ? handleOpenEdit : undefined}
-        onDelete={canWriteNews ? handleDeleteNews : undefined}
-        onTogglePin={canWriteNews ? handleTogglePin : undefined}
-      />
-
-      {/* Modal tạo/sửa thông báo */}
-      {modalOpen && (
-        <CreateNewsModal
-          key={editingItem?.id ?? "new"}
-          open={modalOpen}
-          onClose={() => {
-            setModalOpen(false);
-            setEditingItem(null);
-          }}
-          initial={editingItem}
-          saving={saving}
-          onSubmit={handleSubmit}
-        />
-      )}
-    </div>
-  );
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<News | null | undefined>();
+  const [selected, setSelected] = useState<News | null>(null);
+  const [deleting, setDeleting] = useState<News | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [scope, setScope] = useState("all");
+  const canWrite = (item?: News) => role === "admin" || role === "manager" && !!branchId && (!item || item.branchId === branchId);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const [news, units] = await Promise.all([apiGet<News[]>("/api/news"), apiGet<Branch[]>("/api/branches")]); setItems(news); setBranches(units); } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải bản tin."); } finally { setLoading(false); } }, []);
+  useEffect(() => { if (role === "admin" || role === "manager") void load(); }, [role, load]);
+  if (role !== "admin" && role !== "manager") return <p>Không có quyền truy cập.</p>;
+  function update(row: News) { setItems(old => old.map(n => n.id === row.id ? row : n)); if (selected?.id === row.id) setSelected(row); }
+  async function save(payload: NewsPayload) { const row = editing ? await apiPut<News>(`/api/news/${editing.id}`, payload) : await apiPost<News>("/api/news", payload); if (editing) update(row); else setItems(old => [row, ...old]); setNotice("Đã lưu bản tin."); }
+  async function pin() { if (!selected || busy) return; setBusy(true); setError(""); try { update(await apiPut<News>(`/api/news/${selected.id}`, { pinned: !selected.pinned })); setNotice("Đã cập nhật ghim bản tin."); } catch (e) { setError(e instanceof Error ? e.message : "Không thể ghim."); } finally { setBusy(false); } }
+  async function remove() { if (!deleting || busy) return; setBusy(true); setError(""); try { await apiDelete(`/api/news/${deleting.id}`); setItems(old => old.filter(n => n.id !== deleting.id)); setDeleting(null); setSelected(null); setNotice("Đã xóa bản tin."); } catch (e) { setError(e instanceof Error ? e.message : "Không thể xóa."); } finally { setBusy(false); } }
+  const filtered = items.filter(n => (role === "admin" || !n.branchId || n.branchId === branchId) && (scope === "all" || (scope === "global" ? !n.branchId : n.branchId === scope)) && `${n.title} ${n.summary} ${n.content}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  return <div className="space-y-4"><PageHeader title="Bảng tin nội bộ" actions={canWrite() ? <Button onClick={() => setEditing(null)}>Đăng bản tin</Button> : undefined} />
+    {error && <p role="alert" className="text-red-700">{error}<Button variant="link" onClick={load}>Thử lại</Button></p>}{notice && <p role="status" className="text-green-700">{notice}</p>}
+    <div className="flex flex-wrap gap-3"><Input aria-label="Tìm bản tin" className="sm:max-w-sm" placeholder="Tìm nội dung..." value={search} onChange={e => setSearch(e.target.value)} /><Select aria-label="Lọc phạm vi" className="sm:max-w-xs" value={scope} onChange={e => setScope(e.target.value)}><option value="all">Tất cả phạm vi</option><option value="global">Toàn công ty</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select></div>
+    {loading ? <p role="status">Đang tải bảng tin...</p> : <NewsList items={filtered} branches={branches} onSelect={setSelected} />}
+    {editing !== undefined && canWrite(editing ?? undefined) && <NewsForm key={editing?.id ?? "new"} item={editing} branches={branches} managerBranchId={role === "manager" ? branchId : undefined} onSave={save} onClose={() => setEditing(undefined)} />}
+    {selected && <NewsDetail item={selected} canWrite={canWrite(selected)} busy={busy} onClose={() => setSelected(null)} onEdit={() => { setEditing(selected); setSelected(null); }} onDelete={() => { setDeleting(selected); setSelected(null); }} onPin={pin} />}
+    {deleting && <Modal open title="Xóa bản tin" onClose={() => !busy && setDeleting(null)} footer={<><Button variant="white" disabled={busy} onClick={() => setDeleting(null)}>Hủy</Button><Button variant="danger" disabled={busy} onClick={remove}>{busy ? "Đang xóa..." : "Xác nhận xóa"}</Button></>}><p>Xóa bản tin “{deleting.title}”?</p>{error && <p role="alert" className="text-red-700">{error}</p>}</Modal>}
+  </div>;
 }

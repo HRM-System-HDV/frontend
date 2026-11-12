@@ -32,6 +32,8 @@ interface NotificationPanelProps {
   notifications: NotificationItem[];
   onMarkRead?: (id: string) => void;
   onMarkAllRead?: () => void;
+  error?: string;
+  busy?: boolean;
 }
 
 export default function NotificationPanel({
@@ -40,16 +42,11 @@ export default function NotificationPanel({
   notifications,
   onMarkRead,
   onMarkAllRead,
+  error,
+  busy,
 }: NotificationPanelProps) {
-  const [items, setItems] = useState(notifications);
   const [tab, setTab] = useState<"all" | "unread">("all");
-  const [prevNotifications, setPrevNotifications] = useState(notifications);
-
-  // Đồng bộ lại khi prop notifications thay đổi (pattern React khuyến nghị)
-  if (prevNotifications !== notifications) {
-    setPrevNotifications(notifications);
-    setItems(notifications);
-  }
+  const items = notifications;
 
   useEffect(() => {
     if (!open) return;
@@ -66,12 +63,10 @@ export default function NotificationPanel({
   const unreadCount = items.filter((n) => !n.isRead).length;
 
   const markAllRead = () => {
-    setItems((prev) => prev.map((n) => ({ ...n, isRead: true })));
     onMarkAllRead?.();
   };
 
   const markRead = (id: string) => {
-    setItems((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
     onMarkRead?.(id);
   };
 
@@ -101,6 +96,7 @@ export default function NotificationPanel({
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
+                disabled={busy}
                 className="flex items-center gap-1 text-xs font-medium text-primary hover:underline cursor-pointer"
                 title="Đánh dấu tất cả là đã đọc"
               >
@@ -142,6 +138,7 @@ export default function NotificationPanel({
         </div>
 
         {/* Notification Item List */}
+        {error && <p role="alert" className="px-4 py-2 text-xs text-red-700 bg-red-50">{error}</p>}
         <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
           {list.length === 0 ? (
             <div className="text-center py-10 px-4 text-gray-400">
@@ -153,6 +150,7 @@ export default function NotificationPanel({
               <button
                 key={n.id}
                 onClick={() => markRead(n.id)}
+                disabled={busy || n.isRead}
                 className={cn(
                   "w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer block",
                   !n.isRead ? "bg-primary-50/30" : "bg-white"

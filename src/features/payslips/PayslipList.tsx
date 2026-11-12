@@ -1,143 +1,20 @@
 "use client";
-
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faLock, faPencil } from "@fortawesome/free-solid-svg-icons";
-import Badge, { StatusBadge } from "@/components/ui/Badge";
-import Table, { Column } from "@/components/ui/Table";
+import type { Payslip } from "@/types";
+import Table from "@/components/ui/Table";
 import Button from "@/components/ui/Button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Select } from "@/components/ui/Form";
-import { formatVND } from "@/lib/utils";
-import type { Payslip } from "@/types";
-
-interface Props {
-  payslips: Payslip[];
-  onEdit?: (p: Payslip) => void;
-  onCloseOne?: (p: Payslip) => void;
-  onPrint: (p: Payslip) => void;
-  onBulkClose?: () => void;
-  onGenerate?: () => void;
-  selectedMonth: string;
-  onMonthChange: (month: string) => void;
-  monthOptions: string[];
-}
-
-export default function PayslipSection({
-  payslips,
-  onEdit,
-  onCloseOne,
-  onPrint,
-  onBulkClose,
-  onGenerate,
-  selectedMonth,
-  onMonthChange,
-  monthOptions,
-}: Props) {
-  const columns: Column<Payslip>[] = [
-    {
-      key: "employee",
-      header: "Nhân viên",
-      render: (p) => <span className="font-semibold text-gray-800">{p.employee}</span>,
-    },
-    {
-      key: "month",
-      header: "Kỳ lương",
-      render: (p) => <Badge tone="gray">{p.month}</Badge>,
-    },
-    {
-      key: "days",
-      header: "Công",
-      render: (p) => (
-        <span className="text-gray-600">
-          {p.days > 0 ? `${p.days} ngày` : "—"}
-        </span>
-      ),
-    },
-    {
-      key: "salary",
-      header: "Lương cơ bản",
-      render: (p) => <span className="text-gray-700">{formatVND(p.salary)}</span>,
-    },
-    {
-      key: "bonus",
-      header: "Thưởng",
-      render: (p) => <span className="text-success">{formatVND(p.bonus)}</span>,
-    },
-    {
-      key: "penalty",
-      header: "Phạt",
-      render: (p) => <span className="text-danger">{formatVND(p.penalty)}</span>,
-    },
-    {
-      key: "total",
-      header: "Tổng lương",
-      render: (p) => <span className="font-bold text-gray-800">{formatVND(p.total)}</span>,
-    },
-    {
-      key: "status",
-      header: "Trạng thái",
-      render: (p) => <StatusBadge status={p.status} />,
-    },
-    // Chỉ người được ghi phiếu lương (admin) thấy "Chi tiết" vì nó mở form điều
-    // chỉnh thưởng/phạt — manager/staff chỉ xem, không bấm rồi ăn 403.
-    ...(onEdit
-      ? [
-          {
-            key: "actions",
-            header: "Thao tác",
-            render: (p: Payslip) => (
-              <button
-                type="button"
-                onClick={() => onEdit(p)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-              >
-                Chi tiết
-              </button>
-            ),
-          } as Column<Payslip>,
-        ]
-      : []),
-  ];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Phiếu lương theo tháng</CardTitle>
-        <div className="flex items-center gap-2 flex-wrap">
-          <Select
-            className="w-auto py-1.5"
-            value={selectedMonth}
-            onChange={(e) => onMonthChange(e.target.value)}
-          >
-            <option value="all">Tất cả các kỳ</option>
-            {monthOptions.map((m) => (
-              <option key={m} value={m}>
-                Tháng {m}
-              </option>
-            ))}
-          </Select>
-
-          {onGenerate && (
-            <Button size="sm" variant="white" onClick={onGenerate}>
-              <FontAwesomeIcon icon={faPencil} fontSize={14} /> Tạo phiếu lương tháng
-            </Button>
-          )}
-
-          {onBulkClose && (
-            <Button size="sm" onClick={onBulkClose}>
-              <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
-            </Button>
-          )}
-        </div>
-      </CardHeader>
-      <CardBody className="pt-2">
-        <Table
-          columns={columns}
-          data={payslips}
-          rowKey={(p) => p.id}
-          emptyMessage="Chưa có phiếu lương nào"
-        />
-      </CardBody>
-    </Card>
-  );
+import { money, labels } from "./model";
+export default function PayslipList({ slips, names, onView, onConfirm }: {
+    slips: Payslip[];
+    names: Map<string, string>;
+    onView: (p: Payslip) => void;
+    onConfirm?: (p: Payslip) => void;
+}) {
+    return <Card><CardHeader><CardTitle>Phiếu lương theo tháng</CardTitle></CardHeader><CardBody><Table data={slips} rowKey={p => p.id} columns={[
+            { key: "employeeId", header: "Nhân viên", render: p => names.get(p.employeeId) || p.employeeId }, { key: "month", header: "Kỳ lương" },
+            { key: "baseSalary", header: "Lương tích lũy", render: p => money(p.baseSalary) }, { key: "bonus", header: "Thưởng", render: p => money(p.bonus) },
+            { key: "totalPenalty", header: "Phạt", render: p => money(p.totalPenalty) }, { key: "netSalary", header: "Thực lĩnh", render: p => <strong>{money(p.netSalary)}</strong> },
+            { key: "status", header: "Trạng thái", render: p => labels[p.status] },
+            { key: "actions", header: "Thao tác", render: p => <div className="flex gap-2"><Button size="sm" variant="white" onClick={() => onView(p)}>Chi tiết</Button>{onConfirm && p.status === "pending_confirmation" && <Button size="sm" onClick={() => onConfirm(p)}>Xác nhận</Button>}</div> }
+        ]}/></CardBody></Card>;
 }

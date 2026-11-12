@@ -1,174 +1,29 @@
 "use client";
-
-import { useEffect, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faPen,
-  faThumbtack,
-  faTrashCan,
-} from "@fortawesome/free-solid-svg-icons";
+import { useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
-import Badge from "@/components/ui/Badge";
-import { apiGet } from "@/lib/api";
-import type { Regulation, Branch } from "@/types";
-import { getStatusTone, getCategoryColor } from "./helpers";
+import { apiGet, apiPost, GATEWAY_URL } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-
-interface Props {
-  item: Regulation | null;
-  onClose: () => void;
-  onEdit?: (item: Regulation) => void;
-  onDelete?: (id: string, title?: string) => void;
-  onTogglePin?: (id: string) => void;
-}
-
-export default function RegulationDetailModal({
-  item,
-  onClose,
-  onEdit,
-  onDelete,
-  onTogglePin,
-}: Props) {
-  // Component không nhận branches từ page cha (page không fetch) -> tự tải
-  // bảng chi nhánh để map slug -> tên, giống RegulationList.
-  const [branches, setBranches] = useState<Branch[]>([]);
-
-  useEffect(() => {
-    apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
-  }, []);
-
-  const getBranchDisplayName = (slug?: string) =>
-    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
-
-  return (
-    <Modal
-      open={!!item}
-      onClose={onClose}
-      title={
-        item ? (
-          <div className="flex flex-wrap items-center gap-2.5">
-            <h5 className="mb-0 font-bold text-base md:text-lg text-slate-800">
-              {item.title}
-            </h5>
-            <span
-              className={`text-xs font-semibold px-2 py-0.5 rounded-md border ${getCategoryColor(
-                item.category
-              )}`}
-            >
-              {item.category}
-            </span>
-            <Badge tone={getStatusTone(item.status)} dot>
-              {item.status.toUpperCase()}
-            </Badge>
-            {item.pinned && (
-              <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
-                <FontAwesomeIcon icon={faThumbtack} fontSize={12} /> Đã ghim
-              </span>
-            )}
-            <span className="text-xs text-slate-500 font-medium">
-              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scope)}</strong>
-            </span>
-            <span className="text-xs text-slate-500 font-medium">
-              Hiệu lực: <strong className="text-slate-700">{formatDate(item.effectiveDate)}</strong>
-            </span>
-          </div>
-        ) : (
-          "Chi tiết nội quy"
-        )
-      }
-      size="lg"
-      footer={
-        <div className="flex items-center justify-between w-full">
-          <div>
-            {item && onDelete && (
-              <Button
-                variant="danger"
-                onClick={() => {
-                  onClose();
-                  onDelete(item.id, item.title);
-                }}
-                className="flex items-center gap-1.5"
-              >
-                <FontAwesomeIcon icon={faTrashCan} fontSize={14} />
-                Xóa văn bản
-              </Button>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {item && onTogglePin && (
-              <Button
-                variant="outline"
-                onClick={() => onTogglePin(item.id)}
-                className={`flex items-center gap-1.5 ${
-                  item.pinned
-                    ? "text-amber-600 border-amber-300 bg-amber-50 hover:bg-amber-100"
-                    : "text-slate-600 hover:text-slate-800"
-                }`}
-              >
-                <FontAwesomeIcon icon={faThumbtack} fontSize={14} />
-                {item.pinned ? "Bỏ ghim" : "Ghim đầu trang"}
-              </Button>
-            )}
-            {item && onEdit && (
-              <Button
-                variant="outline"
-                onClick={() => onEdit?.(item)}
-                className="flex items-center gap-1.5"
-              >
-                <FontAwesomeIcon icon={faPen} fontSize={14} />
-                Sửa văn bản
-              </Button>
-            )}
-            <Button variant="primary" onClick={onClose}>
-              Đóng
-            </Button>
-          </div>
-        </div>
-      }
-    >
-      {item && (
-        <div className="space-y-5 text-slate-800">
-          {/* Tóm tắt */}
-          <div>
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Mục đích & Tóm tắt:
-            </h4>
-            <p className="text-sm bg-blue-50/60 p-3.5 rounded-lg border border-blue-100 text-slate-700 italic">
-              {item.summary}
-            </p>
-          </div>
-
-          {/* Toàn văn điều khoản */}
-          <div>
-            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-              Toàn văn điều khoản nội quy:
-            </h4>
-            <div className="bg-white p-4 rounded-xl border border-slate-200 text-sm whitespace-pre-line leading-relaxed font-sans text-slate-800 max-h-[400px] overflow-y-auto">
-              {item.content}
-            </div>
-          </div>
-
-          {/* Tài liệu đính kèm */}
-          {item.attachments && item.attachments > 0 && (
-            <div>
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-                Tài liệu đính kèm ban hành:
-              </h4>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
-                  <span className="flex items-center gap-2 font-medium text-slate-700">
-                    📄 {item.code}_Chinh_Thuc_Ky_Duyet.pdf
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => alert("Đang tải file PDF...")}>
-                    Tải về (1.2 MB)
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </Modal>
-  );
+import type { Regulation } from "@/types";
+export default function RegulationDetail({ item, canWrite, busy, onClose, onEdit, onDelete, onPin, onUploaded }: { item: Regulation; canWrite: boolean; busy: boolean; onClose: () => void; onEdit: () => void; onDelete: () => void; onPin: () => void; onUploaded: (item: Regulation) => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState("");
+  async function upload(file?: File) {
+    if (!file || uploading) return;
+    if (file.type !== "application/pdf") { setError("Vui lòng chọn tệp PDF."); return; }
+    setUploading(true); setError("");
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = () => reject(new Error("Không đọc được tệp.")); reader.readAsDataURL(file); });
+      await apiPost("/api/upload", { file: dataUrl, folder: "hrm/regulations", regulationId: item.id });
+      onUploaded(await apiGet<Regulation>(`/api/regulations/${item.id}`));
+    } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải tệp PDF."); } finally { setUploading(false); }
+  }
+  const disabled = busy || uploading;
+  return <Modal open title={item.title} size="xl" onClose={() => !disabled && onClose()} footer={<>{canWrite && <><Button variant="danger" disabled={disabled} onClick={onDelete}>Xóa</Button><Button variant="white" disabled={disabled} onClick={onPin}>{item.pinned ? "Bỏ ghim" : "Ghim"}</Button><Button disabled={disabled} onClick={onEdit}>Sửa</Button></>}<Button variant="white" disabled={disabled} onClick={onClose}>Đóng</Button></>}>
+    <p className="mb-4 text-xs text-gray-500">{item.regulationCode} · Phiên bản {item.version} · {item.status}</p><p className="mb-4 text-sm">Hiệu lực từ {formatDate(item.effectiveDate)}{item.expiryDate ? ` đến ${formatDate(item.expiryDate)}` : ""}</p><p className="mb-5 font-medium">{item.summary}</p><div className="mb-5 whitespace-pre-wrap break-words text-sm leading-7">{item.content}</div>
+    <div className="border-t border-gray-200 pt-4"><h3 className="mb-3 font-semibold">Tệp đính kèm</h3>{item.files?.length ? <ul className="space-y-2">{item.files.map((file, index) => <li key={file.id}><a className="text-primary underline" href={`${GATEWAY_URL}/api/files/${file.publicId}`} target="_blank" rel="noopener noreferrer">Tệp {index+1} ({file.mime === "application/pdf" ? "PDF" : file.mime})</a></li>)}</ul> : <p className="text-sm text-gray-500">Chưa có tệp đính kèm.</p>}
+      {canWrite && <label className="mt-4 block text-sm font-medium">Đính kèm PDF<input aria-label="Đính kèm PDF" className="mt-2 block w-full text-sm" type="file" accept="application/pdf" disabled={disabled} onChange={e => { void upload(e.target.files?.[0]); e.target.value = ""; }} /></label>}
+      {uploading && <p role="status">Đang tải PDF...</p>}{error && <p role="alert" className="mt-3 text-red-700">{error}</p>}
+    </div>
+  </Modal>;
 }

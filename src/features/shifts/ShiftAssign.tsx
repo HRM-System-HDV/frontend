@@ -1,125 +1,31 @@
-"use client";
-
+﻿"use client";
 import { useEffect, useState } from "react";
-import Button from "@/components/ui/Button";
-import Modal from "@/components/ui/Modal";
-import { Field, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
-import type { ShiftTemplate } from "@/features/shifts/types";
-import type { Employee, Branch } from "@/types";
-
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  templates: ShiftTemplate[];
-  employee: string;
-  branch: string;
-  date: string;
-  templateId: string;
-  note: string;
-  isRecurring: boolean;
-  isManager?: boolean;
-  managerBranch?: string;
-  isFilterLocked?: boolean;
-  employees?: Employee[];
-  onEmployeeChange: (v: string) => void;
-  onBranchChange: (v: string) => void;
-  onNoteChange: (v: string) => void;
-  onRecurringChange: (v: boolean) => void;
-  onSave: () => void;
-}
-
-export default function AssignShiftModal({
-  open,
-  onClose,
-  templates,
-  employee,
-  branch,
-  date,
-  templateId,
-  isManager = false,
-  managerBranch,
-  isFilterLocked = false,
-  employees: employeesProp,
-  onEmployeeChange,
-  onBranchChange,
-  onSave,
-}: Props) {
-  const empList = employeesProp ?? [];
-  const [branches, setBranches] = useState<Branch[]>([]);
-  // Khung ca khóa cứng theo ca được bấm trong lịch (không cho đổi trong modal).
-  const activeTemplate = templates.find((t) => t.id === templateId);
-
+import Modal from "@/components/ui/Modal";
+import Button from "@/components/ui/Button";
+import type { Employee, Shift, ShiftTemplate } from "@/types";
+import { dayValue, employeeLabel, templateLabel, inputClass } from "./types";
+export type ShiftInput = { employeeId: string; templateId: string; workDate: string; note: string; status?: Shift["status"] };
+export default function AssignShiftModal({ shift, employees, templates, date, onClose, onSave }: { shift?: Shift; employees: Employee[]; templates: ShiftTemplate[]; date: string; onClose: () => void; onSave: (payload: ShiftInput) => Promise<void> }) {
+  const [form, setForm] = useState<ShiftInput>({ employeeId: shift?.employeeId || "", templateId: shift?.templateId || "", workDate: dayValue(shift?.workDate) || date, note: shift?.note || "", ...(shift?.id ? { status: shift.status } : {}) });
+  const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  const [existing, setExisting] = useState<Shift[]>([]), [availabilityLoading, setAvailabilityLoading] = useState(false), [availabilityError, setAvailabilityError] = useState("");
   useEffect(() => {
-    if (!open) return;
-    apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
-  }, [open]);
-
-  // Chi nhánh bị khóa nếu là Manager hoặc khi bên ngoài đang filter một chi nhánh cụ thể (không phải "all")
-  const isLocked = isManager || (isFilterLocked && Boolean(branch));
-  const branchDisplay = isManager ? (managerBranch ?? branch) : branch;
-  const branchName = (() => {
-    const target = (branchDisplay || "").toLowerCase().replace(/-/g, "");
-    const matched = branches.find((b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target);
-    return matched ? matched.name : branchDisplay;
-  })();
-
-  return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      title="Phân công nhân viên vào ca"
-      size="lg"
-      footer={
-        <>
-          <Button variant="white" onClick={onClose}>Hủy</Button>
-          <Button onClick={onSave}>Phân công</Button>
-        </>
-      }
-    >
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
-        <Field label="Nhân viên" required>
-          <Select value={employee} onChange={(e) => onEmployeeChange(e.target.value)}>
-            {empList.filter((e) => e.status === "đang làm").map((emp) => (
-              <option key={emp.id} value={emp.name}>{emp.name} ({emp.role})</option>
-            ))}
-          </Select>
-        </Field>
-          {/* Manager ghim chi nhánh: branchSlug được trang cha lấy từ session khi mở modal, nên ẩn hẳn control */}
-          {!isManager && (
-            <Field label="Chi nhánh" required>
-              {isLocked ? (
-                <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-                  <span>{branchName || (branchDisplay ? `Chi nhánh ${branchDisplay}` : "—")}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                    Đã khóa
-                  </span>
-                </div>
-              ) : (
-                <Select value={branch} onChange={(e) => onBranchChange(e.target.value)}>
-                  <option value="" disabled>
-                    — Chọn chi nhánh —
-                  </option>
-                  {branches.map((b) => (
-                    <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                      {b.name} ({b.slug.toUpperCase()})
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-          )}
-        <Field label="Ngày làm việc" required>
-          <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800">
-            {date}
-          </div>
-        </Field>
-        <Field label="Khung ca áp dụng" required>
-          <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800">
-            {activeTemplate ? `${activeTemplate.name} (${activeTemplate.startTime} - ${activeTemplate.endTime})` : "—"}
-          </div>
-        </Field>
-      </div>
-    </Modal>
-  );
+    let active = true;
+    const timer = setTimeout(async () => {
+      if (!form.employeeId || !form.workDate) return;
+      setAvailabilityLoading(true); setAvailabilityError("");
+      try {
+        const rows = await apiGet<Shift[]>(`/api/shifts?employeeId=${encodeURIComponent(form.employeeId)}&workDate=${encodeURIComponent(form.workDate)}`);
+        if (active) setExisting(rows.filter(row => row.id !== shift?.id));
+      } catch (error) { if (active) setAvailabilityError(error instanceof Error ? error.message : "Không thể kiểm tra lịch nhân viên"); }
+      finally { if (active) setAvailabilityLoading(false); }
+    }, 0);
+    return () => { active = false; clearTimeout(timer); };
+  }, [form.employeeId, form.workDate, shift?.id]);
+  const duplicate = existing.some(row => row.templateId === form.templateId);
+  async function submit(event: React.FormEvent) { event.preventDefault(); if (busy || availabilityLoading) return; if (duplicate) { setError("Nhân viên đã có ca này trong ngày"); return; } if (availabilityError) { setError(availabilityError); return; } setBusy(true); setError(""); try { await onSave(form); onClose(); } catch (error) { setError(error instanceof Error ? error.message : "Không thể lưu ca"); } finally { setBusy(false); } }
+  return <Modal open onClose={() => { if (!busy) onClose(); }} title={shift?.id ? "Sửa ca làm việc" : "Phân ca làm việc"} size="md"><form onSubmit={submit} className="space-y-4"><label className="block text-sm">Nhân viên<select aria-label="Nhân viên" required className={inputClass} value={form.employeeId} onChange={e => setForm({ ...form, employeeId: e.target.value })}><option value="">Chọn nhân viên</option>{employees.map(e => <option key={e.id} value={e.id}>{employeeLabel(e)}</option>)}</select></label><label className="block text-sm">Ca mẫu<select aria-label="Ca mẫu" required className={inputClass} value={form.templateId} onChange={e => setForm({ ...form, templateId: e.target.value })}><option value="">Chọn ca mẫu</option>{templates.map(t => <option key={t.id} value={t.id} disabled={existing.some(row => row.templateId === t.id)}>{templateLabel(t)} ({t.startTime}–{t.endTime}){existing.some(row => row.templateId === t.id) ? " · Đã được phân" : ""}</option>)}</select></label><label className="block text-sm">Ngày làm<input aria-label="Ngày làm" required type="date" className={inputClass} value={form.workDate} onChange={e => setForm({ ...form, workDate: e.target.value })}/></label>{shift?.id && <label className="block text-sm">Trạng thái ca<select aria-label="Trạng thái ca" className={inputClass} value={form.status} onChange={e => setForm({ ...form, status: e.target.value as Shift["status"] })}><option value="đang làm">Đang làm</option><option value="đã hủy">Đã hủy</option></select></label>}<label className="block text-sm">Ghi chú<textarea className={inputClass} value={form.note} onChange={e => setForm({ ...form, note: e.target.value })}/></label>{availabilityLoading && <p role="status" className="text-sm text-gray-500">Đang kiểm tra lịch nhân viên…</p>}{availabilityError && <p role="alert" className="text-sm text-red-700">{availabilityError}</p>}{duplicate && <p className="text-sm text-red-700">Nhân viên đã có ca này trong ngày. Vui lòng chọn ca khác.</p>}{error && <p role="alert" className="text-sm text-red-700">{error}</p>}<div className="flex justify-end gap-2"><Button type="button" variant="white" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || availabilityLoading || duplicate || !!availabilityError}>{busy ? "Đang lưu…" : "Lưu phân ca"}</Button></div></form></Modal>;
 }
+
+

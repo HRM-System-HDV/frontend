@@ -15,6 +15,8 @@ import {
   faStore,
   faUsers,
   faWifi,
+  faBriefcase,
+  faUserShield,
 } from "@fortawesome/free-solid-svg-icons";
 import type { SidebarGroup, SidebarItem } from "@/components/layout/Sidebar";
 
@@ -50,6 +52,8 @@ const ADMIN_MENU: SidebarItem[] = [
   menu("Tổng quan Dashboard", "/dashboard", faChartPie),
   menu("Nhân sự toàn công ty", "/dashboard/employees", faUsers),
   menu("Quản lý Phòng ban", "/dashboard/departments", faSitemap),
+  menu("Vị trí công việc", "/dashboard/positions", faBriefcase),
+  menu("Tài khoản & Phân quyền", "/dashboard/accounts", faUserShield),
   menu("Quản lý Chi nhánh", "/dashboard/branches", faStore),
   menu("Phân ca làm việc", "/dashboard/shifts", faCalendarWeek),
   menu("Giao việc & Nhiệm vụ", "/dashboard/tasks", faClipboardList),
@@ -70,6 +74,7 @@ const MANAGER_MENU: SidebarItem[] = [
   menu("Tổng quan Dashboard", "/dashboard", faChartPie),
   menu("Nhân sự chi nhánh", "/dashboard/employees", faUsers),
   menu("Cơ cấu Phòng ban", "/dashboard/departments", faSitemap),
+  menu("Vị trí công việc", "/dashboard/positions", faBriefcase),
   menu("Phân ca làm việc", "/dashboard/shifts", faCalendarWeek),
   menu("Giao việc & Nhiệm vụ", "/dashboard/tasks", faClipboardList),
   menu("Duyệt yêu cầu chi nhánh", "/dashboard/requests", faArrowRightArrowLeft),
@@ -81,22 +86,15 @@ const MANAGER_MENU: SidebarItem[] = [
 // Staff: chỉ luồng tự phục vụ mà gateway mở cho mọi vai trò — đọc bảng tin và
 // nội quy, xem đơn của mình, cập nhật nhiệm vụ được giao, xem phiếu lương của
 // chính mình (payroll-service tự scope theo employeeId).
-const STAFF_MENU: SidebarItem[] = [
-  menu("Tổng quan Dashboard", "/dashboard", faChartPie),
-  menu("Bảng tin & Thông báo", "/dashboard/news", faNewspaper),
-  menu("Nội quy & Quy định", "/dashboard/regulations", faGavel),
-  menu("Đơn từ của tôi", "/dashboard/requests", faArrowRightArrowLeft),
-  menu("Nhiệm vụ được giao", "/dashboard/tasks", faClipboardList),
-  menu("Phiếu lương của tôi", "/dashboard/payslips", faCoins),
-];
 
 const MENUS: Record<AppRole, { title: string; items: SidebarItem[] }> = {
   admin: { title: "QUẢN TRỊ TOÀN CÔNG TY", items: ADMIN_MENU },
   manager: { title: "VẬN HÀNH CHI NHÁNH", items: MANAGER_MENU },
-  staff: { title: "TỰ PHỤC VỤ", items: STAFF_MENU },
+  staff: { title: "", items: [] },
 };
 
 export function buildMenuItems(role: string): SidebarGroup[] {
+  if (normalizeRole(role) === "staff") return [];
   const tier = MENUS[normalizeRole(role)];
   return [{ title: tier.title, items: tier.items }];
 }
@@ -106,7 +104,7 @@ export function buildMenuItems(role: string): SidebarGroup[] {
  * trang đặc quyền thay vì chỉ ẩn link ở sidebar.
  */
 export function canAccessPath(role: string, href: string): boolean {
-  return MENUS[normalizeRole(role)].items.some((item) => item.href === href);
+  return MENUS[normalizeRole(role)].items.some((item) => item.href === href || (item.href !== "/dashboard" && href.startsWith(`${item.href}/`)));
 }
 
 /** Khối báo không có quyền, dùng chung cho các trang chỉ dành cho quản trị viên. */

@@ -1,28 +1,10 @@
-export type TaskSourceType = "manager" | "shift";
-export type TaskStatus = "pending" | "inProgress" | "overdue" | "completed";
-export type TaskPriority = "urgent" | "high" | "normal";
-
-export interface TaskItem {
-  id: string;
-  title: string;
-  description: string;
-  sourceType: TaskSourceType; // "manager": Quản lý giao riêng, "shift": Cố định theo ca
-  assignedByName: string;
-  shiftName?: string;
-  branch: string;
-  dueDate: string;
-  status: TaskStatus;
-  priority: TaskPriority;
-  assignedToEmail: string;
-  assignedToName: string;
-  // Mã nhân viên được giao (id). Backend lưu id để đối chiếu với x-user-id của
-  // người đăng nhập; tên chỉ dùng để hiển thị. Task theo ca (sourceType "shift")
-  // giao cho cả ca nên assignedToId = null.
-  assignedToId?: string | null;
-  completedAt?: string;
-  createdAt: string;
-  requirePhoto?: boolean; // Quản trị viên yêu cầu chụp ảnh kết quả khi hoàn thành
-  proofPhotoUrl?: string; // Ảnh minh chứng kết quả công việc do nhân viên chụp
-  photoSubmittedBy?: string; // Tên nhân viên đã chụp và gửi ảnh qua mobile app
-  photoSubmittedAt?: string; // Thời gian nhân viên chụp/nộp ảnh minh chứng
+﻿export type { Task } from "@/types";
+export type TaskInput = { title: string; description: string; assignedTo: string | null; branchId?: string; workDate?: string; templateId?: string; dueDate: string | null; priority: string; requirePhoto: boolean };
+export const statusLabels = { pending: "Chưa thực hiện", in_progress: "Đang thực hiện", done: "Hoàn thành" };
+export function taskPayload(form: { title: string; description: string; mode: "personal" | "common"; assignedTo: string; branchId: string; workDate: string; templateId: string; dueDate: string; priority: string; requirePhoto: boolean }): TaskInput {
+ if (!form.title.trim()) throw new Error("Vui lòng nhập tên công việc");
+ if (form.mode === "personal" && !form.assignedTo) throw new Error("Vui lòng chọn nhân viên được giao");
+ if (form.mode === "common" && (!form.branchId || !form.workDate || !form.templateId)) throw new Error("Công việc chung cần chi nhánh, ngày làm và ca mẫu");
+ return { title: form.title.trim(), description: form.description.trim(), assignedTo: form.mode === "personal" ? form.assignedTo : null, ...(form.mode === "common" ? { branchId: form.branchId, workDate: form.workDate, templateId: form.templateId } : {}), dueDate: form.dueDate || null, priority: form.priority, requirePhoto: form.requirePhoto };
 }
+

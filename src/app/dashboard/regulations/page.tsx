@@ -1,225 +1,46 @@
 "use client";
-
 import { useCallback, useEffect, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlus } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import type { Regulation } from "@/types";
-import RegulationSection from "@/features/regulations/RegulationList";
-import RegulationDetailModal from "@/features/regulations/RegulationDetail";
-import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
-import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import Modal from "@/components/ui/Modal";
+import { Input, Select } from "@/components/ui/Form";
 import { useCurrentUser } from "@/context/AuthContext";
-import { formatDate, getTodayVN } from "@/lib/utils";
+import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
+import RegulationForm, { type RegulationPayload } from "@/features/regulations/RegulationForm";
+import RegulationList from "@/features/regulations/RegulationList";
+import RegulationDetail from "@/features/regulations/RegulationDetail";
+import type { Regulation, Branch } from "@/types";
 
-function todayStr(): string {
-  return getTodayVN();
-}
-
-export default function RegulationsManagementPage() {
-  const { role } = useCurrentUser();
-  // WRITE /api/regulations = manager + admin; nhân viên chỉ đọc văn bản.
-  const canWriteRegulations = role !== "staff";
-
+export default function RegulationsPage() {
+  const { role, branchId } = useCurrentUser();
   const [items, setItems] = useState<Regulation[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  // Modal xem chi tiết
-  const [viewingItem, setViewingItem] = useState<Regulation | null>(null);
-
-  // Modal tạo / chỉnh sửa
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Regulation | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await apiGet<Regulation[]>("/api/regulations");
-      setItems(data || []);
-    } catch (e) {
-      setError(e instanceof GatewayError ? e.message : "Lỗi tải nội quy");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-    apiGet<Regulation[]>("/api/regulations")
-      .then((data) => {
-        if (!ignore) {
-          setItems(data || []);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          setError(e instanceof GatewayError ? e.message : "Lỗi tải nội quy");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  // Mở modal tạo mới
-  const handleOpenCreateModal = () => {
-    setEditingItem(null);
-    setIsEditModalOpen(true);
-  };
-
-  // Mở modal chỉnh sửa
-  const handleOpenEditModal = (item: Regulation) => {
-    setEditingItem(item);
-    setIsEditModalOpen(true);
-  };
-
-  // Từ modal xem chi tiết → mở modal chỉnh sửa
-  const handleEditFromView = (item: Regulation) => {
-    setViewingItem(null);
-    handleOpenEditModal(item);
-  };
-
-  // Lưu tạo mới hoặc cập nhật qua API thật
-  const handleSaveItem = async (input: RegulationFormInput) => {
-    setSaving(true);
-    try {
-      if (editingItem) {
-        const updated = await apiPut<Regulation>(`/api/regulations/${editingItem.id}`, {
-          code: input.code?.trim() || editingItem.code,
-          title: input.title.trim(),
-          category: input.category,
-          summary: input.summary.trim() || input.title.trim(),
-          content: input.content.trim(),
-          status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || getTodayVN(),
-          version: input.version,
-          pinned: input.pinned,
-        });
-        setItems((prev) => prev.map((i) => (i.id === editingItem.id ? updated : i)));
-        if (viewingItem?.id === editingItem.id) setViewingItem(updated);
-      } else {
-        const created = await apiPost<Regulation>("/api/regulations", {
-          ...(input.code?.trim() ? { code: input.code.trim() } : {}),
-          title: input.title.trim(),
-          category: input.category,
-          summary: input.summary.trim() || input.title.trim(),
-          content: input.content.trim(),
-          status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || todayStr(),
-          version: input.version || "1.0",
-          pinned: input.pinned,
-          attachments: 0,
-        });
-        setItems((prev) => [created, ...prev]);
-      }
-      setIsEditModalOpen(false);
-      setEditingItem(null);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi lưu văn bản nội quy.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Bật/tắt ghim qua API thật
-  const handleTogglePin = async (id: string) => {
-    const target = items.find((i) => i.id === id);
-    if (!target) return;
-    try {
-      const updated = await apiPut<Regulation>(`/api/regulations/${id}`, { pinned: !target.pinned });
-      setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
-      if (viewingItem?.id === id) setViewingItem(updated);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi ghim văn bản.");
-    }
-  };
-
-  // Xóa nội quy qua API thật
-  const handleDeleteItem = async (id: string, title?: string) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa văn bản nội quy "${title}" không?`)) return;
-    try {
-      await apiDelete(`/api/regulations/${id}`);
-      setItems((prev) => prev.filter((i) => i.id !== id));
-      if (viewingItem?.id === id) setViewingItem(null);
-    } catch (e) {
-      alert(e instanceof GatewayError ? e.message : "Lỗi xóa văn bản.");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        actions={
-          <div className="flex items-center gap-2">
-            {canWriteRegulations && (
-              <Button
-                variant="primary"
-                onClick={handleOpenCreateModal}
-                className="flex items-center gap-1.5"
-              >
-                <FontAwesomeIcon icon={faPlus} fontSize={18} />
-                Tạo văn bản nội quy mới
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center justify-between gap-3">
-          <span>{error}</span>
-          <Button variant="white" onClick={fetchData} className="text-xs shrink-0">
-            Thử lại
-          </Button>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 animate-pulse space-y-3">
-          <div className="h-4 bg-gray-100 rounded w-1/3" />
-          <div className="h-8 bg-gray-100 rounded w-full" />
-          <div className="h-8 bg-gray-100 rounded w-full" />
-          <div className="text-xs text-gray-500">Đang tải nội quy qua Gateway...</div>
-        </div>
-      ) : (
-        <RegulationSection
-          items={items}
-          onView={setViewingItem}
-          onEdit={canWriteRegulations ? handleOpenEditModal : undefined}
-          onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
-        />
-      )}
-
-      {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH — chỗ duy nhất có nút xóa */}
-      <RegulationDetailModal
-        item={viewingItem}
-        onClose={() => setViewingItem(null)}
-        onEdit={canWriteRegulations ? handleEditFromView : undefined}
-        onDelete={canWriteRegulations ? handleDeleteItem : undefined}
-        onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
-      />
-
-      {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}
-      {isEditModalOpen && (
-        <RegulationFormModal
-          key={editingItem?.id ?? "new"}
-          initial={editingItem}
-          onClose={() => {
-            setIsEditModalOpen(false);
-            setEditingItem(null);
-          }}
-          onSave={handleSaveItem}
-          saving={saving}
-        />
-      )}
-    </div>
-  );
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [editing, setEditing] = useState<Regulation | null | undefined>();
+  const [selected, setSelected] = useState<Regulation | null>(null);
+  const [deleting, setDeleting] = useState<Regulation | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [search, setSearch] = useState("");
+  const [scope, setScope] = useState("all");
+  const [status, setStatus] = useState("");
+  const canWrite = (item?: Regulation) => role === "admin" || role === "manager" && !!branchId && (!item || item.scopeBranchId === branchId);
+  const load = useCallback(async () => { setLoading(true); setError(""); try { const [rules, units] = await Promise.all([apiGet<Regulation[]>("/api/regulations"), apiGet<Branch[]>("/api/branches")]); setItems(rules); setBranches(units); } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải quy định."); } finally { setLoading(false); } }, []);
+  useEffect(() => { if (role === "admin" || role === "manager") void load(); }, [role, load]);
+  if (role !== "admin" && role !== "manager") return <p>Không có quyền truy cập.</p>;
+  function update(row: Regulation) { setItems(old => old.map(n => n.id === row.id ? row : n)); if (selected?.id === row.id) setSelected(row); }
+  async function save(payload: RegulationPayload) { const row = editing ? await apiPut<Regulation>(`/api/regulations/${editing.id}`, payload) : await apiPost<Regulation>("/api/regulations", payload); if (editing) update(row); else setItems(old => [row, ...old]); setNotice("Đã lưu quy định."); }
+  async function detail(item: Regulation) { if (busy) return; setBusy(true); setError(""); try { setSelected(await apiGet<Regulation>(`/api/regulations/${item.id}`)); } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải chi tiết."); } finally { setBusy(false); } }
+  async function pin() { if (!selected || busy) return; setBusy(true); setError(""); try { const row = await apiPut<Regulation>(`/api/regulations/${selected.id}`, { pinned: !selected.pinned }); update({ ...row, files: selected.files }); setNotice("Đã cập nhật ghim quy định."); } catch (e) { setError(e instanceof Error ? e.message : "Không thể ghim."); } finally { setBusy(false); } }
+  async function remove() { if (!deleting || busy) return; setBusy(true); setError(""); try { await apiDelete(`/api/regulations/${deleting.id}`); setItems(old => old.filter(n => n.id !== deleting.id)); setDeleting(null); setNotice("Đã xóa quy định."); } catch (e) { setError(e instanceof Error ? e.message : "Không thể xóa."); } finally { setBusy(false); } }
+  const filtered = items.filter(n => (role === "admin" || !n.scopeBranchId || n.scopeBranchId === branchId) && (scope === "all" || (scope === "global" ? !n.scopeBranchId : n.scopeBranchId === scope)) && (!status || n.status === status) && `${n.regulationCode} ${n.title} ${n.summary}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  return <div className="space-y-4"><PageHeader title="Quy định nội bộ" actions={canWrite() ? <Button onClick={() => setEditing(null)}>Thêm quy định</Button> : undefined} />
+    {error && <p role="alert" className="text-red-700">{error}<Button variant="link" onClick={load}>Thử lại</Button></p>}{notice && <p role="status" className="text-green-700">{notice}</p>}
+    <div className="flex flex-wrap gap-3"><Input aria-label="Tìm quy định" className="sm:max-w-sm" placeholder="Tìm mã, tiêu đề..." value={search} onChange={e => setSearch(e.target.value)} /><Select aria-label="Lọc phạm vi" className="sm:max-w-xs" value={scope} onChange={e => setScope(e.target.value)}><option value="all">Tất cả phạm vi</option><option value="global">Toàn công ty</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select><Select aria-label="Lọc trạng thái" className="sm:max-w-xs" value={status} onChange={e => setStatus(e.target.value)}><option value="">Tất cả trạng thái</option><option value="dự thảo">Dự thảo</option><option value="hiệu lực">Hiệu lực</option><option value="hết hiệu lực">Hết hiệu lực</option></Select></div>
+    {loading ? <p role="status">Đang tải quy định...</p> : <RegulationList items={filtered} branches={branches} onSelect={detail} />}
+    {editing !== undefined && canWrite(editing ?? undefined) && <RegulationForm key={editing?.id ?? "new"} item={editing} branches={branches} managerBranchId={role === "manager" ? branchId : undefined} onSave={save} onClose={() => setEditing(undefined)} />}
+    {selected && <RegulationDetail item={selected} canWrite={canWrite(selected)} busy={busy} onClose={() => setSelected(null)} onEdit={() => { setEditing(selected); setSelected(null); }} onDelete={() => { setDeleting(selected); setSelected(null); }} onPin={pin} onUploaded={update} />}
+    {deleting && <Modal open title="Xóa quy định" onClose={() => !busy && setDeleting(null)} footer={<><Button variant="white" disabled={busy} onClick={() => setDeleting(null)}>Hủy</Button><Button variant="danger" disabled={busy} onClick={remove}>{busy ? "Đang xóa..." : "Xác nhận xóa"}</Button></>}><p>Xóa quy định “{deleting.title}”?</p>{error && <p role="alert" className="text-red-700">{error}</p>}</Modal>}
+  </div>;
 }

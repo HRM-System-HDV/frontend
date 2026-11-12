@@ -35,40 +35,47 @@ export default function Topbar({
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationError, setNotificationError] = useState("");
+  const [notificationBusy, setNotificationBusy] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
     let ignore = false;
-    apiGet<NotificationItem[]>("/api/notifications")
+    const load = () => apiGet<NotificationItem[]>("/api/notifications")
       .then((data) => {
         if (!ignore && Array.isArray(data)) {
           setNotifications(data);
+          setNotificationError("");
         }
       })
-      .catch(() => {});
+      .catch((e) => { if (!ignore) setNotificationError(e instanceof Error ? e.message : "Không tải được thông báo."); });
+    void load();
+    const timer = setInterval(load, 60000);
     return () => {
       ignore = true;
+      clearInterval(timer);
     };
   }, []);
 
   const handleMarkRead = async (id: string) => {
+    setNotificationBusy(true); setNotificationError("");
     try {
       await apiPut(`/api/notifications/${id}/read`);
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
       );
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { setNotificationError(e instanceof Error ? e.message : "Không cập nhật được thông báo."); }
+    finally { setNotificationBusy(false); }
   };
 
   const handleMarkAllRead = async () => {
-    try {
-      await apiPut("/api/notifications/read-all");
-      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-    } catch {
-      /* ignore */
-    }
+    setNotificationBusy(true); setNotificationError("");
+    const unread = notifications.filter(n => !n.isRead);
+    const results = await Promise.allSettled(unread.map(n => apiPut(`/api/notifications/${n.id}/read`)));
+    const succeeded = new Set(unread.filter((_, index) => results[index].status === "fulfilled").map(n => n.id));
+    setNotifications(prev => prev.map(n => succeeded.has(n.id) ? { ...n, isRead: true } : n));
+    if (results.some(result => result.status === "rejected")) setNotificationError("Một số thông báo chưa được cập nhật. Vui lòng thử lại.");
+    setNotificationBusy(false);
   };
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
@@ -124,6 +131,8 @@ export default function Topbar({
               notifications={notifications}
               onMarkRead={handleMarkRead}
               onMarkAllRead={handleMarkAllRead}
+              error={notificationError}
+              busy={notificationBusy}
             />
           </div>
 

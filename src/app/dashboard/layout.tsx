@@ -1,76 +1,20 @@
 "use client";
-
-import React, { useEffect, useState } from "react";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faLocationDot } from "@fortawesome/free-solid-svg-icons";
+import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import DashboardShell from "@/components/layout/DashboardShell";
 import { useCurrentUser } from "@/context/AuthContext";
-import { buildMenuItems, roleLabel } from "@/lib/permissions";
+import { buildMenuItems, canAccessPath, NoAccessNotice, roleLabel } from "@/lib/permissions";
 import { apiGet } from "@/lib/api";
 import type { Branch } from "@/types";
-
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { user, role, branchSlug, logout, loading } = useCurrentUser();
-  const groups = buildMenuItems(role);
-  const label = roleLabel(role);
-  // identity-service đặt roleTitle đúng bằng nhãn quyền khi tài khoản là
-  // admin/manager, nên chức danh chỉ được hiển thị khi nó thực khác nhãn quyền;
-  // nếu không header thành "Quản trị viên - Quản trị viên".
-  const jobTitle = (user.roleTitle || "").trim();
-  const roleName =
-    jobTitle && jobTitle.toLowerCase() !== label.toLowerCase()
-      ? `${label} - ${jobTitle}`
-      : label;
-
-  // Manager/staff bị ghim một chi nhánh nên mọi bộ lọc chi nhánh đã ẩn; tên chi
-  // nhánh chỉ hiện một lần ở footer sidebar. DB lưu slug ⇒ map qua /api/branches.
-  const [branchName, setBranchName] = useState("");
-  useEffect(() => {
-    if (!branchSlug) {
-      setBranchName("");
-      return;
-    }
-    let alive = true;
-    apiGet<Branch[]>("/api/branches")
-      .then((rows) => {
-        if (alive) setBranchName(rows.find((b) => b.slug.toLowerCase() === branchSlug)?.name || "");
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [branchSlug]);
-
-  return (
-    <DashboardShell
-      brand="HRM System"
-      groups={groups}
-      userName={user.name}
-      userRole={roleName}
-      logoutHref="/login"
-      onLogout={logout}
-      sidebarFooter={
-        branchSlug
-          ? {
-              icon: <FontAwesomeIcon icon={faLocationDot} fontSize={12} />,
-              text: `Chi nhánh ${branchName || branchSlug.toUpperCase()}`,
-            }
-          : undefined
-      }
-    >
-      {/* Chờ xác định phiên: chưa render nội dung trang để không nháy
-          "Không có quyền truy cập" khi role còn là placeholder. */}
-      {loading ? (
-        <div className="flex items-center justify-center py-24 text-sm text-gray-500">
-          Đang tải dữ liệu phiên làm việc...
-        </div>
-      ) : (
-        children
-      )}
-    </DashboardShell>
-  );
+import Button from "@/components/ui/Button";
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const { user, role, branchId, logout, loading, authenticated, error, reloadSession } = useCurrentUser();
+  const pathname = usePathname(); const [branchName, setBranchName] = useState("");
+  useEffect(() => { let active = true; if (!authenticated || !branchId) return; apiGet<Branch[]>("/api/branches").then(rows => { if (active) setBranchName(rows.find(row => row.id === branchId)?.name || ""); }).catch(() => { if (active) setBranchName(""); }); return () => { active = false; }; }, [authenticated, branchId]);
+  if (loading) return <div className="min-h-screen grid place-items-center text-sm text-gray-500">Đang xác thực phiên đăng nhập…</div>;
+  if (error) return <div className="min-h-screen grid place-items-center p-6"><div role="alert" className="space-y-4 text-center"><p>{error}</p><Button onClick={() => void reloadSession()}>Thử lại</Button></div></div>;
+  if (!authenticated || role === "staff") return null;
+  return <DashboardShell brand="HRM System" groups={buildMenuItems(role)} userName={user.name} userRole={roleLabel(role)} logoutHref="/login" onLogout={logout} sidebarFooter={branchId ? { icon: <span aria-hidden>●</span>, text: branchName || "Chi nhánh được phân công" } : undefined}>
+    {canAccessPath(role, pathname) ? children : <NoAccessNotice description="Bạn không có quyền truy cập chức năng này." />}
+  </DashboardShell>;
 }

@@ -1,230 +1,27 @@
 "use client";
+import { useState } from "react";
+import Table from "@/components/ui/Table";
+import Button from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/Form";
+import { formatVND, formatDate } from "@/lib/utils";
+import type { Employee, Branch, Department, Position } from "@/types";
 
-import { useState, useMemo } from "react";
-import { useLocalStorageState } from "@/hooks/useLocalStorage";
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faMagnifyingGlass,
-  faSitemap,
-  faStore,
-} from "@fortawesome/free-solid-svg-icons";
-import Badge, { StatusBadge } from "@/components/ui/Badge";
-import Table, { Column } from "@/components/ui/Table";
-import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Form";
-import type { Employee, Branch, Department } from "@/types";
-
-interface Props {
-  employees: Employee[];
-  branches?: Branch[];
-  departments?: Department[];
-  onOpenDetail?: (e: Employee) => void;
-  onSelect?: (e: Employee) => void;
-  isManager?: boolean;
-  managerBranch?: string;
-  selectedBranchFilter?: string;
-  onBranchFilterChange?: (b: string) => void;
-}
-
-export default function EmployeeSection({
-  employees,
-  branches = [],
-  departments = [],
-  onOpenDetail,
-  onSelect,
-  isManager = false,
-  managerBranch,
-  selectedBranchFilter,
-  onBranchFilterChange,
-}: Props) {
-  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_employees_search", "");
-  const [internalBranchFilter, setInternalBranchFilter] = useState<string>(
-    isManager && managerBranch ? managerBranch : "all"
-  );
-  const branchFilter = selectedBranchFilter !== undefined ? selectedBranchFilter : internalBranchFilter;
-  const setBranchFilter = (val: string) => {
-    if (onBranchFilterChange) onBranchFilterChange(val);
-    else setInternalBranchFilter(val);
-  };
-  const [departmentFilter, setDepartmentFilter] = useLocalStorageState<string>("hrm_employees_dept_filter", "all");
-
-  const filteredEmployees = useMemo(() => {
-    return employees.filter((e) => {
-      const q = searchQuery.trim().toLowerCase();
-      const matchesSearch =
-        !q ||
-        e.name.toLowerCase().includes(q) ||
-        e.phone.includes(q) ||
-        e.role.toLowerCase().includes(q) ||
-        e.email.toLowerCase().includes(q) ||
-        (e.department && e.department.toLowerCase().includes(q));
-
-      const matchesBranch = branchFilter === "all" || e.branch === branchFilter;
-      const matchesDepartment =
-        departmentFilter === "all" || e.department === departmentFilter;
-
-      return matchesSearch && matchesBranch && matchesDepartment;
-    });
-  }, [employees, searchQuery, branchFilter, departmentFilter]);
-
-    const branchMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const b of branches) {
-      const slugKey = (b.slug || "").toLowerCase().replace(/-/g, "");
-      if (slugKey) map.set(slugKey, b.name);
-      if (b.id) map.set(b.id.toLowerCase().replace(/-/g, ""), b.name);
-      if (b.name) map.set(b.name.toLowerCase().replace(/-/g, ""), b.name);
-    }
-    return map;
-  }, [branches]);
-
-  const getBranchDisplayName = (slugOrName?: string) => {
-    if (!slugOrName) return "—";
-    const key = slugOrName.toLowerCase().replace(/-/g, "");
-    return branchMap.get(key) || slugOrName;
-  };
-
-  const columns: Column<Employee>[] = [
-    {
-      key: "name",
-      header: "Nhân viên",
-      render: (e) => (
-        <div className="flex items-center gap-2.5">
-          {e.avatar ? (
-            <img
-              src={e.avatar}
-              alt={e.name}
-              className="w-8 h-8 rounded-full object-cover border border-primary/20 shrink-0"
-            />
-          ) : (
-            <span className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold shrink-0">
-              {e.name.charAt(0)}
-            </span>
-          )}
-          <div>
-            <div className="font-semibold text-gray-800">{e.name}</div>
-            <div className="text-xs text-gray-400 font-mono">{e.phone}</div>
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: "branch",
-      header: "Chi nhánh",
-      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branch)}</Badge>,
-    },
-    {
-      key: "department",
-      header: "Phòng ban",
-      render: (e) =>
-        e.department ? (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-            {e.department}
-          </span>
-        ) : (
-          <span className="text-gray-400 text-xs italic">Chưa gán</span>
-        ),
-    },
-    {
-      key: "role",
-      header: "Vai trò",
-      render: (e) => <span className="text-gray-600">{e.role}</span>,
-    },
-    {
-      key: "status",
-      header: "Trạng thái",
-      render: (e) => <StatusBadge status={e.status} />,
-    },
-    {
-      key: "actions",
-      header: "Thao tác",
-      render: (e) => (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              if (onOpenDetail) onOpenDetail(e);
-              else if (onSelect) onSelect(e);
-            }}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-          >
-            Chi tiết
-          </button>
-        </div>
-      ),
-    },
-  ];
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          Danh sách nhân sự
-          {" "}
-          {filteredEmployees.length !== employees.length
-            ? `(${filteredEmployees.length}/${employees.length})`
-            : `(${employees.length})`}
-        </CardTitle>
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Lọc Chi nhánh: chỉ admin; vai trò bị ghim xem tên chi nhánh ở footer sidebar */}
-          {!isManager && (
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs max-w-[180px]">
-              <FontAwesomeIcon icon={faStore} fontSize={14} className="text-gray-500" />
-              <select
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-transparent border-none text-xs font-semibold text-gray-800 focus:outline-hidden cursor-pointer truncate w-full"
-              >
-                <option value="all">Tất cả chi nhánh</option>
-                {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {getBranchDisplayName(b.slug)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Lọc Phòng ban (Toàn công ty) */}
-          <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs">
-            <FontAwesomeIcon icon={faSitemap} fontSize={13} className="text-gray-500" />
-            <select
-              value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
-              className="bg-transparent border-none text-xs font-bold text-gray-800 focus:outline-hidden cursor-pointer max-w-[135px] truncate"
-            >
-              <option value="all">Tất cả phòng ban</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.name}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="relative w-48">
-            <FontAwesomeIcon
-              icon={faMagnifyingGlass}
-              fontSize={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
-            <Input
-              placeholder="Tìm tên, SĐT, email..."
-              className="pl-8 py-1.5 text-xs"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-        </div>
-      </CardHeader>
-      <CardBody className="pt-2">
-        <Table
-          columns={columns}
-          data={filteredEmployees}
-          rowKey={(e) => e.id}
-          emptyMessage="Không có nhân viên nào phù hợp bộ lọc"
-        />
-      </CardBody>
-    </Card>
-  );
+export default function EmployeeList({ employees, branches, departments, positions, isManager, onEdit, onLeave }: { employees: Employee[]; branches: Branch[]; departments: Department[]; positions: Position[]; isManager: boolean; onEdit: (employee: Employee) => void; onLeave: (employee: Employee) => void }) {
+  const [search, setSearch] = useState("");
+  const [branchId, setBranch] = useState("");
+  const [departmentId, setDepartment] = useState("");
+  const filtered = employees.filter(e => (!branchId || e.branchId === branchId) && (!departmentId || e.departmentId === departmentId) && `${e.employeeCode} ${e.name} ${e.email} ${e.phone ?? ""}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
+  return <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4"><div className="flex flex-wrap gap-3">
+    <Input aria-label="Tìm nhân viên" className="sm:max-w-xs" placeholder="Tìm mã, tên, email, điện thoại..." value={search} onChange={e => setSearch(e.target.value)} />
+    {!isManager && <Select aria-label="Lọc chi nhánh" className="sm:max-w-xs" value={branchId} onChange={e => setBranch(e.target.value)}><option value="">Tất cả chi nhánh</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select>}
+    <Select aria-label="Lọc phòng ban" className="sm:max-w-xs" value={departmentId} onChange={e => setDepartment(e.target.value)}><option value="">Tất cả phòng ban</option>{departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}</Select>
+  </div><Table data={filtered} rowKey={e => e.id} emptyMessage="Chưa có nhân viên phù hợp." columns={[
+    { key: "employeeCode", header: "Mã nhân viên" }, { key: "name", header: "Nhân viên", render: e => <div><p className="font-semibold">{e.name}</p><p className="text-xs text-gray-500">{e.email}</p></div> },
+    { key: "branchId", header: "Chi nhánh", render: e => branches.find(b => b.id === e.branchId)?.name ?? "Chưa gán" },
+    { key: "departmentId", header: "Phòng ban", render: e => departments.find(d => d.id === e.departmentId)?.name ?? "Chưa gán" },
+    { key: "positionId", header: "Vị trí", render: e => positions.find(p => p.id === e.positionId)?.name ?? "Chưa gán" },
+    { key: "salary", header: "Lương thỏa thuận", render: e => `${formatVND(e.salary)} / ${e.salaryType === "hourly" ? "giờ" : "tháng"}` },
+    { key: "status", header: "Trạng thái", render: e => <div>{e.status}{e.resignedAt && <p className="text-xs text-gray-500">Từ {formatDate(e.resignedAt)}</p>}</div> },
+    { key: "actions", header: "Thao tác", render: e => <div className="flex gap-2"><Button size="sm" onClick={() => onEdit(e)}>Hồ sơ</Button>{e.status !== "nghỉ việc" && <Button size="sm" variant="danger" onClick={() => onLeave(e)}>Nghỉ việc</Button>}</div> }
+  ]} /></div>;
 }
