@@ -10,10 +10,10 @@ import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { Employee, Branch } from "@/types";
-import type { TaskItem, TaskSourceType, TaskStatus } from "@/features/tasks/types";
+import type { TaskItem, TaskStatus } from "@/features/tasks/types";
 import TaskFilterBar from "@/features/tasks/TaskFilter";
 import TaskTable from "@/features/tasks/TaskTable";
-import CreateTaskModal, { ShiftTemplateOption } from "@/features/tasks/TaskForm";
+import CreateTaskModal from "@/features/tasks/TaskForm";
 import TaskDetailModal from "@/features/tasks/TaskDetail";
 import { useCurrentUser } from "@/context/AuthContext";
 import { roleLabel } from "@/lib/permissions";
@@ -29,31 +29,25 @@ function errorMessage(reason: unknown, fallback: string): string {
 }
 
 function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): TaskItem {
-  let status: TaskStatus = "pending";
-  if (raw.status === "done" || raw.status === "completed") {
+  // BE chỉ có 3 trạng thái; "overdue" là suy diễn hiển thị phía FE từ dueDate.
+  let status: TaskStatus;
+  if (raw.status === "done") {
     status = "completed";
-  } else if (raw.status === "in_progress" || raw.status === "inProgress") {
+  } else if (raw.status === "in_progress") {
     status = "inProgress";
-  } else if (raw.status === "overdue") {
-    status = "overdue";
   } else {
     const due = parseDate(raw.dueDate);
-    if (due && due.getTime() < Date.now()) {
-      status = "overdue";
-    } else {
-      status = "pending";
-    }
+    status = due && due.getTime() < Date.now() ? "overdue" : "pending";
   }
 
+  // Task chung (assignedTo = null) hiển thị cho cả ca — BE không lưu email người nhận.
   let assignedToName = raw.assignedToName || "Tất cả nhân sự";
-  let assignedToEmail = raw.assignedToEmail || "shift_all";
-  let branch = raw.branchSlug || raw.branch || "";
+  let branch = raw.branchId || "";
   if (raw.assignedTo && empMap?.has(raw.assignedTo)) {
     const emp = empMap.get(raw.assignedTo)!;
     assignedToName = emp.name;
-    assignedToEmail = emp.email;
-    if (!branch && emp.branch) {
-      branch = emp.branch;
+    if (!branch && emp.branchId) {
+      branch = emp.branchId;
     }
   }
 
@@ -61,36 +55,32 @@ function mapBackendTaskToTaskItem(raw: any, empMap?: Map<string, Employee>): Tas
     id: raw.id,
     title: raw.title || "Nhiệm vụ",
     description: raw.description || "",
-    sourceType: (raw.sourceType as TaskSourceType) || (raw.shiftName ? "shift" : "manager"),
     assignedByName: raw.assignedByName || "Ban Quản lý",
-    shiftName: raw.shiftName,
     branch,
     dueDate: raw.dueDate ? formatDateTime(raw.dueDate) : "—",
     status,
     priority: raw.priority || "normal",
-    assignedToEmail,
     assignedToName,
     completedAt: raw.completedAt,
     createdAt: raw.createdAt ? formatDateTime(raw.createdAt) : "—",
     requirePhoto: Boolean(raw.requirePhoto),
     proofPhotoUrl: raw.proofPhotoUrl,
-    photoSubmittedBy: raw.photoSubmittedBy,
+    photoSubmittedByName: raw.photoSubmittedByName,
     photoSubmittedAt: raw.photoSubmittedAt,
   };
 }
 
 export default function TasksPage() {
-  const { role, branchSlug, name: currentUserRealName } = useCurrentUser();
+  const { role, branchId, name: currentUserRealName } = useCurrentUser();
   const isAdmin = role === "admin";
   const isManager = role === "manager";
   // Ghi task (POST/DELETE /api/tasks) chỉ dành cho manager + admin.
   const canWriteTasks = role !== "staff";
-  const managerBranch = branchSlug ? branchSlug.toUpperCase() : "";
+  const managerBranch = branchId ? branchId : "";
 
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [empList, setEmpList] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [shiftTemplates, setShiftTemplates] = useState<ShiftTemplateOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionInProgress, setActionInProgress] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +88,7 @@ export default function TasksPage() {
 
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_tasks_search", "");
   const [statusTab, setStatusTab] = useLocalStorageState<TaskStatus | "all">("hrm_tasks_status_tab", "all");
-  const [sourceFilter, setSourceFilter] = useLocalStorageState<TaskSourceType | "all">("hrm_tasks_source_filter", "all");
-  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_tasks_branch_filter", "all");
+  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_tasks_branch_filter_by_id", "all");
   const branchFilter = isManager ? managerBranch : savedBranchFilter;
   const setBranchFilter = useCallback(
     (b: string) => {
@@ -119,16 +108,6 @@ export default function TasksPage() {
     }, 4000);
   };
 
-  const empMap = useMemo(() => {
-    const map = new Map<string, Employee>();
-    for (const e of empList) {
-      map.set(e.id, e);
-      map.set(e.name, e);
-      map.set(e.email, e);
-    }
-    return map;
-  }, [empList]);
-
   // Load danh sách tasks & employees từ gateway
   const fetchData = useCallback(async () => {
     try {
@@ -137,40 +116,32 @@ export default function TasksPage() {
 
       const effectiveBranch = isAdmin
         ? (branchFilter === "all" ? "" : branchFilter)
-        : branchSlug;
+        : branchId;
       const queryParams = new URLSearchParams();
-      if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
+      if (effectiveBranch) queryParams.set("branchId", effectiveBranch);
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-      const [tasksRes, empRes, templatesRes, branchesRes] = await Promise.allSettled([
+      const [tasksRes, empRes, branchesRes] = await Promise.allSettled([
         apiGet<any[]>(`/api/tasks${queryString}`),
         apiGet<Employee[]>("/api/employees"),
-        apiGet<any[]>("/api/shift-templates"),
         apiGet<Branch[]>("/api/branches"),
       ]);
 
       if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
         setBranches(branchesRes.value);
       }
-      if (templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value)) {
-        setShiftTemplates(templatesRes.value);
-      }
 
       let employeesData: Employee[] = [];
       if (empRes.status === "fulfilled" && Array.isArray(empRes.value)) {
-        // API trả `branchSlug`; các màn khác đọc `branch` nên chuẩn hoá tại đây
+        // API trả `branchId`; các màn khác đọc `branch` nên chuẩn hoá tại đây
         // để bộ lọc chi nhánh không bị rỗng.
-        employeesData = empRes.value.map((e) => ({ ...e, branch: e.branchSlug ?? e.branch ?? "" }));
+        employeesData = empRes.value.map((e) => ({ ...e, branchId: e.branchId ?? null }));
       }
       setEmpList(employeesData);
 
-      const currentEmpMap = new Map<string, Employee>();
-      for (const e of employeesData) {
-        currentEmpMap.set(e.id, e);
-        currentEmpMap.set(e.name, e);
-        currentEmpMap.set(e.email, e);
-      }
+      // assignedTo là employees.id nên chỉ cần map theo id.
+      const currentEmpMap = new Map(employeesData.map((e) => [e.id, e]));
 
       if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
         setTasks(tasksRes.value.map((t) => mapBackendTaskToTaskItem(t, currentEmpMap)));
@@ -184,82 +155,25 @@ export default function TasksPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, branchFilter, branchSlug]);
+  }, [isAdmin, branchFilter, branchId]);
 
   useEffect(() => {
-    let ignore = false;
-    const effectiveBranch = isAdmin ? (branchFilter === "all" ? "" : branchFilter) : branchSlug;
-    const queryParams = new URLSearchParams();
-    if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
-    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
-
-    Promise.allSettled([
-      apiGet<any[]>(`/api/tasks${queryString}`),
-      apiGet<Employee[]>("/api/employees"),
-      apiGet<Branch[]>("/api/branches"),
-      apiGet<any[]>("/api/shift-templates"),
-    ])
-      .then(([tasksRes, empRes, branchesRes, templatesRes]) => {
-        if (ignore) return;
-        if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
-          setBranches(branchesRes.value);
-        }
-        if (templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value)) {
-          setShiftTemplates(
-            templatesRes.value.map((t: any) => ({
-              id: t.id || "",
-              name: t.name || "",
-              startTime: t.startTime || "",
-              endTime: t.endTime || "",
-            }))
-          );
-        }
-        let employeesData: Employee[] = [];
-        if (empRes.status === "fulfilled" && Array.isArray(empRes.value)) {
-          employeesData = empRes.value.map((e) => ({ ...e, branch: e.branchSlug ?? e.branch ?? "" }));
-        }
-        setEmpList(employeesData);
-
-        const currentEmpMap = new Map<string, Employee>();
-        for (const e of employeesData) {
-          currentEmpMap.set(e.id, e);
-          currentEmpMap.set(e.name, e);
-          currentEmpMap.set(e.email, e);
-        }
-
-        if (tasksRes.status === "fulfilled" && Array.isArray(tasksRes.value)) {
-          setTasks(tasksRes.value.map((t) => mapBackendTaskToTaskItem(t, currentEmpMap)));
-        } else if (tasksRes.status === "rejected") {
-          setError(errorMessage(tasksRes.reason, "Không thể tải danh sách nhiệm vụ từ gateway"));
-        }
-        setLoading(false);
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách nhiệm vụ từ gateway";
-          setError(msg);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [isAdmin, branchFilter, branchSlug]);
+    void fetchData();
+  }, [fetchData]);
 
   // Lọc theo chi nhánh: Admin có bộ lọc chi nhánh (all/CN01...), Manager cố định chi nhánh
   const branchFilteredTasks = useMemo(() => {
     if (isAdmin) {
       if (branchFilter === "all") return tasks;
       return tasks.filter(
-        (t) => (t.branch || "").toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", "")
+        (t) => (t.branch || "") === branchFilter
       );
     }
     return tasks.filter(
       (t) =>
-        (t.branch || "").toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "")
+        (t.branch || "") === branchId
     );
-  }, [tasks, isAdmin, branchSlug, branchFilter]);
+  }, [tasks, isAdmin, branchId, branchFilter]);
 
   // Bộ đếm trạng thái cho badge
   const statusCounts = useMemo(() => {
@@ -285,10 +199,6 @@ export default function TasksPage() {
       if (statusTab !== "all" && t.status !== statusTab) {
         return false;
       }
-      // Filter source
-      if (sourceFilter !== "all" && t.sourceType !== sourceFilter) {
-        return false;
-      }
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -300,33 +210,18 @@ export default function TasksPage() {
       }
       return true;
     });
-  }, [branchFilteredTasks, statusTab, sourceFilter, searchQuery]);
+  }, [branchFilteredTasks, statusTab, searchQuery]);
 
   // Xác nhận hoàn thành công việc từ Modal chi tiết (PUT /api/tasks/:id)
   const handleCompleteTask = async (taskId: string, photoUrl?: string) => {
-    const completedAt = formatDateTime(new Date());
     try {
       setActionInProgress(true);
       await apiPut(`/api/tasks/${encodeURIComponent(taskId)}`, {
         status: "done",
         proofPhotoUrl: photoUrl,
-        completedAt,
       });
-      setTasks((prev) =>
-        prev.map((t) => {
-          if (t.id === taskId) {
-            return {
-              ...t,
-              status: "completed",
-              proofPhotoUrl: photoUrl || t.proofPhotoUrl,
-              completedAt,
-            };
-          }
-          return t;
-        })
-      );
-      // Đồng bộ lại danh sách từ server (nhiệm vụ theo ca giao cho cả ca nên
-      // trạng thái hiển thị phải theo nguồn thật).
+      // Nguồn trạng thái thật là BE (task chung theo ca dùng kết quả chung)
+      // nên tải lại thay vì cập nhật cục bộ.
       await fetchData();
       showToast("Đã duyệt hoàn thành nhiệm vụ thành công", "success");
     } catch (e: any) {
@@ -342,7 +237,6 @@ export default function TasksPage() {
     try {
       setActionInProgress(true);
       await apiDelete(`/api/tasks/${encodeURIComponent(taskId)}`);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
       await fetchData();
       showToast("Đã xóa nhiệm vụ thành công", "success");
     } catch (e: any) {
@@ -358,28 +252,21 @@ export default function TasksPage() {
     const payload = {
       title: newTask.title,
       description: newTask.description,
-      // Backend đối chiếu assignedTo với x-user-id nên phải gửi MÃ nhân viên.
-      // Task theo ca không có một người nhận cụ thể nên gửi null.
+      // BE kiểm assignedTo là employees.id (không có cột email trên Task).
+      // Task theo ca có assignedTo null — web chỉ tạo task riêng nên luôn có id.
       assignedTo: newTask.assignedToId ?? null,
-      branchSlug: newTask.branch,
-      dueDate: formatDateTime(newTask.dueDate),
+      branchId: newTask.branch,
+      dueDate: newTask.dueDate,
       status: "pending",
-      sourceType: newTask.sourceType,
-      assignedByName: newTask.assignedByName,
-      shiftName: newTask.shiftName,
       priority: newTask.priority,
-      assignedToEmail: newTask.assignedToEmail,
-      assignedToName: newTask.assignedToName,
       requirePhoto: newTask.requirePhoto,
       proofPhotoUrl: newTask.proofPhotoUrl,
     };
 
     try {
       setActionInProgress(true);
-      const res = await apiPost<any>("/api/tasks", payload);
-      const createdTask = res && typeof res === "object" && "data" in res ? res.data : res;
-      const mapped = mapBackendTaskToTaskItem(createdTask || newTask, empMap);
-      setTasks((prev) => [mapped, ...prev]);
+      await apiPost("/api/tasks", payload);
+      await fetchData();
       showToast(`Đã giao nhiệm vụ "${newTask.title}" thành công`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi giao nhiệm vụ";
@@ -451,8 +338,6 @@ export default function TasksPage() {
         onSearchChange={setSearchQuery}
         statusTab={statusTab}
         onStatusTabChange={setStatusTab}
-        sourceFilter={sourceFilter}
-        onSourceFilterChange={setSourceFilter}
         branchFilter={branchFilter}
         onBranchFilterChange={setBranchFilter}
         isManager={!isAdmin}
@@ -489,14 +374,11 @@ export default function TasksPage() {
           employees={
             isAdmin
               ? (branchFilter !== "all"
-                  ? empList.filter((e) => (e.branch || "").toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", ""))
+                  ? empList.filter((e) => (e.branchId || "") === branchFilter)
                   : empList)
-              : empList.filter((e) => (e.branch || "").toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", ""))
+              : empList.filter((e) => (e.branchId || "") === branchId)
           }
-          branches={branches}
-          shiftTemplates={shiftTemplates}
-          isAdmin={isAdmin}
-          currentBranch={isAdmin && branchFilter !== "all" ? branchFilter.toUpperCase() : (branchSlug || "").toUpperCase()}
+          currentBranch={isAdmin && branchFilter !== "all" ? branchFilter : (branchId || "")}
           currentUserName={currentUserName}
           onCreated={handleCreateTask}
         />
@@ -511,8 +393,8 @@ export default function TasksPage() {
           task={detailTask}
           onComplete={handleCompleteTask}
           onDelete={canWriteTasks ? handleDeleteTask : undefined}
-          branchLabel={(slug) =>
-            branches.find((b) => b.slug.toLowerCase() === slug.toLowerCase())?.name || slug
+          branchLabel={(branchId) =>
+            branches.find((b) => b.id === branchId)?.name || branchId
           }
         />
       )}

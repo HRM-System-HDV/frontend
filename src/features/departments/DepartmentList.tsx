@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
@@ -10,34 +10,18 @@ import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Form";
-import type { Department, Employee } from "@/types";
+import type { Department } from "@/types";
 
 interface Props {
   departments: Department[];
-  employees: Employee[];
   onEdit: (d: Department) => void;
-  isManager?: boolean;
 }
 
 export default function DepartmentList({
   departments,
-  employees,
   onEdit,
-  isManager = false,
 }: Props) {
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_departments_search", "");
-
-  // Tính số nhân sự thực tế theo từng phòng ban
-  const staffCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    employees.forEach((e) => {
-      const key = (e.department || "").trim().toLowerCase();
-      if (key) {
-        map[key] = (map[key] || 0) + 1;
-      }
-    });
-    return map;
-  }, [employees]);
 
   const filteredDepartments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -45,7 +29,7 @@ export default function DepartmentList({
     return departments.filter(
       (d) =>
         d.name.toLowerCase().includes(q) ||
-        d.code.toLowerCase().includes(q) ||
+        d.departmentCode.toLowerCase().includes(q) ||
         // `manager` có thể null (phòng ban chưa bổ nhiệm người phụ trách) —
         // bắt buộc chặn null trước khi toLowerCase, giống cột "Phụ trách" bên dưới.
         Boolean(d.manager && d.manager.toLowerCase().includes(q))
@@ -72,7 +56,7 @@ export default function DepartmentList({
       key: "staff",
       header: "Nhân sự",
       render: (d) => {
-        const count = staffCounts[(d.name || "").trim().toLowerCase()] ?? d.staff ?? 0;
+        const count = d.staff ?? 0;
         return (
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-sm text-gray-800">{count}</span>

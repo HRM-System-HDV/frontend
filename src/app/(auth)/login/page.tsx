@@ -38,10 +38,14 @@ export default function LoginPage() {
   }, [loading, authenticated, router]);
 
   // Toast "Phiên làm việc đã hết hạn" — thumbnail ngang góc phải trên, tự ẩn sau ~6s.
+  // Cờ đến từ hai nơi: sessionStorage (client tự đá về) và ?expired=1 (proxy đá
+  // trước khi trang kịp mount), nên phải đọc cả hai.
   const [expToast, setExpToast] = useState(() => {
     if (typeof window === "undefined") return false;
     try {
-      const expired = sessionStorage.getItem("hrm_session_expired") === "1";
+      const expired =
+        sessionStorage.getItem("hrm_session_expired") === "1" ||
+        new URLSearchParams(window.location.search).get("expired") === "1";
       if (expired) {
         sessionStorage.removeItem("hrm_session_expired");
         return true;

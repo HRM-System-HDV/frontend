@@ -25,7 +25,8 @@ export default function BranchSection({ branches, onEdit }: Props) {
     return branches.filter(
       (b) =>
         b.name.toLowerCase().includes(q) ||
-        b.slug.toLowerCase().includes(q) ||
+        b.id.toLowerCase().includes(q) ||
+        (b.branchCode || "").toLowerCase().includes(q) ||
         (b.address && b.address.toLowerCase().includes(q)) ||
         (b.manager && b.manager.toLowerCase().includes(q))
     );

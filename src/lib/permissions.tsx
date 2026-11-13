@@ -13,6 +13,7 @@ import {
   faNewspaper,
   faSitemap,
   faStore,
+  faUserTie,
   faUsers,
   faWifi,
 } from "@fortawesome/free-solid-svg-icons";
@@ -51,6 +52,9 @@ const ADMIN_MENU: SidebarItem[] = [
   menu("Nhân sự toàn công ty", "/dashboard/employees", faUsers),
   menu("Quản lý Phòng ban", "/dashboard/departments", faSitemap),
   menu("Quản lý Chi nhánh", "/dashboard/branches", faStore),
+  // organization-service chặn ghi danh mục vị trí bằng assertAdmin nên menu chỉ có
+  // ở tầng admin; manager vẫn chọn chức danh được trên hồ sơ (GET /api/positions).
+  menu("Danh mục Vị trí", "/dashboard/positions", faUserTie),
   menu("Phân ca làm việc", "/dashboard/shifts", faCalendarWeek),
   menu("Giao việc & Nhiệm vụ", "/dashboard/tasks", faClipboardList),
   menu("Phê duyệt yêu cầu", "/dashboard/requests", faArrowRightArrowLeft),
@@ -62,14 +66,12 @@ const ADMIN_MENU: SidebarItem[] = [
   menu("Lịch sử thao tác", "/dashboard/backlog", faClockRotateLeft),
 ];
 
-// Manager: nghiệp vụ vận hành chi nhánh. Bị chặn tính năng hệ thống nên mất
-// "Kết nối Ngân hàng" (số tài khoản + lệnh chi + SOAP), "Thông tin Chi nhánh",
-// "Wi-Fi chi nhánh" và "Lịch sử thao tác"; bảng lương chỉ còn chế độ xem vì
-// ghi lương đã chuyển sang admin.
+// Manager: vận hành chi nhánh; BE giới hạn sửa/xóa chi nhánh theo branchId.
 const MANAGER_MENU: SidebarItem[] = [
   menu("Tổng quan Dashboard", "/dashboard", faChartPie),
   menu("Nhân sự chi nhánh", "/dashboard/employees", faUsers),
   menu("Cơ cấu Phòng ban", "/dashboard/departments", faSitemap),
+  menu("Quản lý Chi nhánh", "/dashboard/branches", faStore),
   menu("Phân ca làm việc", "/dashboard/shifts", faCalendarWeek),
   menu("Giao việc & Nhiệm vụ", "/dashboard/tasks", faClipboardList),
   menu("Duyệt yêu cầu chi nhánh", "/dashboard/requests", faArrowRightArrowLeft),

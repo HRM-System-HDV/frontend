@@ -12,8 +12,9 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
-import { formatDate, formatDateTime, formatVND, getTodayVN } from "@/lib/utils";
-import { apiDelete, apiGet, GatewayError } from "@/lib/api";
+import { formatDate, formatDateTime, formatVND, getTodayVN, toInputDate } from "@/lib/utils";
+import { apiPost, apiGet, GatewayError } from "@/lib/api";
+import { Field, Input } from "@/components/ui/Form";
 import type { Employee, Branch, Department } from "@/types";
 import ExcelJS from "exceljs";
 
@@ -33,7 +34,7 @@ interface ShiftData {
   id: string;
   employeeId?: string;
   employee?: string;
-  branchSlug?: string;
+  branchId?: string;
   branch?: string;
   date: string;
   template?: string;
@@ -77,6 +78,7 @@ export default function EmployeeDeleteModal({
   const [confirmedCheck, setConfirmedCheck] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resignedAt, setResignedAt] = useState(getTodayVN());
 
   if (!employee) return null;
 
@@ -85,12 +87,12 @@ export default function EmployeeDeleteModal({
     employee.id === currentUserId ||
     (currentUserEmail && employee.email && employee.email.toLowerCase() === currentUserEmail.toLowerCase());
 
-  const getBranchLabel = (slug?: string) => {
-    if (!slug) return "Chưa phân công";
+  const getBranchLabel = (branchId?: string | null) => {
+    if (!branchId) return "Chưa phân công";
     const b = branches.find(
-      (item) => item.slug?.toLowerCase() === slug.toLowerCase() || item.name?.toLowerCase() === slug.toLowerCase()
+      (item) => item.id === branchId
     );
-    return b ? `${b.name} (${b.slug})` : slug;
+    return b ? `${b.name} (${b.branchCode || b.id})` : branchId;
   };
 
   // Tính số giờ làm việc từ 2 chuỗi HH:mm
@@ -206,7 +208,7 @@ export default function EmployeeDeleteModal({
       wsProfile.addRow([]); // Dòng trống
 
       const fullAddress = cleanText([employee.street, employee.ward, employee.province].filter(Boolean).join(", "));
-      const branchName = cleanText(getBranchLabel(employee.branchSlug || employee.branch));
+      const branchName = cleanText(getBranchLabel(employee.branchId));
 
       // Hàm helper thêm section header cho Sheet 1
       const addSectionHeader = (title: string) => {
@@ -538,7 +540,7 @@ export default function EmployeeDeleteModal({
             s.id,
             cleanText(formatDate(s.date)),
             tmpl,
-            cleanText(s.branch || s.branchSlug || "—"),
+            cleanText(s.branch || s.branchId || "—"),
             sched,
             cleanText(s.checkIn),
             cleanText(s.checkOut),
@@ -629,26 +631,28 @@ export default function EmployeeDeleteModal({
 
   const handleConfirmDelete = async () => {
     if (isSelf) {
-      setError("Không thể xóa tài khoản của chính bạn đang đăng nhập!");
+      setError("Không thể tự ghi nhận nghỉ việc cho tài khoản đang đăng nhập!");
       return;
     }
 
     if (!hasDownloaded) {
-      setError("Bạn bắt buộc phải tải file Excel lưu trữ dữ liệu trước khi xóa nhân viên này!");
+      setError("Vui lòng tải file Excel lưu trữ trước khi ghi nhận nghỉ việc.");
       return;
     }
 
+    const isoResignedAt = toInputDate(resignedAt);
+    if (!isoResignedAt) {
+      setError("Ngày nghỉ việc không hợp lệ. Vui lòng nhập theo định dạng DD/MM/YYYY.");
+      return;
+    }
     setDeleting(true);
     setError(null);
     try {
-      // apiDelete ném GatewayError (kèm message thật từ service) khi request lỗi,
-      // đồng thời tự ghi nhật ký xóa vào backlog như mọi thao tác ghi khác.
-      await apiDelete(`/api/employees/${encodeURIComponent(employee.id)}`);
-
-      onDeleted(employee);
+      const saved = await apiPost<Employee>(`/api/employees/${encodeURIComponent(employee.id)}/leave`, { resignedAt: isoResignedAt });
+      onDeleted(saved);
       onClose();
     } catch (err: any) {
-      setError(err instanceof GatewayError ? err.message : err?.message || "Lỗi khi thực hiện xóa nhân viên");
+      setError(err instanceof GatewayError ? err.message : err?.message || "Không ghi nhận được nghỉ việc");
     } finally {
       setDeleting(false);
     }
@@ -658,7 +662,7 @@ export default function EmployeeDeleteModal({
     <Modal
       open={open}
       onClose={deleting ? () => {} : onClose}
-      title="Xác nhận xóa vĩnh viễn nhân sự"
+      title="Xác nhận nhân viên nghỉ việc"
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
@@ -677,7 +681,7 @@ export default function EmployeeDeleteModal({
               {deleting ? (
                 <>
                   <FontAwesomeIcon icon={faSpinner} className="animate-spin mr-1.5" />
-                  Đang xóa vĩnh viễn...
+                  Đang ghi nhận nghỉ việc...
                 </>
               ) : (
                 <>
@@ -696,9 +700,9 @@ export default function EmployeeDeleteModal({
           <div className="p-3.5 rounded-xl bg-red-100 border border-red-300 text-red-900 flex items-start gap-3">
             <FontAwesomeIcon icon={faTriangleExclamation} className="text-red-600 text-lg mt-0.5 shrink-0" />
             <div className="space-y-1">
-              <div className="font-bold text-sm">Hành động bị nghiêm cấm: Không thể tự xóa tài khoản của chính mình!</div>
+              <div className="font-bold text-sm">Không thể tự ghi nhận nghỉ việc cho tài khoản đang đăng nhập.</div>
               <p className="text-xs text-red-800 leading-relaxed">
-                Bạn đang đăng nhập bằng chính tài khoản của nhân viên <strong>{employee.name} ({employee.id})</strong>. Hệ thống không cho phép người dùng tự xóa tài khoản của mình nhằm bảo đảm tính toàn vẹn phiên làm việc và bảo mật kiểm toán.
+                Bạn đang đăng nhập bằng tài khoản của nhân viên <strong>{employee.name} ({employee.id})</strong>. Vui lòng nhờ người quản lý khác thực hiện.
               </p>
             </div>
           </div>
@@ -731,7 +735,7 @@ export default function EmployeeDeleteModal({
                       : "bg-gray-200 text-gray-600"
                   }`}
                 >
-                  {employee.status === "đang làm" ? "Đang làm việc" : "Đã vô hiệu hóa"}
+                  {employee.status === "đang làm" ? "Đang làm việc" : employee.status === "nghỉ việc" ? "Nghỉ việc" : "Vô hiệu hóa"}
                 </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs text-gray-500 mt-2.5 pt-2.5 border-t border-gray-200">
@@ -745,7 +749,7 @@ export default function EmployeeDeleteModal({
                 </div>
                 <div>
                   <span className="text-gray-400 block text-[11px]">Chi nhánh:</span>
-                  <strong className="text-gray-700 block truncate" title={getBranchLabel(employee.branchSlug || employee.branch)}>{getBranchLabel(employee.branchSlug || employee.branch)}</strong>
+                  <strong className="text-gray-700 block truncate" title={getBranchLabel(employee.branchId)}>{getBranchLabel(employee.branchId)}</strong>
                 </div>
                 <div>
                   <span className="text-gray-400 block text-[11px]">Phòng ban:</span>
@@ -781,7 +785,7 @@ export default function EmployeeDeleteModal({
                   Quy định bắt buộc: Tải file Excel lưu trữ hồ sơ & toàn bộ dữ liệu lương
                 </div>
                 <p className="text-xs text-amber-800 leading-relaxed">
-                  Để đảm bảo tính toàn vẹn hồ sơ nhân sự và phục vụ công tác thanh tra/kiểm toán, trước khi xóa vĩnh viễn nhân sự này khỏi hệ thống, bạn <strong>bắt buộc phải tải về 01 file Excel tổng hợp</strong> bao gồm:
+                  Trước khi ghi nhận nghỉ việc, bạn <strong>tải về file Excel tổng hợp</strong> bao gồm:
                 </p>
                 <ul className="text-xs text-amber-800 list-disc list-inside space-y-0.5 pt-1">
                   <li><strong>Sheet 1:</strong> Toàn bộ thông tin nhân sự (Định danh, CCCD, địa chỉ, vị trí, tài khoản ngân hàng).</li>
@@ -808,7 +812,7 @@ export default function EmployeeDeleteModal({
                     Đã tải thành công: <strong>{downloadedFileName}</strong>
                   </span>
                 ) : (
-                  "Chưa tải về file dữ liệu. Nút xác nhận xóa đang bị khóa."
+                  "Chưa tải về file dữ liệu. Nút xác nhận nghỉ việc đang bị khóa."
                 )}
               </div>
             </div>
@@ -845,7 +849,7 @@ export default function EmployeeDeleteModal({
           <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-950 space-y-2 animate-fadeIn">
             <div className="flex items-center gap-2 text-xs font-bold text-emerald-800">
               <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-600 text-sm" />
-              Điều kiện tải file đã thỏa mãn — Nút xóa vĩnh viễn đã được mở khóa
+              Đã tải file, có thể xác nhận nghỉ việc.
             </div>
             <label className="flex items-start gap-2.5 cursor-pointer pt-1 select-none">
               <input
@@ -855,12 +859,13 @@ export default function EmployeeDeleteModal({
                 className="mt-0.5 rounded border-gray-300 text-red-600 focus:ring-red-500"
               />
               <span className="text-xs text-gray-700 leading-relaxed">
-                Tôi xác nhận đã lưu trữ an toàn file Excel trên máy tính nội bộ và hoàn toàn hiểu rằng hành động xóa này sẽ <strong>xóa vĩnh viễn hồ sơ của nhân sự &quot;{employee.name}&quot;</strong> và không thể hoàn tác.
+                Tôi xác nhận đã lưu trữ file Excel và ghi nhận <strong>nhân viên &quot;{employee.name}&quot; nghỉ việc</strong>. Hồ sơ và lịch sử vẫn được giữ lại, tài khoản ngừng đăng nhập.
               </span>
             </label>
           </div>
         )}
 
+        {!isSelf && <Field label="Ngày nghỉ việc" required><Input value={resignedAt} onChange={e => setResignedAt(e.target.value)} placeholder="DD/MM/YYYY" disabled={deleting} /></Field>}
         {/* THÔNG BÁO LỖI NẾU CÓ */}
         {error && (
           <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">

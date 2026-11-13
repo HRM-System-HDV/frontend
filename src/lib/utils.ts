@@ -155,3 +155,28 @@ export function getTodayVN(): string {
   const y = now.getFullYear();
   return `${d}/${m}/${y}`;
 }
+
+/** Format giờ "HH:mm" từ nhiều dạng đầu vào (Date, ISO datetime, DD/MM/YYYY HH:mm, "HH:mm").
+ *  Trả về "HH:mm" chuẩn; giá trị rỗng/invalid -> "" (gọi site tự fallback "—"). */
+export function toHHmm(value?: string | Date | null): string {
+  if (value === undefined || value === null) return "";
+  if (value instanceof Date) {
+    if (isNaN(value.getTime())) return "";
+    const hh = String(value.getHours()).padStart(2, "0");
+    const mi = String(value.getMinutes()).padStart(2, "0");
+    return `${hh}:${mi}`;
+  }
+  const str = String(value).trim();
+  if (!str) return "";
+  const hm = str.match(/^(\d{1,2}):(\d{2})$/);
+  if (hm) return `${String(hm[1]).padStart(2, "0")}:${hm[2]}`;
+  const isoTime = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[T ](\d{1,2}):(\d{2})/);
+  if (isoTime) return `${String(isoTime[4]).padStart(2, "0")}:${isoTime[5]}`;
+  const vnTime = str.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})(?:[T ](\d{1,2}):(\d{2}))?/);
+  if (vnTime) return `${String(vnTime[4] ?? "0").padStart(2, "0")}:${vnTime[5] ?? "00"}`;
+  const parsed = parseDate(str);
+  if (!parsed) return "";
+  const hh = String(parsed.getHours()).padStart(2, "0");
+  const mi = String(parsed.getMinutes()).padStart(2, "0");
+  return `${hh}:${mi}`;
+}

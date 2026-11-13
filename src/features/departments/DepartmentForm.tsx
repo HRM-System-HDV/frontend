@@ -1,42 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import { Field, Input, Select } from "@/components/ui/Form";
-import type { Department, Employee } from "@/types";
-import { getTodayVN } from "@/lib/utils";
+import type { Department } from "@/types";
+import { apiGet } from "@/lib/api";
+
+// Đúng 4 trường organization-service nhận (orgValidator fields.department);
+// manager/staff/createdAt do BE tính và trả về, không gửi lên.
+export type DepartmentFormPayload = Pick<Department, "name" | "departmentCode" | "managerId" | "status"> & { id?: string };
 
 interface Props {
   open: boolean;
   onClose: () => void;
   department: Department | null;
-  employees: Employee[];
-  onSave: (data: Omit<Department, "id"> & { id?: string }) => void;
+  onSave: (data: DepartmentFormPayload) => void;
   onDelete?: (department: Department) => void;
   onLock?: (department: Department) => void;
 }
 
-export default function DepartmentModal({ open, onClose, department, employees, onSave, onDelete, onLock }: Props) {
+export default function DepartmentModal({ open, onClose, department, onSave, onDelete, onLock }: Props) {
+  const [candidates, setCandidates] = useState<{ id: string; name: string }[]>([]);
+  const [candidateError, setCandidateError] = useState("");
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  const departmentId = department?.id;
+  useEffect(() => {
+    if (!open || !departmentId) return;
+    let ignore = false;
+    setLoadingCandidates(true);
+    setCandidateError("");
+    apiGet<{ id: string; name: string }[]>(`/api/departments/${encodeURIComponent(departmentId)}/manager-candidates`)
+      .then(data => { if (!ignore) setCandidates(data || []); })
+      .catch(() => { if (!ignore) setCandidateError("Không thể tải danh sách người phụ trách. Vui lòng mở lại form để thử lại."); })
+      .finally(() => { if (!ignore) setLoadingCandidates(false); });
+    return () => { ignore = true; };
+  }, [open, departmentId]);
+  const [departmentCode, setDepartmentCode] = useState(department?.departmentCode || "");
   const [name, setName] = useState(department?.name || "");
   const [manager, setManager] = useState(
-    department?.manager ? department.manager.split(/—|-|\(/)[0].trim() : ""
+    department?.managerId || ""
   );
   const [status, setStatus] = useState<"hoạt động" | "tạm dừng">(
     department?.status || "hoạt động"
   );
 
   const handleSave = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !departmentCode.trim()) return;
     onSave({
       id: department?.id,
       name: name.trim(),
-      // Mã phòng ban do BE tự sinh khi tạo; form chỉ giữ lại code ở chế độ sửa.
-      code: department?.code ?? "",
-      manager: manager.trim(),
+      departmentCode: departmentCode.trim(),
+      managerId: manager || null,
       status,
-      staff: department?.staff ?? 0,
-      createdAt: department?.createdAt || getTodayVN(),
     });
   };
 
@@ -75,6 +91,9 @@ export default function DepartmentModal({ open, onClose, department, employees, 
       }
     >
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+        <Field label="Mã phòng ban" required className="md:col-span-2">
+          <Input value={departmentCode} onChange={e => setDepartmentCode(e.target.value)} placeholder="VD: PB-001" />
+        </Field>
         <Field label="Tên phòng ban" required className="md:col-span-2">
           <Input
             value={name}
@@ -84,25 +103,19 @@ export default function DepartmentModal({ open, onClose, department, employees, 
         </Field>
 
         <Field label="Phụ trách" className="md:col-span-2">
-          {employees.length > 0 ? (
-            <Select value={manager} onChange={(e) => setManager(e.target.value)}>
+            <Select value={manager} onChange={(e) => setManager(e.target.value)} disabled={!department || loadingCandidates || !!candidateError}>
               <option value="">-- Chọn nhân sự phụ trách --</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.name}>
+              {candidates.map((emp) => (
+                <option key={emp.id} value={emp.id}>
                   {emp.name}
                 </option>
               ))}
-              {manager && !employees.some((emp) => emp.name === manager) && (
-                <option value={manager}>{manager}</option>
+              {manager && !candidates.some((emp) => emp.id === manager) && (
+                <option value={manager} disabled>{department?.manager || "Người phụ trách hiện tại"}</option>
               )}
             </Select>
-          ) : (
-            <Input
-              value={manager}
-              onChange={(e) => setManager(e.target.value)}
-              placeholder="Nhập tên nhân sự phụ trách..."
-            />
-          )}
+            {!department && <p className="mt-1 text-xs text-gray-500">Tạo phòng ban và phân nhân viên vào trước khi chọn người phụ trách.</p>}
+            {candidateError && <p role="alert" className="mt-1 text-xs text-red-600">{candidateError}</p>}
         </Field>
 
         <Field label="Trạng thái hoạt động" required className="md:col-span-2">

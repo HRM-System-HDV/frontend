@@ -3,7 +3,6 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBuildingColumns,
-  faCheck,
   faCircleCheck,
   faCircleXmark,
   faShieldHalved,
@@ -16,13 +15,11 @@ import type { BankPartner } from "./types";
 
 interface Props {
   partners: BankPartner[];
-  onSetPrimary: (id: string) => void;
   onOpenConfig: (p: BankPartner) => void;
 }
 
 export default function BankPartnersList({
   partners,
-  onSetPrimary,
   onOpenConfig,
 }: Props) {
   return (
@@ -71,7 +68,7 @@ export default function BankPartnersList({
                       {partner.shortName}
                     </h4>
                     <p className="text-xs text-gray-500 truncate">
-                      {partner.branch}
+                      {partner.bankBranch || partner.branch}
                     </p>
                   </div>
                 </div>
@@ -116,19 +113,12 @@ export default function BankPartnersList({
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
-                  {!isPrimary ? (
-                    <Button
-                      variant="white"
-                      size="sm"
-                      className="text-xs flex-1"
-                      onClick={() => onSetPrimary(partner.id)}
-                    >
-                      <FontAwesomeIcon icon={faCheck} fontSize={12} /> Chọn làm nguồn chính
-                    </Button>
-                  ) : (
+                  {isPrimary ? (
                     <span className="text-xs text-primary font-semibold flex items-center gap-1">
                       <FontAwesomeIcon icon={faShieldHalved} fontSize={12} /> Nguồn chi mặc định
                     </span>
+                  ) : (
+                    <span className="text-xs text-gray-400">Chưa phải nguồn chính</span>
                   )}
                   <Button
                     variant="white"

@@ -17,13 +17,11 @@ import { apiGet } from "@/lib/api";
 import type { Branch, Department, Employee } from "@/types";
 import { useCurrentUser } from "@/context/AuthContext";
 
-// Gateway trả về hồ sơ nhân sự với khóa `branchSlug` (schema Employee không có
-// trường `branch`), nên phải đọc `branchSlug` — giữ `branch` làm giá trị dự phòng
-// cho dữ liệu đã được chuẩn hóa ở nơi khác.
-const employeeBranchOf = (e: Employee) => e.branchSlug || e.branch || "";
+// Liên kết hồ sơ nhân sự với chi nhánh bằng branchId từ backend.
+const employeeBranchOf = (e: Employee) => e.branchId || "";
 
 export default function DashboardOverviewPage() {
-  const { role, branchSlug } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   const isManager = role === "manager";
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -68,7 +66,7 @@ export default function DashboardOverviewPage() {
   // Filter if manager
   const displayedEmployees = isManager
     ? employees.filter(
-        (e) => employeeBranchOf(e).toLowerCase().replace(/-/g, "") === branchSlug.toLowerCase().replace(/-/g, "")
+        (e) => employeeBranchOf(e) === branchId
       )
     : employees;
 
@@ -98,7 +96,7 @@ export default function DashboardOverviewPage() {
         const raw = employeeBranchOf(e);
         return (
           <Badge tone="gray">
-            {branches.find((b) => b.slug.toLowerCase() === raw.toLowerCase())?.name || raw || "—"}
+            {branches.find((b) => b.id === raw)?.name || raw || "—"}
           </Badge>
         );
       },
@@ -161,16 +159,16 @@ export default function DashboardOverviewPage() {
         <CardBody className="space-y-4">
           {branches.map((b) => {
             const count = displayedEmployees.filter(
-              (e) => employeeBranchOf(e).toLowerCase().replace(/-/g, "") === (b.slug || "").toLowerCase().replace(/-/g, "")
+              (e) => employeeBranchOf(e) === (b.id || "")
             ).length;
             const pct = totalEmployees > 0 ? Math.round((count / totalEmployees) * 100) : 0;
 
             return (
-              <div key={b.id || b.slug} className="p-3.5 rounded-lg border border-gray-100 hover:border-gray-200 transition-all bg-gray-50/50">
+              <div key={b.id} className="p-3.5 rounded-lg border border-gray-100 hover:border-gray-200 transition-all bg-gray-50/50">
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-gray-800 text-sm">{b.name}</span>
-                    <Badge tone="gray">{b.slug}</Badge>
+                    <Badge tone="gray">{b.branchCode || b.id}</Badge>
                   </div>
                   <span className="text-sm font-bold text-gray-800">
                     {count} nhân sự <span className="text-xs font-normal text-gray-500">({pct}%)</span>

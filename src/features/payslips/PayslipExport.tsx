@@ -136,10 +136,10 @@ export async function exportPayslipsToExcel(slips: Payslip[], options: ExportOpt
   let totalNet = 0;
 
   slips.forEach((p, idx) => {
-    const base = Number(p.salary) || 0;
+    const base = Number(p.salary ?? p.baseSalary) || 0;
     const bonus = Number(p.bonus) || 0;
-    const penalty = Number(p.penalty) || 0;
-    const net = Number(p.total) || 0;
+    const penalty = Number(p.penalty ?? p.totalPenalty) || 0;
+    const net = Number(p.total ?? p.netSalary) || 0;
 
     totalBase += base;
     totalBonus += bonus;
@@ -255,8 +255,8 @@ interface ExportModalProps {
   months: string[];
   defaultMonth?: string;
   userName?: string;
-  /** Đổi slug chi nhánh thành tên hiển thị; thiếu thì hiện slug gốc. */
-  branchLabel?: (slug: string) => string;
+  /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function ExportPayslipModal({
@@ -305,10 +305,10 @@ export default function ExportPayslipModal({
     let penalty = 0;
     let net = 0;
     targetSlips.forEach((p) => {
-      base += Number(p.salary) || 0;
+      base += Number(p.salary ?? p.baseSalary) || 0;
       bonus += Number(p.bonus) || 0;
-      penalty += Number(p.penalty) || 0;
-      net += Number(p.total) || 0;
+      penalty += Number(p.penalty ?? p.totalPenalty) || 0;
+      net += Number(p.total ?? p.netSalary) || 0;
     });
     return { base, bonus, penalty, net };
   }, [targetSlips]);
@@ -320,8 +320,8 @@ export default function ExportPayslipModal({
     }
     setExporting(true);
     try {
-      // Giá trị lọc vẫn là slug; chỉ nhãn (header + cột Excel) đổi slug -> tên.
-      const resolve = (slug?: string) => (slug ? (branchLabel ? branchLabel(slug) : slug) : slug);
+      // Giá trị lọc vẫn là branchId; chỉ nhãn (header + cột Excel) đổi branchId -> tên.
+      const resolve = (branchId?: string) => (branchId ? (branchLabel ? branchLabel(branchId) : branchId) : branchId);
       await exportPayslipsToExcel(
         targetSlips.map((p) => ({ ...p, branch: resolve(p.branch) })),
         {

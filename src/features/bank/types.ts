@@ -1,18 +1,19 @@
+// BE BankAccount không có cột status/chi nhánh dạng text — branch là tên hiển thị
+// suy từ branchId (organization-service), mọi giá trị khác là dữ liệu thật của bank_accounts.
 export interface BankPartner {
   id: string;
   name: string;
   shortName: string;
   accountNumber: string;
   accountName: string;
+  branchId: string | null;
   branch: string;
+  /** Ngân hàng/phòng giao dịch nơi doanh nghiệp mở tài khoản (bank_accounts.bankBranch). */
+  bankBranch: string;
   balance: number;
   isPrimary: boolean;
-  status: "active" | "standby" | "maintenance";
-  soapProtocol: string;
-  mTLSStatus: "valid" | "expiring_soon" | "not_configured";
   certExpiry: string;
-  channel: string;
-  connectionStatus: "connected" | "disconnected" | "checking";
+  connectionStatus: "connected" | "disconnected";
 }
 
 export interface SoapTransaction {
@@ -30,20 +31,16 @@ export interface SoapTransaction {
   soapAction: string;
   xmlPayload: string;
   xmlResponse: string;
-  /** Có khi backend trả deduped:true (trùng idempotencyKey) — dùng để hiện badge "Trùng". */
-  deduped?: boolean;
 }
 
+// Khớp đúng model SoapGatewayConfig của integration-service (không có port/allowedIPs/channel).
 export interface SoapGatewayConfig {
   endpointUrl: string;
   wsdlUrl: string;
   serviceName: string;
-  port: number;
   securityMode: string;
-  allowedIPs: string[];
   status: "healthy" | "degraded" | "down" | "unknown";
   lastPingTime: string | null;
   avgResponseTime: string | null;
   certExpiry?: string;
-  channel?: string;
 }

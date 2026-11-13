@@ -16,67 +16,82 @@ import CreatePayrollDisbursementModal from "@/features/bank/PayoutCreate";
 import BankConfigModal, { CreateBankAccountModal } from "@/features/bank/BankForm";
 import { DEFAULT_SOAP_GATEWAY_CONFIG } from "@/features/bank/constants";
 import type { BankPartner, SoapTransaction, SoapGatewayConfig } from "@/features/bank/types";
+import type { Branch } from "@/types";
 import { apiGet, apiPut, GatewayError } from "@/lib/api";
 import { useCurrentUser } from "@/context/AuthContext";
 import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
+// Khớp dòng bank_accounts của payroll-service: balance là Decimal(15,0)
+// (JSON serialize thành chuỗi), branchId trỏ branches.id của organization.
 interface BankAccountRow {
   id: string;
   accountNumber: string;
-  accountName?: string;
-  bankName?: string;
-  branch?: string;
-  balance: number;
-  status?: string;
+  accountName?: string | null;
+  bankName?: string | null;
+  bankBranch?: string | null;
+  branchId?: string | null;
+  balance: string | number;
   isPrimary?: boolean;
 }
 
+// Khớp dòng payouts: khóa nợ là debitAccountId/debitAccountNumber, không có `debitAccount`.
 interface PayoutRow {
   id: string;
   bankReference: string;
-  debitAccount: string;
-  totalAmount: number;
-  content?: string;
+  debitAccountNumber?: string | null;
+  totalAmount: string | number;
+  content?: string | null;
   beneficiaryCount: number;
-  idempotencyKey?: string;
   status: string;
   createdAt: string;
-  deduped?: boolean;
 }
 
-function accountToPartner(row: BankAccountRow, gatewayConfig: SoapGatewayConfig): BankPartner {
+function parseSoapConfig(configData: Record<string, unknown> | null): SoapGatewayConfig {
+  if (!configData || typeof configData !== "object") return DEFAULT_SOAP_GATEWAY_CONFIG;
+  return {
+    endpointUrl: (configData.endpointUrl as string) ?? "",
+    wsdlUrl: (configData.wsdlUrl as string) ?? "",
+    serviceName: (configData.serviceName as string) ?? "",
+    securityMode: (configData.securityMode as string) ?? "",
+    status: ((configData.status as string) || "unknown") as SoapGatewayConfig["status"],
+    lastPingTime: (configData.lastPingTime as string) ?? null,
+    avgResponseTime: configData.avgResponseTime != null ? String(configData.avgResponseTime) : null,
+    certExpiry: (configData.certExpiry as string) ?? "Chưa thiết lập",
+  };
+}
+
+function accountToPartner(
+  row: BankAccountRow,
+  gatewayConfig: SoapGatewayConfig,
+  branchNames: Map<string, string>
+): BankPartner {
   const displayName = row.bankName || row.accountName || `Tài khoản ${row.accountNumber}`;
   const shortName = row.bankName || displayName.split(" ").slice(0, 2).join(" ");
-  const isHealthy = gatewayConfig.status === "healthy";
   return {
     id: row.id,
     name: displayName,
     shortName,
     accountNumber: row.accountNumber,
     accountName: row.accountName || displayName,
-    branch: row.branch || "Chưa cập nhật chi nhánh",
+    branchId: row.branchId ?? null,
+    branch: row.branchId ? branchNames.get(row.branchId) || row.branchId : "Chưa gán chi nhánh",
+    bankBranch: row.bankBranch || "",
     balance: Number(row.balance) || 0,
     isPrimary: row.isPrimary === true,
-    status: row.status === "vô hiệu hóa" ? "maintenance" : "active",
-    soapProtocol: gatewayConfig.securityMode || "SOAP 1.2 / HTTPS (qua Gateway :4000)",
-    mTLSStatus: isHealthy ? "valid" : "not_configured",
     certExpiry: gatewayConfig.certExpiry || "Chưa thiết lập",
-    channel: gatewayConfig.channel || "Gateway",
-    connectionStatus: isHealthy ? "connected" : "disconnected",
+    connectionStatus: gatewayConfig.status === "healthy" ? "connected" : "disconnected",
   };
 }
 
-function payoutToTx(
-  row: PayoutRow,
-  bankNameByAccount: Map<string, string>,
-  accountNameByAccount: Map<string, string>
-): SoapTransaction {
+function payoutToTx(row: PayoutRow, partners: BankPartner[]): SoapTransaction {
+  const accountNumber = row.debitAccountNumber || "—";
+  const match = partners.find((p) => p.accountNumber === accountNumber);
   return {
     id: row.id,
     batchName: row.content || "Lệnh chi lương",
-    bankName: bankNameByAccount.get(row.debitAccount) || row.debitAccount,
-    accountNumber: row.debitAccount,
-    accountName: accountNameByAccount.get(row.debitAccount) || "CÔNG TY CỔ PHẦN HRM",
+    bankName: match?.shortName || accountNumber,
+    accountNumber,
+    accountName: match?.accountName,
     totalEmployees: row.beneficiaryCount,
     totalAmount: Number(row.totalAmount) || 0,
     status: row.status === "success" ? "success" : row.status === "failed" ? "failed" : "processing",
@@ -84,9 +99,8 @@ function payoutToTx(
     completedAt: row.createdAt,
     bankReference: row.bankReference,
     soapAction: "CreatePayout (REST)",
-    xmlPayload: `REST POST /api/payroll/payouts\nidempotencyKey=${row.idempotencyKey ?? ""}`,
+    xmlPayload: `REST POST /api/payroll/payouts\npayslipIds theo lệnh chi ${row.bankReference}`,
     xmlResponse: `transactionId=${row.id}\nbankReference=${row.bankReference}`,
-    deduped: row.deduped,
   };
 }
 
@@ -99,6 +113,7 @@ export default function BankIntegrationPage() {
 
   const [partners, setPartners] = useState<BankPartner[]>([]);
   const [transactions, setTransactions] = useState<SoapTransaction[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [gatewayConfig, setGatewayConfig] = useState<SoapGatewayConfig>(DEFAULT_SOAP_GATEWAY_CONFIG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,39 +130,21 @@ export default function BankIntegrationPage() {
     try {
       setLoading(true);
       setError(null);
-      const [accounts, payouts, configData] = await Promise.all([
+      const [accounts, payouts, branchRows, configData] = await Promise.all([
         apiGet<BankAccountRow[]>("/api/payroll/bank-accounts"),
         apiGet<PayoutRow[]>("/api/payroll/payouts"),
+        apiGet<Branch[]>("/api/branches"),
         apiGet<Record<string, unknown>>("/api/soap-config").catch(() => null),
       ]);
 
-      let currentConfig = DEFAULT_SOAP_GATEWAY_CONFIG;
-      if (configData && typeof configData === "object") {
-        currentConfig = {
-          endpointUrl: (configData.endpointUrl as string) ?? "",
-          wsdlUrl: (configData.wsdlUrl as string) ?? "",
-          serviceName: (configData.serviceName as string) ?? "",
-          port: Number(configData.port) || 0,
-          securityMode: (configData.securityMode as string) ?? "",
-          allowedIPs: Array.isArray(configData.allowedIPs) ? configData.allowedIPs : [],
-          status: ((configData.status as any) || "unknown") as "healthy" | "degraded" | "down" | "unknown",
-          lastPingTime: (configData.lastPingTime as string) ?? null,
-          avgResponseTime: configData.avgResponseTime != null ? String(configData.avgResponseTime) : null,
-          certExpiry: (configData.certExpiry as string) ?? "Chưa thiết lập",
-          channel: (configData.channel as string) ?? "Gateway",
-        };
-        setGatewayConfig(currentConfig);
-      }
-
-      const mappedPartners = (accounts || []).map((acc) => accountToPartner(acc, currentConfig));
+      const currentConfig = parseSoapConfig(configData);
+      setGatewayConfig(currentConfig);
+      const branchList = Array.isArray(branchRows) ? branchRows : [];
+      setBranches(branchList);
+      const branchNames = new Map(branchList.map((b) => [b.id, b.name] as const));
+      const mappedPartners = (accounts || []).map((acc) => accountToPartner(acc, currentConfig, branchNames));
       setPartners(mappedPartners);
-      const bankNameByAccount = new Map(
-        mappedPartners.map((p) => [p.accountNumber, p.shortName] as const)
-      );
-      const accountNameByAccount = new Map(
-        mappedPartners.map((p) => [p.accountNumber, p.accountName] as const)
-      );
-      setTransactions((payouts || []).map((r) => payoutToTx(r, bankNameByAccount, accountNameByAccount)));
+      setTransactions((payouts || []).map((r) => payoutToTx(r, mappedPartners)));
     } catch (e) {
       setError(e instanceof GatewayError ? e.message : "Lỗi tải dữ liệu ngân hàng");
     } finally {
@@ -156,81 +153,28 @@ export default function BankIntegrationPage() {
   }, []);
 
   useEffect(() => {
-    if (!isAdmin) {
-      setLoading(false);
-      return;
-    }
-    let ignore = false;
-    Promise.all([
-      apiGet<BankAccountRow[]>("/api/payroll/bank-accounts"),
-      apiGet<PayoutRow[]>("/api/payroll/payouts"),
-      apiGet<Record<string, unknown>>("/api/soap-config").catch(() => null),
-    ])
-      .then(([accounts, payouts, configData]) => {
-        if (!ignore) {
-          let currentConfig = DEFAULT_SOAP_GATEWAY_CONFIG;
-          if (configData && typeof configData === "object") {
-            currentConfig = {
-              endpointUrl: (configData.endpointUrl as string) ?? "",
-              wsdlUrl: (configData.wsdlUrl as string) ?? "",
-              serviceName: (configData.serviceName as string) ?? "",
-              port: Number(configData.port) || 0,
-              securityMode: (configData.securityMode as string) ?? "",
-              allowedIPs: Array.isArray(configData.allowedIPs) ? configData.allowedIPs : [],
-              status: ((configData.status as any) || "unknown") as "healthy" | "degraded" | "down" | "unknown",
-              lastPingTime: (configData.lastPingTime as string) ?? null,
-              avgResponseTime: configData.avgResponseTime != null ? String(configData.avgResponseTime) : null,
-              certExpiry: (configData.certExpiry as string) ?? "Chưa thiết lập",
-              channel: (configData.channel as string) ?? "Gateway",
-            };
-            setGatewayConfig(currentConfig);
-          }
-
-          const mappedPartners = (accounts || []).map((acc) => accountToPartner(acc, currentConfig));
-          setPartners(mappedPartners);
-          const bankNameByAccount = new Map(
-            mappedPartners.map((p) => [p.accountNumber, p.shortName] as const)
-          );
-          const accountNameByAccount = new Map(
-            mappedPartners.map((p) => [p.accountNumber, p.accountName] as const)
-          );
-          setTransactions((payouts || []).map((r) => payoutToTx(r, bankNameByAccount, accountNameByAccount)));
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          setError(e instanceof GatewayError ? e.message : "Lỗi tải dữ liệu ngân hàng");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, [isAdmin]);
+    // Vai trò khác admin đã bị NoAccessNotice chặn ở return dưới đây,
+    // nên chỉ cần tải dữ liệu khi là admin.
+    if (!isAdmin) return;
+    void fetchData();
+  }, [isAdmin, fetchData]);
 
   const handleSetPrimary = async (bankId: string) => {
     try {
-      await apiPut(`/api/payroll/bank-accounts/${bankId}`, { isPrimary: true });
-      setPartners((prev) =>
-        prev.map((p) => ({
-          ...p,
-          isPrimary: p.id === bankId,
-        }))
-      );
-    } catch {
-      // ignore
+      await apiPut(`/api/payroll/bank-accounts/${encodeURIComponent(bankId)}`, { isPrimary: true });
+      await fetchData();
+    } catch (e) {
+      setError(e instanceof GatewayError ? e.message : "Không đổi được tài khoản chính");
     }
   };
 
-  const handleSavedPartner = (updated: BankPartner) => {
-    setPartners((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-    fetchData();
+  // Nguồn trạng thái thật là BE nên mọi thao tác ghi xong tải lại, không cập nhật cục bộ.
+  const handleSavedPartner = () => {
+    void fetchData();
   };
 
-  const handleDeletedPartner = (deletedId: string) => {
-    setPartners((prev) => prev.filter((p) => p.id !== deletedId));
-    fetchData();
+  const handleDeletedPartner = () => {
+    void fetchData();
   };
 
   if (!canAccessPath(role, "/dashboard/bank")) {
@@ -283,7 +227,6 @@ export default function BankIntegrationPage() {
           {/* Partner Banks Grid */}
           <BankPartnersList
             partners={partners}
-            onSetPrimary={handleSetPrimary}
             onOpenConfig={(p) => setSelectedBankConfig(p)}
           />
 
@@ -300,7 +243,7 @@ export default function BankIntegrationPage() {
         open={testModalOpen}
         onClose={() => {
           setTestModalOpen(false);
-          fetchData();
+          void fetchData();
         }}
         config={gatewayConfig}
       />
@@ -324,9 +267,11 @@ export default function BankIntegrationPage() {
         <BankConfigModal
           key={selectedBankConfig.id}
           partner={selectedBankConfig}
+          branches={branches}
           onClose={() => setSelectedBankConfig(null)}
           onSaved={handleSavedPartner}
           onDeleted={handleDeletedPartner}
+          onSetPrimary={handleSetPrimary}
         />
       )}
 
@@ -334,6 +279,7 @@ export default function BankIntegrationPage() {
         <CreateBankAccountModal
           key="create-account-modal"
           open={createAccountOpen}
+          branches={branches}
           onClose={() => setCreateAccountOpen(false)}
           onCreated={() => fetchData()}
           isFirstAccount={partners.length === 0}

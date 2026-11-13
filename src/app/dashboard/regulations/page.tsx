@@ -11,16 +11,12 @@ import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import { useCurrentUser } from "@/context/AuthContext";
-import { formatDate, getTodayVN } from "@/lib/utils";
-
-function todayStr(): string {
-  return getTodayVN();
-}
+import { canManageRegulation } from "@/features/regulations/helpers";
 
 export default function RegulationsManagementPage() {
-  const { role } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   // WRITE /api/regulations = manager + admin; nhân viên chỉ đọc văn bản.
-  const canWriteRegulations = role !== "staff";
+  const canWriteRegulations = role === "admin" || (role === "manager" && !!branchId);
 
   const [items, setItems] = useState<Regulation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,24 +44,8 @@ export default function RegulationsManagementPage() {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-    apiGet<Regulation[]>("/api/regulations")
-      .then((data) => {
-        if (!ignore) {
-          setItems(data || []);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          setError(e instanceof GatewayError ? e.message : "Lỗi tải nội quy");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   // Mở modal tạo mới
   const handleOpenCreateModal = () => {
@@ -75,6 +55,7 @@ export default function RegulationsManagementPage() {
 
   // Mở modal chỉnh sửa
   const handleOpenEditModal = (item: Regulation) => {
+    if (!canManageRegulation(role, branchId, item)) return;
     setEditingItem(item);
     setIsEditModalOpen(true);
   };
@@ -87,18 +68,20 @@ export default function RegulationsManagementPage() {
 
   // Lưu tạo mới hoặc cập nhật qua API thật
   const handleSaveItem = async (input: RegulationFormInput) => {
+    if (!canWriteRegulations || (editingItem && !canManageRegulation(role, branchId, editingItem))) return;
     setSaving(true);
     try {
       if (editingItem) {
         const updated = await apiPut<Regulation>(`/api/regulations/${editingItem.id}`, {
-          code: input.code?.trim() || editingItem.code,
+          regulationCode: input.regulationCode?.trim() || editingItem.regulationCode,
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
           content: input.content.trim(),
           status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || getTodayVN(),
+          scopeBranchId: input.scopeBranchId,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           version: input.version,
           pinned: input.pinned,
         });
@@ -106,18 +89,17 @@ export default function RegulationsManagementPage() {
         if (viewingItem?.id === editingItem.id) setViewingItem(updated);
       } else {
         const created = await apiPost<Regulation>("/api/regulations", {
-          ...(input.code?.trim() ? { code: input.code.trim() } : {}),
+          ...(input.regulationCode?.trim() ? { regulationCode: input.regulationCode.trim() } : {}),
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
           content: input.content.trim(),
           status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || todayStr(),
+          scopeBranchId: input.scopeBranchId,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           version: input.version || "1.0",
-          pinned: input.pinned,
-          attachments: 0,
-        });
+          pinned: input.pinned,        });
         setItems((prev) => [created, ...prev]);
       }
       setIsEditModalOpen(false);
@@ -132,7 +114,7 @@ export default function RegulationsManagementPage() {
   // Bật/tắt ghim qua API thật
   const handleTogglePin = async (id: string) => {
     const target = items.find((i) => i.id === id);
-    if (!target) return;
+    if (!target || !canManageRegulation(role, branchId, target)) return;
     try {
       const updated = await apiPut<Regulation>(`/api/regulations/${id}`, { pinned: !target.pinned });
       setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
@@ -144,6 +126,8 @@ export default function RegulationsManagementPage() {
 
   // Xóa nội quy qua API thật
   const handleDeleteItem = async (id: string, title?: string) => {
+    const target = items.find(item => item.id === id);
+    if (!target || !canManageRegulation(role, branchId, target)) return;
     if (!confirm(`Bạn có chắc chắn muốn xóa văn bản nội quy "${title}" không?`)) return;
     try {
       await apiDelete(`/api/regulations/${id}`);
@@ -202,9 +186,9 @@ export default function RegulationsManagementPage() {
       <RegulationDetailModal
         item={viewingItem}
         onClose={() => setViewingItem(null)}
-        onEdit={canWriteRegulations ? handleEditFromView : undefined}
-        onDelete={canWriteRegulations ? handleDeleteItem : undefined}
-        onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
+        onEdit={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleEditFromView : undefined}
+        onDelete={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleDeleteItem : undefined}
+        onTogglePin={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleTogglePin : undefined}
       />
 
       {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}

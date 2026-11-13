@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { GATEWAY_URL, GatewayError } from "@/lib/api";
+import { GATEWAY_URL, GatewayError, refreshSession } from "@/lib/api";
 
 export interface UserSession {
   userId: string;
@@ -18,7 +18,6 @@ export interface UserSession {
   role: "admin" | "manager" | "staff";
   roleTitle: string;
   branchId: string;
-  branchSlug: string;
   branchName: string;
 }
 
@@ -28,24 +27,18 @@ interface AuthMeResponse {
   name: string;
   role: "admin" | "manager" | "staff";
   roleTitle: string;
-  branchSlug: string | null;
+  branchId: string | null;
 }
 
 function toSession(me: AuthMeResponse): UserSession {
-  const slug = (me.branchSlug || "").toLowerCase();
   return {
     userId: me.id,
     name: me.name,
     email: me.email,
     role: me.role,
     roleTitle: me.roleTitle,
-    branchId: slug ? `b-${slug}` : "",
-    branchSlug: slug,
-    branchName: !slug
-      ? ""
-      : slug === "hn-1"
-        ? "Chi nhánh HN-1"
-        : `Chi nhánh ${slug.toUpperCase()}`,
+    branchId: me.branchId || "",
+    branchName: "",
   };
 }
 
@@ -60,7 +53,6 @@ const ANONYMOUS_USER: UserSession = {
   role: "staff",
   roleTitle: "",
   branchId: "",
-  branchSlug: "",
   branchName: "",
 };
 
@@ -68,7 +60,7 @@ interface AuthContextType {
   user: UserSession;
   name: string;
   role: "admin" | "manager" | "staff";
-  branchSlug: string;
+  branchId: string;
   loading: boolean;
   authenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -79,7 +71,7 @@ const AuthContext = createContext<AuthContextType>({
   user: ANONYMOUS_USER,
   name: "",
   role: "staff",
-  branchSlug: "",
+  branchId: "",
   loading: true,
   authenticated: false,
   login: async () => {},
@@ -99,7 +91,8 @@ async function clearWebSession() {
   }
 }
 
-async function fetchMe(): Promise<UserSession | null> {
+/** status 0 = không đo được (mất mạng/timeout), không phải do phiên chết. */
+async function readMe(): Promise<{ status: number; session: UserSession | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
   try {
@@ -107,21 +100,35 @@ async function fetchMe(): Promise<UserSession | null> {
       credentials: "include",
       signal: controller.signal,
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { status: res.status, session: null };
     const body = await res.json();
-    if (!body || typeof body !== "object" || !("data" in body)) return null;
+    if (!body || typeof body !== "object" || !("data" in body)) {
+      return { status: res.status, session: null };
+    }
     const session = toSession(body.data as AuthMeResponse);
     if (session.role === "staff") {
       // Cookie là httpOnly nên phải gọi API logout để server xoá phiên.
       await clearWebSession();
-      return null;
+      return { status: res.status, session: null };
     }
-    return session;
+    return { status: res.status, session };
   } catch {
-    return null;
+    return { status: 0, session: null };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchMe(): Promise<UserSession | null> {
+  let first = await readMe();
+  if (first.session) return first.session;
+  // Access token chỉ 15 phút nên khi mở lại trang sau một thời gian, /me chết
+  // trong khi phiên 7 ngày ở cookie refresh vẫn còn hạn. Đổi token rồi hỏi lại
+  // một lần, thay vì bắt người dùng đăng nhập lại vô lý do.
+  if (first.status === 401 && (await refreshSession())) {
+    first = await readMe();
+  }
+  return first.session;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -133,16 +140,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Phân biệt "người dùng bấm đăng xuất" với "phiên hết hạn": chỉ trường hợp sau
   // mới đáng báo "Phiên làm việc đã hết hạn" ở trang login.
   const signingOutRef = useRef(false);
+  // Số lần phiên trong máy trình duyệt đổi chủ (login/logout). /me lúc mount có
+  // thể về trễ hơn một lần đăng nhập vừa xong (điền nhanh, gateway còn khởi động);
+  // kết quả cũ chỉ đúng với phiên TRƯỚC đó nên phải bỏ, nếu không nó xoá phiên
+  // hợp lệ và đá người dùng về /login dù cookie đã dùng được.
+  const sessionEpochRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
+    const epoch = sessionEpochRef.current;
     fetchMe().then((session) => {
       if (cancelled) return;
-      if (session) {
-        setUser(session);
-        setAuthenticated(true);
-      } else {
-        setAuthenticated(false);
+      // Chỉ áp kết quả khi chưa có login/logout nào xen vào; loading luôn tắt để
+      // không kẹt màn hình "Đang tải dữ liệu phiên làm việc".
+      if (sessionEpochRef.current === epoch) {
+        if (session) {
+          setUser(session);
+          setAuthenticated(true);
+        } else {
+          setAuthenticated(false);
+        }
       }
       setLoading(false);
     });
@@ -160,12 +177,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     try {
+      // Server tự xoá hrm-session khi từ chối nó; JS ghi đè được cookie httpOnly
+      // là không đúng, để server quyết định.
       sessionStorage.setItem("hrm_session_expired", "1");
-      document.cookie = "hrm-session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     } catch {
       /* ignore */
     }
-    router.replace(`/login?from=${encodeURIComponent(pathname)}`);
+    router.replace(`/login?expired=1&from=${encodeURIComponent(pathname)}`);
   }, [loading, authenticated, pathname, router]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -207,8 +225,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           403
         );
       }
+      sessionEpochRef.current += 1;
       setUser(session);
       setAuthenticated(true);
+      setLoading(false);
       signingOutRef.current = false;
     } finally {
       clearTimeout(timer);
@@ -217,6 +237,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     signingOutRef.current = true;
+    sessionEpochRef.current += 1;
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 5000);
@@ -243,7 +264,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         name: user.name,
         role: user.role,
-        branchSlug: user.branchSlug,
+        branchId: user.branchId,
         loading,
         authenticated,
         login,

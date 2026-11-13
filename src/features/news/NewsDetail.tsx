@@ -31,7 +31,7 @@ export default function NewsDetailModal({
   onTogglePin,
 }: Props) {
   // Component không nhận branches từ page cha (page không fetch) -> tự tải
-  // bảng chi nhánh để map slug -> tên, giống NewsList.
+  // bảng chi nhánh để map branchId -> tên, giống NewsList.
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
@@ -40,8 +40,8 @@ export default function NewsDetailModal({
       .catch(() => {});
   }, []);
 
-  const getBranchDisplayName = (slug?: string) =>
-    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
+  const getBranchDisplayName = (branchId?: string | null) =>
+    branches.find((b) => b.id === branchId)?.name || branchId;
 
   return (
     <Modal
@@ -66,11 +66,16 @@ export default function NewsDetailModal({
               </span>
             )}
             <span className="text-xs text-slate-500 font-medium">
-              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.branch) || "Toàn công ty"}</strong>
+              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.branchId) || "Toàn công ty"}</strong>
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              Ngày đăng: <strong className="text-slate-700">{formatDate(item.date)}</strong>
+              Ngày đăng: <strong className="text-slate-700">{formatDate(item.publishDate)}</strong>
             </span>
+            {item.authorName && (
+              <span className="text-xs text-slate-500 font-medium">
+                Người đăng: <strong className="text-slate-700">{item.authorName}</strong>
+              </span>
+            )}
           </div>
         ) : (
           "Chi tiết thông báo"

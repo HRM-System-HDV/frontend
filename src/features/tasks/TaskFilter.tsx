@@ -2,18 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFilter, faListCheck, faMagnifyingGlass, faStore } from "@fortawesome/free-solid-svg-icons";
+import { faListCheck, faMagnifyingGlass, faStore } from "@fortawesome/free-solid-svg-icons";
 import { apiGet } from "@/lib/api";
 import type { Branch } from "@/types";
-import type { TaskSourceType, TaskStatus } from "./types";
+import type { TaskStatus } from "./types";
 
 interface TaskFilterBarProps {
   searchQuery: string;
   onSearchChange: (val: string) => void;
   statusTab: TaskStatus | "all";
   onStatusTabChange: (status: TaskStatus | "all") => void;
-  sourceFilter: TaskSourceType | "all";
-  onSourceFilterChange: (source: TaskSourceType | "all") => void;
   branchFilter: string;
   onBranchFilterChange: (branch: string) => void;
   isManager?: boolean;
@@ -31,8 +29,6 @@ export default function TaskFilterBar({
   onSearchChange,
   statusTab,
   onStatusTabChange,
-  sourceFilter,
-  onSourceFilterChange,
   branchFilter,
   onBranchFilterChange,
   isManager = false,
@@ -95,28 +91,15 @@ export default function TaskFilterBar({
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {b.name} ({b.slug.toUpperCase()})
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.branchCode || b.id})
                   </option>
                 ))}
               </select>
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 min-w-0">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500 font-medium whitespace-nowrap">
-              <FontAwesomeIcon icon={faFilter} fontSize={15} />
-            </div>
-            <select
-              value={sourceFilter}
-              onChange={(e) => onSourceFilterChange(e.target.value as TaskSourceType | "all")}
-              className="min-w-0 max-w-full px-3 py-2 border border-gray-300 rounded-lg text-xs md:text-sm bg-white focus:outline-hidden focus:ring-2 focus:ring-primary"
-            >
-              <option value="all">Toàn bộ nguồn việc</option>
-              <option value="manager">Quản lý giao riêng</option>
-              <option value="shift">Cố định theo ca</option>
-            </select>
-          </div>
+
         </div>
       </div>
     </div>

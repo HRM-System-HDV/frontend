@@ -47,134 +47,16 @@ async function parseEnvelope(res: Response) {
   return body;
 }
 
-/**
- * Tự động ghi nhật ký thao tác (Thêm / Sửa / Xóa) vào Backlog khi request API thành công.
- */
-function autoLogBacklog(method: string, path: string, payload?: unknown) {
-  if (typeof window === "undefined") return;
-  if (path.startsWith("/api/backlog") || path.startsWith("/api/auth") || path === "/health") return;
-
-  let moduleName = "Hệ thống";
-  let action: "CREATE" | "UPDATE" | "DELETE" = "UPDATE";
-  let actionLabel = "Chỉnh sửa";
-  let targetName = "Dữ liệu";
-
-  if (method === "POST") {
-    action = "CREATE";
-    actionLabel = "Thêm mới";
-  } else if (method === "DELETE") {
-    action = "DELETE";
-    actionLabel = "Xóa";
-  } else if (method === "PUT") {
-    action = "UPDATE";
-    actionLabel = "Cập nhật";
-  }
-
-  const pObj = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
-  const getString = (key: string): string | undefined => {
-    const val = pObj[key];
-    return typeof val === "string" && val.trim() ? val : undefined;
-  };
-
-  const nameVal = getString("name");
-  const titleVal = getString("title");
-  const templateVal = getString("template");
-  const ssidVal = getString("ssid");
-
-  if (path.startsWith("/api/archive")) {
-    moduleName = "Lưu trữ";
-    targetName = "Dữ liệu cũ";
-    if (path.includes("/restore")) {
-      actionLabel = "Khôi phục";
-      targetName = "Bản ghi lưu trữ";
-    } else if (path.includes("/run")) {
-      actionLabel = "Thực hiện lưu trữ";
-    }
-  } else if (path.includes("/shifts/templates") || path.includes("/shift-templates")) {
-    moduleName = "Khung ca mẫu";
-    targetName = nameVal ? `Khung ca ${nameVal}` : "Khung ca mẫu";
-  } else if (path.includes("/shifts/register") || path.includes("/shifts/registrations")) {
-    moduleName = "Đăng ký ca";
-    targetName = "Đăng ký ca tuần";
-  } else if (path.includes("/shifts")) {
-    moduleName = "Phân ca làm việc";
-    targetName = templateVal ? `Ca ${templateVal}` : "Phân ca làm việc";
-  } else if (path.includes("/attendance/config")) {
-    moduleName = "Cấu hình chấm công";
-    targetName = "Cấu hình phạt & đổi ca";
-    actionLabel = "Lưu cấu hình";
-  } else if (path.includes("/attendance")) {
-    moduleName = "Chấm công";
-    targetName = "Dữ liệu chấm công";
-  } else if (path.includes("/tasks")) {
-    moduleName = "Giao việc & Nhiệm vụ";
-    targetName = titleVal ? `Nhiệm vụ: ${titleVal}` : "Nhiệm vụ";
-  } else if (path.includes("/employees")) {
-    moduleName = "Nhân sự";
-    targetName = nameVal ? `Nhân viên: ${nameVal}` : "Hồ sơ nhân viên";
-  } else if (path.includes("/branches")) {
-    moduleName = "Chi nhánh";
-    targetName = nameVal ? `Chi nhánh: ${nameVal}` : "Chi nhánh";
-  } else if (path.includes("/departments")) {
-    moduleName = "Phòng ban";
-    targetName = nameVal ? `Phòng ban: ${nameVal}` : "Phòng ban";
-  } else if (path.includes("/requests")) {
-    moduleName = "Phê duyệt yêu cầu";
-    targetName = "Yêu cầu / Đơn từ";
-    if (path.includes("/approve")) actionLabel = "Phê duyệt";
-    else if (path.includes("/reject")) actionLabel = "Từ chối";
-  } else if (path.includes("/news")) {
-    moduleName = "Bảng tin";
-    targetName = titleVal ? `Bản tin: ${titleVal}` : "Bản tin";
-  } else if (path.includes("/regulations")) {
-    moduleName = "Nội quy & Quy định";
-    targetName = titleVal ? `Quy định: ${titleVal}` : "Quy định";
-  } else if (path.includes("/wifi")) {
-    moduleName = "Cấu hình Wi-Fi";
-    targetName = ssidVal ? `Wi-Fi: ${ssidVal}` : "Cấu hình Wi-Fi";
-  } else if (path.includes("/payroll") || path.includes("/payslips")) {
-    moduleName = "Phiếu lương";
-    targetName = "Bảng lương & Phiếu lương";
-    if (path.includes("/generate")) actionLabel = "Tạo bảng lương";
-  }
-
-  let userName = "Người dùng";
-  let userRole = "staff";
-  try {
-    const sessionRaw = localStorage.getItem("hrm_user_session") || sessionStorage.getItem("hrm_user_session");
-    if (sessionRaw) {
-      const sess = JSON.parse(sessionRaw);
-      userName = sess.name || sess.username || userName;
-      userRole = sess.role || userRole;
-    }
-  } catch {
-    /* ignore */
-  }
-
-  fetch(`${GATEWAY_URL}/api/backlog`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({
-      userName,
-      userRole,
-      action,
-      actionLabel,
-      module: moduleName,
-      targetName,
-      description: `${actionLabel} đối tượng ${targetName}`,
-    }),
-  }).catch(() => {});
-}
-
 let refreshInFlight: Promise<boolean> | null = null;
 
 /**
  * Access token chỉ sống 15 phút; phiên dài hạn nằm ở cookie refresh (httpOnly,
  * JS không đọc được). Nhiều request 401 cùng lúc chỉ được đổi token MỘT lần,
  * nếu không mỗi tab/lỗi sẽ đốt thêm một vòng xoay vòng refresh token.
+ * Trang login cũng phải đi qua cửa này: tự gọi /api/auth/refresh ở nơi khác sẽ
+ * làm lộ vòng xoay vòng và giết luôn phiên đang còn tốt.
  */
-async function tryRefreshSession(): Promise<boolean> {
+export function refreshSession(): Promise<boolean> {
   if (!refreshInFlight) {
     refreshInFlight = fetch(`${GATEWAY_URL}/api/auth/refresh`, {
       method: "POST",
@@ -194,7 +76,7 @@ async function gatewayFetch(path: string, init: RequestInit): Promise<Response> 
   const res = await fetch(`${GATEWAY_URL}${path}`, init);
   // /api/auth/* trả 401 là kết quả đăng nhập sai, không phải phiên hết hạn.
   if (res.status !== 401 || path.startsWith("/api/auth/")) return res;
-  const refreshed = await tryRefreshSession();
+  const refreshed = await refreshSession();
   if (!refreshed) return res;
   return fetch(`${GATEWAY_URL}${path}`, init);
 }
@@ -207,7 +89,7 @@ export function markSessionExpiredAndRedirect() {  if (typeof window === "undefi
   try {
     sessionStorage.setItem("hrm_session_expired", "1");
     const next = window.location.pathname + window.location.search;
-    window.location.replace(`/login?from=${encodeURIComponent(next)}`);
+    window.location.replace(`/login?expired=1&from=${encodeURIComponent(next)}`);
   } catch {
     /* ignore */
   }
@@ -227,6 +109,18 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
 }
 
+export async function apiDownload(path: string): Promise<Blob> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
+  try {
+    const res = await gatewayFetch(path, { credentials: "include", signal: controller.signal });
+    if (!res.ok) await parseEnvelope(res);
+    return await res.blob();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 5000);
@@ -238,9 +132,7 @@ export async function apiPost<T>(path: string, payload: unknown): Promise<T> {
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    const data = (await parseEnvelope(res)) as T;
-    autoLogBacklog("POST", path, payload);
-    return data;
+    const data = (await parseEnvelope(res)) as T;    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -257,9 +149,7 @@ export async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
       body: payload !== undefined ? JSON.stringify(payload) : undefined,
       signal: controller.signal,
     });
-    const data = (await parseEnvelope(res)) as T;
-    autoLogBacklog("PUT", path, payload);
-    return data;
+    const data = (await parseEnvelope(res)) as T;    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -274,9 +164,7 @@ export async function apiDelete<T>(path: string): Promise<T> {
       credentials: "include",
       signal: controller.signal,
     });
-    const data = (await parseEnvelope(res)) as T;
-    autoLogBacklog("DELETE", path);
-    return data;
+    const data = (await parseEnvelope(res)) as T;    return data;
   } finally {
     clearTimeout(timer);
   }
@@ -284,9 +172,12 @@ export async function apiDelete<T>(path: string): Promise<T> {
 
 export interface PayoutPayload {
   idempotencyKey: string;
+  /** BE bắt buộc >= 1 payslipId UUID, chỉ nhận phiếu confirmed chưa có payoutId. */
+  payslipIds: string[];
   debitAccount: string;
   content: string;
   totalAmount: number;
+  /** Số employeeId duy nhất trong payslipIds — BE đối chiếu, gửi sai là 400. */
   beneficiaryCount: number;
 }
 

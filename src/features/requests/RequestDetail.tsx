@@ -6,7 +6,6 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import type { ShiftRequest } from "@/types";
-import { formatDateTime } from "@/lib/utils";
 
 interface RequestDetailModalProps {
   open: boolean;
@@ -15,8 +14,8 @@ interface RequestDetailModalProps {
   /** Không truyền = vai trò này không duyệt đơn (nhân viên chỉ xem đơn của mình). */
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
-  /** Đổi slug chi nhánh thành tên hiển thị; thiếu thì hiện slug gốc. */
-  branchLabel?: (slug: string) => string;
+  /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function RequestDetailModal({
@@ -171,7 +170,7 @@ export default function RequestDetailModal({
             {request.createdAt && (
               <div className="text-[11px] text-gray-400 mt-2.5 pt-2 border-t border-gray-100 flex items-center gap-1">
                 <FontAwesomeIcon icon={faClock} fontSize={12} />
-                <span>Thời điểm gửi: {formatDateTime(request.createdAt)}</span>
+                <span>Thời điểm gửi: {request.createdAt}</span>
               </div>
             )}
           </div>
@@ -203,16 +202,39 @@ export default function RequestDetailModal({
           </div>
         </div>
 
-        {/* Nội dung chi tiết & Lý do giải trình (không bắt buộc với nhờ làm thay) */}
-        {request.type !== "đổi ca" || (request.reason && !request.reason.startsWith("Nhờ ") && request.reason !== "Yêu cầu nội bộ cần phê duyệt") ? (
+        {/* Nội dung chi tiết & Lý do giải trình (BE bắt buộc content khác rỗng) */}
+        {request.reason ? (
           <div className="bg-white border border-gray-200 rounded-xl p-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5 mb-2">
               <FontAwesomeIcon icon={faFileLines} fontSize={15} className="text-primary" />
               <span>Nội dung & Lý do đề xuất của nhân viên</span>
             </h4>
             <div className="bg-gray-50 rounded-lg p-3.5 text-sm text-gray-800 leading-relaxed border border-gray-100">
-              {request.reason || "Không có nội dung giải trình thêm."}
+              {request.reason}
             </div>
+          </div>
+        ) : null}
+
+        {/* Người duyệt & ghi chú (BE chỉ trả các field này khi đơn đã duyệt/từ chối) */}
+        {(isApproved || isRejected) && request.reviewedByName ? (
+          <div className="bg-white border border-gray-200 rounded-xl p-4">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1.5 mb-2">
+              <FontAwesomeIcon icon={faCheck} fontSize={15} className={isApproved ? "text-success" : "text-danger"} />
+              <span>{isApproved ? "Người phê duyệt" : "Người từ chối"}</span>
+            </h4>
+            <div className="flex items-center gap-2 text-sm text-gray-800">
+              <span className="font-semibold">{request.reviewedByName}</span>
+              {request.reviewedAt && (
+                <span className="text-[11px] text-gray-400 flex items-center gap-1">
+                  <FontAwesomeIcon icon={faClock} fontSize={12} /> {request.reviewedAt}
+                </span>
+              )}
+            </div>
+            {request.reviewNote && (
+              <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm text-gray-700 border border-gray-100 leading-relaxed">
+                Ghi chú: {request.reviewNote}
+              </div>
+            )}
           </div>
         ) : null}
       </div>

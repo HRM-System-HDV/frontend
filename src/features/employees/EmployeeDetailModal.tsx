@@ -29,7 +29,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { StatusBadge } from "@/components/ui/Badge";
-import type { Employee, UserRole, Branch, Department } from "@/types";
+import type { Employee, UserRole, Branch, Department, Position } from "@/types";
 import { uploadImageFile } from "@/lib/imageUpload";
 import { formatDate } from "@/lib/utils";
 import { useCurrentUser } from "@/context/AuthContext";
@@ -40,9 +40,11 @@ interface Props {
   employee: Employee | null;
   branches?: Branch[];
   departments?: Department[];
+  positions?: Position[];
   onSave?: (updated: Employee) => Promise<Employee | void>;
   onDelete?: (employee: Employee) => void;
   onLock?: (employee: Employee) => void;
+  onResetPassword?: (employee: Employee) => void;
   isManager?: boolean;
   managerBranch?: string;
 }
@@ -65,7 +67,7 @@ const COMMON_BANKS = [
 type DetailTab = "profile" | "job" | "salary" | "cccd";
 
 // Lời giải thích thống nhất cho nhóm trường chỉ admin mới ghi được
-// (systemRole / branchSlug / email / baseSalary).
+// (systemRole / branchId / email).
 const ADMIN_ONLY_FIELD_HINT =
   "Chỉ Quản trị viên mới được thay đổi thông tin này, hệ thống đang khóa lại cho bạn.";
 
@@ -75,19 +77,18 @@ export default function EmployeeDetailModal({
   employee,
   branches = [],
   departments = [],
+  positions = [],
   onSave,
   onDelete,
   onLock,
+  onResetPassword,
   isManager = false,
   managerBranch = "",
 }: Props) {
   const { user, role: authRole } = useCurrentUser();
   const currentUserId = user?.userId;
   const currentUserEmail = user?.email;
-  // organization-service lọc im lặng 4 trường systemRole / branchSlug / email /
-  // baseSalary khỏi payload PUT /api/employees/:id khi người gọi không phải admin
-  // (omitPrivilegedFields). Vì vậy chỉ admin mới được sửa và gửi các trường này;
-  // với manager các ô input phải khóa + giải thích để không tưởng là đã lưu.
+  // Chỉ Admin đổi quyền tài khoản, chi nhánh và email; Manager sửa hồ sơ tại chi nhánh mình.
   // `authRole` là quyền hệ thống của người đang đăng nhập, khác với `role`
   // (chức danh trên hồ sơ) bên dưới.
   const isAdmin = authRole === "admin";
@@ -115,17 +116,18 @@ export default function EmployeeDetailModal({
   const [street, setStreet] = useState(employee?.street || "");
 
   // 3. Công tác & Phân quyền
-  const [branch, setBranch] = useState((employee?.branch || "").toUpperCase());
-  const [department, setDepartment] = useState(employee?.department || "");
-  const [role, setRole] = useState(employee?.role || "");
-  const [systemRole, setSystemRole] = useState<UserRole>(employee?.systemRole || "staff");
-  const [status, setStatus] = useState<"đang làm" | "vô hiệu hóa">(employee?.status || "đang làm");
+  const [branch, setBranch] = useState((employee?.branchId || ""));
+  const [department, setDepartment] = useState(employee?.departmentId || "");
+  const [positionId, setPositionId] = useState(employee?.positionId || "");
+  const [systemRole, setSystemRole] = useState<UserRole | "">(employee?.systemRole || "");
+  const [status, setStatus] = useState<Employee["status"]>(employee?.status || "đang làm");
   const [joinDate, setJoinDate] = useState(formatDate(employee?.joinDate));
 
   // 4. Tiền lương & Ngân hàng
   const [salaryType, setSalaryType] = useState<"hourly" | "monthly">(employee?.salaryType || "monthly");
   const [hourlySalary, setHourlySalary] = useState<number>(employee?.hourlySalary ?? 0);
   const [baseSalary, setBaseSalary] = useState<number>(employee?.baseSalary ?? 0);
+  const [standardWorkDays, setStandardWorkDays] = useState(employee?.standardWorkDays == null ? "" : String(employee.standardWorkDays));
   const [bankName, setBankName] = useState(employee?.bankName || "");
   const [bankAccountNumber, setBankAccountNumber] = useState(employee?.bankAccountNumber || "");
   const [bankAccountName, setBankAccountName] = useState(employee?.bankAccountName || "");
@@ -134,8 +136,8 @@ export default function EmployeeDetailModal({
   const [cccd, setCccd] = useState(employee?.cccd || "");
   const [issueDate, setIssueDate] = useState(formatDate(employee?.issueDate));
   const [issuePlace, setIssuePlace] = useState(employee?.issuePlace || "");
-  const [cccdFront, setCccdFront] = useState(typeof employee?.cccdFront === "string" ? employee.cccdFront : "");
-  const [cccdBack, setCccdBack] = useState(typeof employee?.cccdBack === "string" ? employee.cccdBack : "");
+  const [cccdFront, setCccdFront] = useState(employee?.cccdFront || "");
+  const [cccdBack, setCccdBack] = useState(employee?.cccdBack || "");
   const [uploadingFront, setUploadingFront] = useState(false);
   const [uploadingBack, setUploadingBack] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
@@ -162,16 +164,17 @@ export default function EmployeeDetailModal({
     setWard(employee.ward || "");
     setStreet(employee.street || "");
 
-    setBranch((employee.branch || "").toUpperCase());
-    setDepartment(employee.department || "");
-    setRole(employee.role);
-    setSystemRole(employee.systemRole || "staff");
+    setBranch((employee.branchId || ""));
+    setDepartment(employee.departmentId || "");
+    setPositionId(employee.positionId || "");
+    setSystemRole(employee.systemRole || "");
     setStatus(employee.status);
     setJoinDate(formatDate(employee.joinDate));
 
     setSalaryType(employee.salaryType || "monthly");
     setHourlySalary(employee.hourlySalary ?? 0);
     setBaseSalary(employee.baseSalary ?? 0);
+    setStandardWorkDays(employee.standardWorkDays == null ? "" : String(employee.standardWorkDays));
     setBankName(employee.bankName || "");
     setBankAccountNumber(employee.bankAccountNumber || "");
     setBankAccountName(employee.bankAccountName || "");
@@ -179,8 +182,8 @@ export default function EmployeeDetailModal({
     setCccd(employee.cccd || "");
     setIssueDate(formatDate(employee.issueDate));
     setIssuePlace(employee.issuePlace || "");
-    setCccdFront(typeof employee.cccdFront === "string" ? employee.cccdFront : "");
-    setCccdBack(typeof employee.cccdBack === "string" ? employee.cccdBack : "");
+    setCccdFront(employee.cccdFront || "");
+    setCccdBack(employee.cccdBack || "");
     setAvatar(employee.avatar || "");
     setUploadingFront(false);
     setUploadingBack(false);
@@ -195,8 +198,7 @@ export default function EmployeeDetailModal({
       setSaveError("Vui lòng nhập họ và tên nhân viên");
       return;
     }
-    // Email bị khóa với người gọi không phải admin (server bỏ field này khỏi payload
-    // PUT), nên không bắt buộc nhập lại email hợp lệ — tránh kẹt không lưu được hồ sơ.
+    // Chỉ Admin gửi thay đổi email tới BE.
     if (isAdmin && (!email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))) {
       setSaveError("Vui lòng nhập địa chỉ email hợp lệ");
       return;
@@ -212,15 +214,17 @@ export default function EmployeeDetailModal({
       province,
       ward,
       street,
-      branch: isManager ? managerBranch : branch,
-      department,
-      role,
-      systemRole,
+      branchId: isManager ? managerBranch : branch,
+      departmentId: department || null,
+      positionId: positionId || null,
+      systemRole: systemRole || undefined,
       status,
       joinDate: formatDate(joinDate),
       salaryType,
       hourlySalary: Number(hourlySalary) || 0,
       baseSalary: Number(baseSalary) || 0,
+      salary: String(salaryType === "hourly" ? hourlySalary : baseSalary),
+      standardWorkDays: salaryType === "monthly" ? Number(standardWorkDays) : null,
       bankName,
       bankAccountNumber: bankAccountNumber.trim(),
       bankAccountName: bankAccountName.trim().toUpperCase(),
@@ -291,24 +295,24 @@ export default function EmployeeDetailModal({
     }
   };
 
-  const getSystemRoleLabel = (r: UserRole) => {
+  const getSystemRoleLabel = (r?: UserRole) => {
     switch (r) {
       case "admin":
         return "Quản trị viên";
       case "manager":
         return "Quản lý Chi nhánh";
       case "staff":
-      default:
         return "Nhân viên";
+      default: return "Chưa có thông tin quyền";
     }
   };
 
-  // Đổi slug chi nhánh thành tên hiển thị (cùng cách resolve với khối header);
+  // Đổi branchId chi nhánh thành tên hiển thị (cùng cách resolve với khối header);
   // không map được thì fallback về giá trị gốc.
-  const getBranchDisplayName = (slugOrValue?: string) => {
-    const target = slugOrValue || "";
+  const getBranchDisplayName = (branchId?: string | null) => {
+    const target = branchId || "";
     const matched = branches.find(
-      (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target.toLowerCase().replace(/-/g, "")
+      (b) => (b.id || "") === target
     );
     return matched ? matched.name : target;
   };
@@ -330,7 +334,7 @@ export default function EmployeeDetailModal({
       footer={
         isEditing ? (
           <>
-            {onLock && employee && !isSelf && employee.status !== "vô hiệu hóa" && (
+            {onLock && employee && !isSelf && employee.status === "đang làm" && (
               <Button
                 type="button"
                 variant="white"
@@ -343,15 +347,15 @@ export default function EmployeeDetailModal({
                 Vô hiệu hóa
               </Button>
             )}
-            {onDelete && !isManager && employee && !isSelf && (
+            {onDelete && employee && !isSelf && employee.status !== "nghỉ việc" && (
               <Button
                 type="button"
                 variant="danger"
                 disabled={saving}
-                title="Xóa nhân viên"
+                title="Ghi nhận nghỉ việc"
                 onClick={() => onDelete(employee)}
               >
-                Xóa
+                Nghỉ việc
               </Button>
             )}
             <Button variant="white" onClick={handleCancelEdit} disabled={saving}>
@@ -365,7 +369,7 @@ export default function EmployeeDetailModal({
           </>
         ) : (
           <>
-            {onLock && employee && !isSelf && employee.status !== "vô hiệu hóa" && (
+            {onLock && employee && !isSelf && employee.status === "đang làm" && (
               <Button
                 type="button"
                 variant="white"
@@ -377,14 +381,24 @@ export default function EmployeeDetailModal({
                 Vô hiệu hóa
               </Button>
             )}
-            {onDelete && !isManager && employee && !isSelf && (
+            {onResetPassword && isAdmin && employee && !isSelf && employee.email && (
+              <Button
+                type="button"
+                variant="white"
+                title="Cấp mật khẩu tạm (thu hồi mọi phiên của người này)"
+                onClick={() => onResetPassword(employee)}
+              >
+                Đặt lại mật khẩu
+              </Button>
+            )}
+            {onDelete && employee && !isSelf && employee.status !== "nghỉ việc" && (
               <Button
                 type="button"
                 variant="danger"
-                title="Xóa nhân viên"
+                title="Ghi nhận nghỉ việc"
                 onClick={() => onDelete(employee)}
               >
-                Xóa
+                Nghỉ việc
               </Button>
             )}
             <Button variant="white" onClick={onClose}>
@@ -513,9 +527,9 @@ export default function EmployeeDetailModal({
                   <span>
                     Chi nhánh: <strong className="text-gray-800">
   {(() => {
-    const target = isEditing ? branch : employee.branch;
+    const target = isEditing ? branch : employee.branchId;
     const matched = branches.find(
-      (b) => (b.slug || "").toLowerCase().replace(/-/g, "") === (target || "").toLowerCase().replace(/-/g, "")
+      (b) => (b.id || "") === (target || "")
     );
     return matched ? matched.name : target;
   })()}
@@ -523,11 +537,11 @@ export default function EmployeeDetailModal({
                   </span>
                   <span>•</span>
                   <span>
-                    Phòng ban: <strong className="text-gray-800">{isEditing ? department : employee.department || "Chưa gán"}</strong>
+                    Phòng ban: <strong className="text-gray-800">{(isEditing ? departments.find(d => d.id === department)?.name : employee.department) || "Chưa gán"}</strong>
                   </span>
                   <span>•</span>
                   <span>
-                    Chức danh: <strong className="text-gray-800">{isEditing ? role : employee.role}</strong>
+                    Chức danh: <strong className="text-gray-800">{(isEditing ? positions.find(p => p.id === positionId)?.name : employee.role) || "Chưa gán"}</strong>
                   </span>
                 </div>
               </div>
@@ -791,12 +805,12 @@ export default function EmployeeDetailModal({
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Mã nhân viên (ID):</span>
-                      <span className="font-mono font-bold text-gray-900 text-xs">{employee.id}</span>
+                      <span className="font-mono font-bold text-gray-900 text-xs">{employee.employeeCode || employee.id}</span>
                     </div>
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
                       <span className="text-gray-500 text-xs">Chi nhánh làm việc:</span>
                       <span className="font-semibold text-primary text-xs">
-                        {getBranchDisplayName(employee.branch)}
+                        {getBranchDisplayName(employee.branchId)}
                       </span>
                     </div>
                     <div className="flex justify-between items-center py-1.5 border-b border-gray-50">
@@ -841,6 +855,7 @@ export default function EmployeeDetailModal({
                         {formatDate(employee.joinDate) || "Chưa cập nhật"}
                       </span>
                     </div>
+                    {employee.resignedAt && <div className="flex justify-between items-center py-1.5"><span className="text-gray-500 text-xs">Ngày nghỉ việc:</span><span>{formatDate(employee.resignedAt)}</span></div>}
                   </div>
                 </div>
               </div>
@@ -855,12 +870,12 @@ export default function EmployeeDetailModal({
                     <Field label="Chi nhánh làm việc" required>
                       <Select value={branch} onChange={(e) => setBranch(e.target.value)}>
                         <option value="">— Chọn chi nhánh —</option>
-                        {branch && !branches.some((b) => b.slug.toUpperCase() === branch) && (
+                        {branch && !branches.some((b) => b.id === branch) && (
                           <option value={branch}>{branch}</option>
                         )}
                         {branches.map((b) => (
-                          <option key={b.id} value={b.slug.toUpperCase()}>
-                            {b.name} ({b.slug.toUpperCase()})
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.branchCode || b.id})
                           </option>
                         ))}
                       </Select>
@@ -868,25 +883,24 @@ export default function EmployeeDetailModal({
                   )}
 
                   <Field label="Phòng ban trực thuộc" required>
-                    <Select value={department} onChange={(e) => setDepartment(e.target.value)}>
+                    <Select value={department} onChange={(e) => { setDepartment(e.target.value); setPositionId(""); }}>
                       <option value="">— Chọn phòng ban —</option>
-                      {department && !departments.some((d) => d.name === department) && (
+                      {department && !departments.some((d) => d.id === department) && (
                         <option value={department}>{department}</option>
                       )}
                       {departments.map((d) => (
-                        <option key={d.id} value={d.name}>
-                          {d.name} ({d.code})
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.departmentCode})
                         </option>
                       ))}
                     </Select>
                   </Field>
 
-                  <Field label="Vị trí / Chức vụ" required>
-                    <Input
-                      value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      placeholder="Nhân viên kinh doanh / Thu ngân..."
-                    />
+                  <Field label="Vị trí / Chức vụ">
+                    <Select value={positionId} onChange={e => setPositionId(e.target.value)}>
+                      <option value="">— Chưa gán vị trí —</option>
+                      {positions.filter(p => !p.departmentId || p.departmentId === department).map(p => <option key={p.id} value={p.id}>{p.name} ({p.positionCode})</option>)}
+                    </Select>
                   </Field>
                 </div>
 
@@ -900,6 +914,7 @@ export default function EmployeeDetailModal({
                       onChange={(e) => setSystemRole(e.target.value as UserRole)}
                       disabled={!isAdmin}
                     >
+                      <option value="" disabled>— Chưa có thông tin quyền —</option>
                       <option value="staff">Nhân viên</option>
                       <option value="manager">Quản lý Chi nhánh</option>
                       <option value="admin">Quản trị viên</option>
@@ -909,13 +924,16 @@ export default function EmployeeDetailModal({
                   <Field label="Trạng thái tài khoản" required>
                     <Select
                       value={status}
-                      onChange={(e) => setStatus(e.target.value as "đang làm" | "vô hiệu hóa")}
+                      onChange={(e) => setStatus(e.target.value as Employee["status"])}
+                      disabled={employee.status === "nghỉ việc"}
                     >
                       <option value="đang làm">Đang làm</option>
                       <option value="vô hiệu hóa">Vô hiệu hóa</option>
+                      {employee.status === "nghỉ việc" && <option value="nghỉ việc">Nghỉ việc</option>}
                     </Select>
                   </Field>
 
+                  {employee.resignedAt && <Field label="Ngày nghỉ việc"><Input value={formatDate(employee.resignedAt)} disabled /></Field>}
                   <Field label="Ngày vào làm việc" required>
                     <Input
                       value={joinDate}
@@ -956,6 +974,7 @@ export default function EmployeeDetailModal({
                       </span>
                     </div>
 
+                    {employee.salaryType === "monthly" && <div className="flex justify-between items-center py-1.5"><span className="text-gray-500 text-xs">Số công thỏa thuận:</span><span>{employee.standardWorkDays ?? "Chưa cập nhật"}</span></div>}
                     {employee.salaryType === "hourly" ? (
                       <div className="flex justify-between items-center py-1.5">
                         <span className="text-gray-500 text-xs">Đơn giá giờ làm:</span>
@@ -1055,17 +1074,16 @@ export default function EmployeeDetailModal({
                     <Field
                       label="Mức lương cơ bản tháng (VNĐ/tháng)"
                       required
-                      hint={isAdmin ? undefined : ADMIN_ONLY_FIELD_HINT}
                     >
                       <Input
                         type="number"
                         value={baseSalary}
                         onChange={(e) => setBaseSalary(Number(e.target.value))}
                         placeholder="8500000"
-                        disabled={!isAdmin}
                       />
                     </Field>
                   )}
+                  {salaryType === "monthly" && <Field label="Số công thỏa thuận" required><Input type="number" value={standardWorkDays} onChange={e => setStandardWorkDays(e.target.value)} placeholder="Nhập số công thỏa thuận" /></Field>}
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-4">
@@ -1176,11 +1194,11 @@ export default function EmployeeDetailModal({
                           </span>
                         )}
                       </div>
-                      {typeof employee.cccdFront === "string" && employee.cccdFront ? (
+                      {employee.cccdFront ? (
                         <div
                           onClick={() =>
                             setPreviewImage({
-                              url: employee.cccdFront as string,
+                              url: employee.cccdFront ?? "",
                               title: `CCCD Mặt trước — ${employee.name}`,
                             })
                           }
@@ -1213,11 +1231,11 @@ export default function EmployeeDetailModal({
                           </span>
                         )}
                       </div>
-                      {typeof employee.cccdBack === "string" && employee.cccdBack ? (
+                      {employee.cccdBack ? (
                         <div
                           onClick={() =>
                             setPreviewImage({
-                              url: employee.cccdBack as string,
+                              url: employee.cccdBack ?? "",
                               title: `CCCD Mặt sau — ${employee.name}`,
                             })
                           }

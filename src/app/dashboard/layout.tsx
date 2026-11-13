@@ -14,7 +14,7 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, role, branchSlug, logout, loading } = useCurrentUser();
+  const { user, role, branchId, logout, loading } = useCurrentUser();
   const groups = buildMenuItems(role);
   const label = roleLabel(role);
   // identity-service đặt roleTitle đúng bằng nhãn quyền khi tài khoản là
@@ -27,23 +27,23 @@ export default function DashboardLayout({
       : label;
 
   // Manager/staff bị ghim một chi nhánh nên mọi bộ lọc chi nhánh đã ẩn; tên chi
-  // nhánh chỉ hiện một lần ở footer sidebar. DB lưu slug ⇒ map qua /api/branches.
+  // nhánh chỉ hiện một lần ở footer sidebar. DB lưu branchId ⇒ map qua /api/branches.
   const [branchName, setBranchName] = useState("");
   useEffect(() => {
-    if (!branchSlug) {
+    if (!branchId) {
       setBranchName("");
       return;
     }
     let alive = true;
     apiGet<Branch[]>("/api/branches")
       .then((rows) => {
-        if (alive) setBranchName(rows.find((b) => b.slug.toLowerCase() === branchSlug)?.name || "");
+        if (alive) setBranchName(rows.find((b) => b.id === branchId)?.name || "");
       })
       .catch(() => {});
     return () => {
       alive = false;
     };
-  }, [branchSlug]);
+  }, [branchId]);
 
   return (
     <DashboardShell
@@ -54,10 +54,10 @@ export default function DashboardLayout({
       logoutHref="/login"
       onLogout={logout}
       sidebarFooter={
-        branchSlug
+        branchId
           ? {
               icon: <FontAwesomeIcon icon={faLocationDot} fontSize={12} />,
-              text: `Chi nhánh ${branchName || branchSlug.toUpperCase()}`,
+              text: `Chi nhánh ${branchName || branchId}`,
             }
           : undefined
       }

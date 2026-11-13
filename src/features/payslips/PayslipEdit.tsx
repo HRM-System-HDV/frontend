@@ -1,7 +1,7 @@
 "use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPrint } from "@fortawesome/free-solid-svg-icons";
+import { faLock, faPrint } from "@fortawesome/free-solid-svg-icons";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -20,19 +20,43 @@ interface EditProps {
   onReasonChange: (v: string) => void;
   onClose: () => void;
   onSave: () => void;
+  /** In phiếu lương từ modal chi tiết. */
+  onPrint?: () => void;
+  /** Chốt phiếu lương từ modal chi tiết (ẩn khi phiếu đã chốt). */
+  onClosePayslip?: () => void;
 }
 
-export function EditPayslipModal({ payslip, bonusStr, penaltyStr, reasonStr, onBonusChange, onPenaltyChange, onReasonChange, onClose, onSave }: EditProps) {
+export function EditPayslipModal({ payslip, bonusStr, penaltyStr, reasonStr, onBonusChange, onPenaltyChange, onReasonChange, onClose, onSave, onPrint, onClosePayslip }: EditProps) {
   return (
-    <Modal open={!!payslip} onClose={onClose} title={`Điều chỉnh Thưởng / Phạt — ${payslip?.employee ?? ""}`} size="lg" footer={<><Button variant="white" onClick={onClose}>Hủy</Button><Button onClick={onSave}>Lưu thay đổi</Button></>}>
+    <Modal open={!!payslip} onClose={onClose} title={`Chi tiết phiếu lương — ${payslip?.employee ?? ""}`} size="lg" footer={
+      <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+        <div className="flex flex-wrap items-center gap-2">
+          {onPrint && (
+            <Button variant="white" onClick={onPrint}>
+              <FontAwesomeIcon icon={faPrint} fontSize={14} /> In phiếu lương
+            </Button>
+          )}
+          {onClosePayslip && payslip?.status !== "đã chốt" && (
+            <Button variant="white" onClick={onClosePayslip} className="text-amber-700 border-amber-300 hover:bg-amber-50">
+              <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="white" onClick={onClose}>Hủy</Button>
+          <Button onClick={onSave}>Lưu thay đổi</Button>
+        </div>
+      </div>
+    }>
       {payslip && (() => {
         const bonusVal = Number(bonusStr) || 0;
         const penaltyVal = Number(penaltyStr) || 0;
-        const calculatedTotal = payslip.salary + bonusVal - penaltyVal;
+        const baseSalary = payslip.salary ?? payslip.baseSalary ?? 0;
+        const calculatedTotal = baseSalary + bonusVal - penaltyVal;
         return (
           <div className="flex flex-col gap-4">
             <div className="rounded-lg bg-gray-50 p-3 text-sm flex justify-between items-center">
-              <span className="text-gray-600">Lương cơ bản ({payslip.days} ngày công):</span><span className="font-bold text-gray-800">{formatVND(payslip.salary)}</span>
+              <span className="text-gray-600">Lương cơ bản ({payslip.days} ngày công):</span><span className="font-bold text-gray-800">{formatVND(baseSalary)}</span>
             </div>
             <Field label="Tiền Thưởng (VNĐ)"><Input type="number" value={bonusStr} onChange={(e) => onBonusChange(e.target.value)} placeholder="Nhập số tiền thưởng (VD: 500000)" /></Field>
             <Field label="Tiền Phạt (VNĐ)"><Input type="number" value={penaltyStr} onChange={(e) => onPenaltyChange(e.target.value)} placeholder="Nhập số tiền phạt (VD: 100000)" /></Field>
@@ -88,9 +112,9 @@ export function PrintPayslipModal({ payslip, onClose }: PrintProps) {
             <div><span className="text-gray-500">Trạng thái:</span> <Badge tone="success">Đã chốt lương</Badge></div>
           </div>
           <div className="border-t border-b border-dashed border-gray-300 py-3 space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-gray-600">Lương cơ bản:</span><span className="font-medium text-gray-800">{formatVND(payslip.salary)}</span></div>
-            <div className="flex justify-between text-success"><span>Tiền thưởng (+):</span><span className="font-medium">{formatVND(payslip.bonus)}</span></div>
-            <div className="flex justify-between text-danger"><span>Khấu trừ / Phạt (-):</span><span className="font-medium">{formatVND(payslip.penalty)}</span></div>
+            <div className="flex justify-between"><span className="text-gray-600">Lương cơ bản:</span><span className="font-medium text-gray-800">{formatVND(payslip.baseSalary ?? payslip.salary ?? 0)}</span></div>
+            <div className="flex justify-between text-success"><span>Tiền thưởng (+):</span><span className="font-medium">{formatVND(payslip.bonus ?? 0)}</span></div>
+            <div className="flex justify-between text-danger"><span>Khấu trừ / Phạt (-):</span><span className="font-medium">{formatVND(payslip.penalty ?? payslip.totalPenalty ?? 0)}</span></div>
           </div>
           {payslip.reason && (
             <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-700 border border-gray-100">
@@ -98,7 +122,7 @@ export function PrintPayslipModal({ payslip, onClose }: PrintProps) {
             </div>
           )}
           <div className="flex justify-between items-center text-base pt-1">
-            <span className="font-bold text-gray-800">TỔNG CỘNG THỰC LĨNH:</span><span className="font-extrabold text-primary text-lg">{formatVND(payslip.total)}</span>
+            <span className="font-bold text-gray-800">TỔNG CỘNG THỰC LĨNH:</span><span className="font-extrabold text-primary text-lg">{formatVND(payslip.netSalary ?? payslip.total ?? 0)}</span>
           </div>
         </div>
       )}

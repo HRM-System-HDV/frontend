@@ -21,22 +21,28 @@ export interface Employee {
   cccd?: string;        // Số CCCD (12 chữ số)
   issueDate?: string;   // Ngày cấp
   issuePlace?: string;  // Nơi cấp
-  cccdFront?: string | boolean; // Trạng thái ảnh mặt trước
-  cccdBack?: string | boolean;  // Trạng thái ảnh mặt sau
+  cccdFront?: string; // Đường dẫn ảnh mặt trước
+  cccdBack?: string;  // Đường dẫn ảnh mặt sau
   avatar?: string;              // Đường dẫn ảnh đại diện
 
   // Công tác & Phân quyền
-  branch: string;
-  branchSlug?: string;
+  branchId?: string | null;
+  departmentId?: string | null;
+  positionId?: string | null;
+  employeeCode?: string;
   department: string;
   role: "Quản trị viên" | "Quản lý" | "Nhân sự" | "Kế toán" | "Lễ tân" | "Kỹ thuật" | string;
-  systemRole: UserRole;
-  status: "đang làm" | "vô hiệu hóa";
+  systemRole?: UserRole;
+  accountId?: string;
+  status: "đang làm" | "vô hiệu hóa" | "nghỉ việc";
+  resignedAt?: string | null;
   joinDate?: string;
 
   // Tiền lương & Ngân hàng
   baseSalary?: number;
   salaryType?: "hourly" | "monthly";
+  salary?: string;
+  standardWorkDays?: number | null;
   hourlySalary?: number;
   bankName?: string;
   bankAccountNumber?: string;
@@ -55,59 +61,86 @@ export interface ShiftRequest {
   reason: string;
   status: "chờ duyệt" | "đã duyệt" | "từ chối";
   createdAt?: string;
+  // Thông tin xử lý đơn do BE lưu khi duyệt/từ chối.
+  reviewedByName?: string;
+  reviewNote?: string;
+  reviewedAt?: string;
 }
 
 export interface Payslip {
   id: string;
+  /** employeeId của organization-service (BE) — dùng để gọi chi tiết nhân sự. */
+  employeeId?: string;
   employee: string;
   branch?: string;
+  branchId?: string | null;
   month: string;
-  days: number;
-  salary: number;
+  days: number | null;
+  salaryType?: "monthly" | "hourly";
+  workedHours?: number | null;
+  /** Số ca làm việc được tính lương (BE: workedShifts). */
+  workedShifts?: number | null;
+  penaltyOverride?: number | null;
+  /** Các trường chuẩn BE (payroll-service /api/payroll/payslips). */
+  baseSalary?: number;
   bonus: number;
-  penalty: number;
-  total: number;
-  status: "chưa chốt" | "đã chốt";
+  totalPenalty?: number;
+  netSalary?: number;
+  /** Alias sau map BE -> hiển thị: salary = baseSalary, penalty = totalPenalty, total = netSalary. */
+  salary?: number;
+  penalty?: number;
+  total?: number;
+  payoutId?: string | null;
+  status: "chưa chốt" | "đã chốt" | "chưa xác nhận" | "đã xác nhận" | "đã thanh toán";
   reason?: string;
-}
-
-export interface Shift {
-  id: string;
-  employee: string;
-  branch: string;
-  date: string;
-  template: string;
-  scheduled: string;
-  checkIn?: string;
-  checkOut?: string;
-  status: "hoàn thành" | "đang làm" | "vắng" | "trễ";
+  adjustmentReason?: string | null;
+  issuedAt?: string;
 }
 
 export interface WifiConfig {
   id: string;
   ssid: string;
   bssid: string;
-  branch: string;
-  status: string;
+  /** branches.id (UUID) của organization-service — không có FK chéo DB. */
+  branchId: string;
+  /** integration-service chặn đúng 2 giá trị này khi ghi. */
+  status: "hoạt động" | "vô hiệu hóa";
+  createdAt?: string;
 }
 
 export interface Branch {
   id: string;
   name: string;
-  slug: string;
+  branchCode?: string;
   address: string;
   manager: string;
+  managerId: string | null;
   status: "hoạt động" | "vô hiệu hóa";
   staff: number;
+  createdAt?: string;
 }
+export interface BranchManagerCandidate { id: string; name: string; systemRole: "admin" | "manager" }
 
 export interface Department {
   id: string;
   name: string;
-  /** Mã phòng ban do hệ thống tự sinh (PB-0001), client không tự nhập. */
-  code: string;
+  /** Mã nghiệp vụ của phòng ban; dùng ID để liên kết. */
+  departmentCode: string;
+  managerId?: string | null;
   manager: string;
   status: "hoạt động" | "tạm dừng";
+  staff?: number;
+  createdAt?: string;
+}
+export interface Position {
+  id: string;
+  name: string;
+  /** Mã nghiệp vụ của vị trí; dùng ID để liên kết. */
+  positionCode: string;
+  /** null = vị trí liên chi nhánh, khai báo dùng được ở mọi phòng ban. */
+  departmentId: string | null;
+  status: "hoạt động" | "tạm dừng";
+  /** Số hồ sơ đang trỏ tới vị trí — do organization-service đếm. */
   staff?: number;
   createdAt?: string;
 }
@@ -145,20 +178,27 @@ export type RegulationCategory =
 
 export type RegulationStatus = "hiệu lực" | "dự thảo" | "hết hiệu lực";
 
+export interface RegulationFile {
+  id: string;
+  publicId: string;
+  mime: string;
+  bytes: number;
+}
+
 export interface Regulation {
   id: string;
-  code: string;
+  regulationCode: string;
   title: string;
   category: RegulationCategory;
   summary: string;
   content: string;
   status: RegulationStatus;
-  scope: string; // "Toàn công ty" | "HN-1" | "HN-2" ...
-  effectiveDate: string; // dd/mm/yyyy
-  expiryDate?: string;
+  scopeBranchId: string | null; // null = toàn công ty
+  effectiveDate: string; // ISO YYYY-MM-DD (BE gửi/nhận ngày ISO)
+  expiryDate?: string | null;
   createdAt: string;
   updatedAt: string;
   version: string;
   pinned?: boolean;
-  attachments?: number;
+  files?: RegulationFile[];
 }

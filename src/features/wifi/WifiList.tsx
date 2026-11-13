@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEye, faTrashCan, faWifi } from "@fortawesome/free-solid-svg-icons";
+import { faTrashCan, faWifi } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -15,13 +15,15 @@ interface WifiDetailModalProps {
   config: WifiConfig | null;
   open: boolean;
   onClose: () => void;
-  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
-  branchLabel?: (slug: string) => string;
+  /** Phân giải branchId chi nhánh -> tên hiển thị (fallback = chính branchId). */
+  branchLabel?: (branchId: string) => string;
+  /** Chỉ truyền khi người dùng có quyền xóa: nút xóa nằm trong modal chi tiết. */
+  onDelete?: () => void;
 }
 
-export function WifiDetailModal({ config, open, onClose, branchLabel }: WifiDetailModalProps) {
+export function WifiDetailModal({ config, open, onClose, branchLabel, onDelete }: WifiDetailModalProps) {
   if (!config) return null;
-  const branchName = branchLabel ? branchLabel(config.branch) : config.branch;
+  const branchName = branchLabel ? branchLabel(config.branchId) : config.branchId;
   return (
     <Modal
       open={open}
@@ -29,9 +31,19 @@ export function WifiDetailModal({ config, open, onClose, branchLabel }: WifiDeta
       title="Chi tiết Wi-Fi chấm công"
       size="md"
       footer={
-        <Button variant="white" onClick={onClose}>
-          Đóng
-        </Button>
+        <div className="flex items-center justify-between w-full">
+          {onDelete ? (
+            <Button variant="danger" size="sm" onClick={onDelete}>
+              <FontAwesomeIcon icon={faTrashCan} className="mr-1.5" />
+              Xóa Wi-Fi
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button variant="white" onClick={onClose}>
+            Đóng
+          </Button>
+        </div>
       }
     >
       <div className="space-y-3 text-sm">
@@ -63,14 +75,14 @@ export function WifiDetailModal({ config, open, onClose, branchLabel }: WifiDeta
 interface Props {
   configs: WifiConfig[];
   onDelete?: (id: string) => void | Promise<void>;
-  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
-  branchLabel?: (slug: string) => string;
+  /** Phân giải branchId chi nhánh -> tên hiển thị (fallback = chính branchId). */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function WifiTableSection({ configs, onDelete, branchLabel }: Props) {
   const [viewingConfig, setViewingConfig] = useState<WifiConfig | null>(null);
   const [deletingConfig, setDeletingConfig] = useState<WifiConfig | null>(null);
-  const label = (slug: string) => (branchLabel ? branchLabel(slug) : slug);
+  const label = (branchId: string) => (branchLabel ? branchLabel(branchId) : branchId);
 
   const columns: Column<WifiConfig>[] = [
     {
@@ -91,9 +103,9 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
       render: (w) => <span className="font-mono text-xs text-gray-500">{w.bssid}</span>,
     },
     {
-      key: "branch",
+      key: "branchId",
       header: "Chi nhánh",
-      render: (w) => <Badge tone="gray">{label(w.branch)}</Badge>,
+      render: (w) => <Badge tone="gray">{label(w.branchId)}</Badge>,
     },
     {
       key: "status",
@@ -104,26 +116,13 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
       key: "actions",
       header: "Thao tác",
       render: (w) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            className="text-xs text-gray-600 hover:text-gray-900 px-2 py-1"
-            onClick={() => setViewingConfig(w)}
-          >
-            <FontAwesomeIcon icon={faEye} className="mr-1" />
-            Xem
-          </Button>
-          {onDelete && (
-            <Button
-              variant="ghost"
-              className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 px-2 py-1"
-              onClick={() => setDeletingConfig(w)}
-            >
-              <FontAwesomeIcon icon={faTrashCan} className="mr-1" />
-              Xóa
-            </Button>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => setViewingConfig(w)}
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+        >
+          Chi tiết
+        </button>
       ),
     },
   ];
@@ -151,6 +150,14 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
           open={!!viewingConfig}
           onClose={() => setViewingConfig(null)}
           branchLabel={branchLabel}
+          onDelete={
+            onDelete
+              ? () => {
+                  setDeletingConfig(viewingConfig);
+                  setViewingConfig(null);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -158,7 +165,7 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
         <ConfirmDialog
           open={!!deletingConfig}
           title="Xác nhận xóa Wi-Fi"
-          message={`Xác nhận xóa cấu hình Wi-Fi "${deletingConfig.ssid}" khỏi chi nhánh ${label(deletingConfig.branch)}?`}
+          message={`Xác nhận xóa cấu hình Wi-Fi "${deletingConfig.ssid}" khỏi chi nhánh ${label(deletingConfig.branchId)}?`}
           confirmLabel="Xóa"
           cancelLabel="Hủy"
           tone="danger"

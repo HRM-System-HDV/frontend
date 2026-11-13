@@ -11,12 +11,13 @@ import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import { useCurrentUser } from "@/context/AuthContext";
-import { getTodayVN } from "@/lib/utils";
+import { toInputDate } from "@/lib/utils";
+import { canManageNews } from "@/features/news/helpers";
 
 export default function NewsPage() {
-  const { role } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   // Đăng/ghim/xóa tin là WRITE /api/news = manager + admin; nhân viên chỉ đọc.
-  const canWriteNews = role !== "staff";
+  const canWriteNews = role === "admin" || (role === "manager" && !!branchId);
 
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,37 +41,24 @@ export default function NewsPage() {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-    apiGet<NewsItem[]>("/api/news")
-      .then((data) => {
-        if (!ignore) {
-          setNewsList(data || []);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          setError(e instanceof GatewayError ? e.message : "Lỗi tải bảng tin");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
   const handleOpenCreate = () => {
+    if (!canWriteNews) return;
     setEditingItem(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (item: NewsItem) => {
+    if (!canManageNews(role, branchId, item)) return;
     setSelectedNews(null);
     setEditingItem(item);
     setModalOpen(true);
   };
 
   const handleSubmit = async (payload: NewsFormPayload) => {
+    if (!canWriteNews || (editingItem && !canManageNews(role, branchId, editingItem))) return;
     setSaving(true);
     try {
       if (editingItem) {
@@ -80,7 +68,7 @@ export default function NewsPage() {
       } else {
         const created = await apiPost<NewsItem>("/api/news", {
           ...payload,
-          date: getTodayVN(),
+          publishDate: toInputDate(new Date()),
         });
         setNewsList((prev) => [created, ...prev]);
       }
@@ -95,7 +83,7 @@ export default function NewsPage() {
 
   const handleTogglePin = async (id: string) => {
     const target = newsList.find((n) => n.id === id);
-    if (!target) return;
+    if (!target || !canManageNews(role, branchId, target)) return;
     try {
       const updated = await apiPut<NewsItem>(`/api/news/${id}`, { pinned: !target.pinned });
       setNewsList((prev) => prev.map((n) => (n.id === id ? updated : n)));
@@ -107,6 +95,7 @@ export default function NewsPage() {
 
   const handleDeleteNews = async (id: string, title?: string) => {
     const target = newsList.find((n) => n.id === id);
+    if (!target || !canManageNews(role, branchId, target)) return;
     const displayTitle = title || target?.title || "";
     if (!confirm(`Bạn có chắc chắn muốn xóa thông báo "${displayTitle}" không?`)) return;
     try {
@@ -166,9 +155,9 @@ export default function NewsPage() {
       <NewsDetailModal
         item={selectedNews}
         onClose={() => setSelectedNews(null)}
-        onEdit={canWriteNews ? handleOpenEdit : undefined}
-        onDelete={canWriteNews ? handleDeleteNews : undefined}
-        onTogglePin={canWriteNews ? handleTogglePin : undefined}
+        onEdit={selectedNews && canManageNews(role, branchId, selectedNews) ? handleOpenEdit : undefined}
+        onDelete={selectedNews && canManageNews(role, branchId, selectedNews) ? handleDeleteNews : undefined}
+        onTogglePin={selectedNews && canManageNews(role, branchId, selectedNews) ? handleTogglePin : undefined}
       />
 
       {/* Modal tạo/sửa thông báo */}

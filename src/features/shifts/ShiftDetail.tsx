@@ -143,7 +143,7 @@ export default function StaffShiftDetailModal({
           <div className="flex-1 min-w-0">
             <div className="font-bold text-gray-900">{staff.name}</div>
             <div className="text-xs text-gray-500">
-              {/* staff.branch đã được trang cha resolve slug -> tên qua /api/branches;
+              {/* staff.branch đã được trang cha resolve branchId -> tên qua /api/branches;
                   không còn heuristic bịa "Quận 1" từ độ dài chuỗi. */}
               {staff.role} • Chi nhánh {staff.branch || "—"}
             </div>

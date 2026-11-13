@@ -6,18 +6,19 @@ import Button from "@/components/ui/Button";
 import { Field, Input, Textarea, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
 import { useCurrentUser } from "@/context/AuthContext";
-import { formatDate, getTodayVN } from "@/lib/utils";
+import { toInputDate } from "@/lib/utils";
 import type { Regulation, RegulationStatus, RegulationCategory, Branch } from "@/types";
 
 export interface RegulationFormInput {
-  code?: string;
+  regulationCode: string;
   title: string;
   category: RegulationCategory;
   summary: string;
   content: string;
   status: RegulationStatus;
-  scope: string;
+  scopeBranchId: string | null;
   effectiveDate: string;
+  expiryDate: string | null;
   version: string;
   pinned: boolean;
 }
@@ -30,18 +31,20 @@ interface Props {
 }
 
 export default function RegulationFormModal({ initial, onClose, onSave, saving }: Props) {
-  const { role, branchSlug } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   const isAdmin = role === "admin";
+  const [formCode, setFormCode] = useState(initial?.regulationCode || "");
   const [formTitle, setFormTitle] = useState(initial?.title ?? "");
   const [formCategory, setFormCategory] = useState<RegulationCategory>(initial?.category ?? "Nội quy lao động");
   const [formSummary, setFormSummary] = useState(initial?.summary ?? "");
   const [formContent, setFormContent] = useState(initial?.content ?? "");
   const [formStatus, setFormStatus] = useState<RegulationStatus>(initial?.status ?? "hiệu lực");
   // Tài khoản bị ghim không có control nhưng giá trị vẫn phải vào payload.
-  const [formScope, setFormScope] = useState(initial?.scope ?? (isAdmin ? "Toàn công ty" : branchSlug.toUpperCase()));
+  const [formScope, setFormScope] = useState(initial?.scopeBranchId ?? (isAdmin ? "Toàn công ty" : branchId));
   const [formEffectiveDate, setFormEffectiveDate] = useState(
-    initial?.effectiveDate ? formatDate(initial.effectiveDate) : getTodayVN()
+    toInputDate(initial?.effectiveDate) || toInputDate(new Date())
   );
+  const [formExpiryDate, setFormExpiryDate] = useState(toInputDate(initial?.expiryDate));
   const [formVersion, setFormVersion] = useState(initial?.version ?? "1.0");
   const [formPinned, setFormPinned] = useState(!!initial?.pinned);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -51,18 +54,24 @@ export default function RegulationFormModal({ initial, onClose, onSave, saving }
   }, []);
 
   const handleSave = () => {
-    if (!formTitle.trim() || !formContent.trim()) {
-      alert("Vui lòng nhập đầy đủ tiêu đề và nội dung quy định.");
+    if (!formCode.trim() || !formTitle.trim() || !formContent.trim()) {
+      alert("Vui lòng nhập mã, tiêu đề và nội dung quy định.");
+      return;
+    }
+    if (formExpiryDate && formExpiryDate < formEffectiveDate) {
+      alert("Ngày hết hiệu lực không được trước ngày bắt đầu hiệu lực.");
       return;
     }
     onSave({
+      regulationCode: formCode.trim(),
       title: formTitle.trim(),
       category: formCategory,
       summary: formSummary.trim(),
       content: formContent.trim(),
       status: formStatus,
-      scope: formScope,
-      effectiveDate: formatDate(formEffectiveDate.trim()) || getTodayVN(),
+      scopeBranchId: formScope === "Toàn công ty" ? null : formScope,
+      effectiveDate: formEffectiveDate || toInputDate(new Date()),
+      expiryDate: formExpiryDate || null,
       version: formVersion,
       pinned: formPinned,
     });
@@ -86,6 +95,9 @@ export default function RegulationFormModal({ initial, onClose, onSave, saving }
       }
     >
       <div className="text-sm">
+        <Field label="Mã quy định" required className="mb-4">
+          <Input value={formCode} onChange={e => setFormCode(e.target.value)} disabled={saving} placeholder="VD: QD-001" />
+        </Field>
         {/* 1. Tiêu đề quy định */}
         <Field label="Tiêu đề quy định" required className="mb-4">
           <Input
@@ -122,8 +134,8 @@ export default function RegulationFormModal({ initial, onClose, onSave, saving }
               >
                 <option value="Toàn công ty">Toàn công ty</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
+                  <option key={b.id} value={b.id}>
+                    Chi nhánh {b.name} ({b.branchCode || b.id})
                   </option>
                 ))}
               </Select>
@@ -147,13 +159,25 @@ export default function RegulationFormModal({ initial, onClose, onSave, saving }
 
           <Field label="Ngày bắt đầu hiệu lực" className="mb-0">
             <Input
+              type="date"
+              aria-label="Ngày bắt đầu hiệu lực"
               value={formEffectiveDate}
               onChange={(e) => setFormEffectiveDate(e.target.value)}
-              placeholder="DD/MM/YYYY"
               disabled={saving}
             />
           </Field>
         </div>
+
+        <Field label="Ngày hết hiệu lực (không bắt buộc)" className="mb-4">
+          <Input
+            type="date"
+            aria-label="Ngày hết hiệu lực"
+            value={formExpiryDate}
+            min={formEffectiveDate}
+            onChange={e => setFormExpiryDate(e.target.value)}
+            disabled={saving}
+          />
+        </Field>
 
         {/* 4. Tóm tắt nội dung */}
         <Field label="Tóm tắt ngắn (hiển thị trên danh sách thẻ)" className="mb-4">

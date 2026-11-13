@@ -14,8 +14,8 @@ interface Props {
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
   emptyMessage?: string;
-  /** Đổi slug chi nhánh thành tên hiển thị; thiếu thì hiện slug gốc. */
-  branchLabel?: (slug: string) => string;
+  /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function ShiftRequestSection({ requests, onApprove, onReject, emptyMessage, branchLabel }: Props) {

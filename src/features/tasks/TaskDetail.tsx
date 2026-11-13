@@ -4,7 +4,7 @@ import { useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCamera, faCheck, faCircleExclamation, faClock, faFire, faLocationDot, faMagnifyingGlassPlus, faRotateRight, faThumbtack, faUser } from "@fortawesome/free-solid-svg-icons";
+import { faCamera, faCheck, faCircleExclamation, faClock, faFire, faLocationDot, faMagnifyingGlassPlus, faUser } from "@fortawesome/free-solid-svg-icons";
 import type { TaskItem } from "./types";
 import { formatDateTime } from "@/lib/utils";
 
@@ -15,8 +15,8 @@ interface TaskDetailModalProps {
   onComplete: (taskId: string, photoUrl?: string) => void;
   /** Không truyền = người dùng không được xóa nhiệm vụ (nhân viên). */
   onDelete?: (taskId: string) => void;
-  /** Phân giải slug chi nhánh -> tên hiển thị (fallback = chính slug). */
-  branchLabel?: (slug: string) => string;
+  /** Phân giải branchId chi nhánh -> tên hiển thị (fallback = chính branchId). */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function TaskDetailModal({
@@ -128,23 +128,9 @@ export default function TaskDetailModal({
             </div>
           </div>
 
-          {/* Hàng 2: Thông tin phân loại & Phụ trách */}
+          {/* Người khởi tạo và người thực hiện */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs">
             <div>
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="text-gray-500 font-medium whitespace-nowrap">Nguồn gốc công việc:</span>
-                {task.sourceType === "manager" ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-semibold bg-rose-50 text-rose-800 border border-rose-200 text-xs">
-                    <FontAwesomeIcon icon={faThumbtack} fontSize={12} className="text-rose-600" />
-                    Quản lý giao riêng
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md font-semibold bg-blue-50 text-blue-800 border border-blue-200 text-xs">
-                    <FontAwesomeIcon icon={faRotateRight} fontSize={12} className="text-blue-600" />
-                    Cố định theo ca {task.shiftName ? `• ${task.shiftName}` : ""}
-                  </span>
-                )}
-              </div>
               <div className="text-gray-500">
                 Người khởi tạo: <strong className="text-gray-700">{task.assignedByName}</strong>
               </div>
@@ -159,7 +145,7 @@ export default function TaskDetailModal({
                 <FontAwesomeIcon icon={faClock} fontSize={13} className={isOverdue ? "text-red-600" : "text-gray-400"} />
                 <span>Hạn chót: </span>
                 <strong className={isOverdue ? "text-red-600 font-bold" : "text-gray-700"}>
-                  {formatDateTime(task.dueDate)} {isOverdue && "(Đã quá hạn)"}
+                  {task.dueDate} {isOverdue && "(Đã quá hạn)"}
                 </strong>
               </div>
             </div>
@@ -227,18 +213,18 @@ export default function TaskDetailModal({
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
                       <FontAwesomeIcon icon={faUser} fontSize={14} className="text-gray-400 shrink-0" />
                       <span className="truncate">
-                        Người chụp:{" "}
+                        Người nộp ảnh:{" "}
                         <strong className="text-gray-800 whitespace-nowrap">
-                          {task.photoSubmittedBy || task.assignedToName}
+                          {task.photoSubmittedByName || "Chưa có thông tin"}
                         </strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <FontAwesomeIcon icon={faClock} fontSize={14} className="text-gray-400 shrink-0" />
                       <span>
-                        Thời gian chụp:{" "}
+                        Thời gian nộp ảnh:{" "}
                         <strong className="text-gray-800 whitespace-nowrap">
-                          {formatDateTime(task.photoSubmittedAt || task.completedAt || task.dueDate)}
+                          {task.photoSubmittedAt ? formatDateTime(task.photoSubmittedAt) : "Chưa có thông tin"}
                         </strong>
                       </span>
                     </div>
@@ -297,10 +283,10 @@ export default function TaskDetailModal({
             </div>
             <div className="text-xs text-gray-500 flex items-center justify-between px-1">
               <span>
-                Ảnh chụp bởi: <strong className="text-gray-700">{task.photoSubmittedBy || task.assignedToName}</strong>
+                Người nộp ảnh: <strong className="text-gray-700">{task.photoSubmittedByName || "Chưa có thông tin"}</strong>
               </span>
               <span>
-                Thời gian: <strong className="text-gray-700">{formatDateTime(task.photoSubmittedAt || task.completedAt || task.dueDate)}</strong>
+                Thời gian nộp ảnh: <strong className="text-gray-700">{task.photoSubmittedAt ? formatDateTime(task.photoSubmittedAt) : "Chưa có thông tin"}</strong>
               </span>
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { apiGet, apiPost, apiPut, apiDelete, GatewayError, GATEWAY_URL } from "./api";
+import { apiDownload, apiGet, apiPost, apiPut, apiDelete, GatewayError, GATEWAY_URL } from "./api";
 
 describe("api client (@/lib/api)", () => {
   const originalFetch = global.fetch;
@@ -10,6 +10,36 @@ describe("api client (@/lib/api)", () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
+  });
+
+  it("downloads binary content with credentials and refreshes an expired session", async () => {
+    const blob = new Blob(["%PDF-1.4"], { type: "application/pdf" });
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: true, status: 200 })
+      .mockResolvedValueOnce({ ok: true, status: 200, blob: async () => blob });
+    expect(await apiDownload("/api/files/hrm/regulations/file-1")).toBe(blob);
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(global.fetch).toHaveBeenNthCalledWith(2, `${GATEWAY_URL}/api/auth/refresh`, expect.objectContaining({ credentials: "include" }));
+    expect(global.fetch).toHaveBeenNthCalledWith(3, `${GATEWAY_URL}/api/files/hrm/regulations/file-1`, expect.objectContaining({ credentials: "include" }));
+  });
+
+  it("reports a forbidden file download as an API error", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403, text: async () => JSON.stringify({ error: { code: "FORBIDDEN", message: "Không có quyền" } }) });
+    await expect(apiDownload("/api/files/hrm/regulations/file-1")).rejects.toMatchObject({ code: "FORBIDDEN", status: 403 });
+  });
+
+  it("successful mutations issue only the business request without a browser audit write", async () => {
+    global.fetch = vi.fn().mockImplementation(async () => ({
+      ok: true, status: 200, text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response));
+    await apiPost("/api/tasks", { title: "Task" });
+    await apiPut("/api/tasks/task-id", { status: "done" });
+    await apiDelete("/api/tasks/task-id");
+    expect(global.fetch).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(global.fetch).mock.calls.map(([url]) => String(url))).toEqual([
+      `${GATEWAY_URL}/api/tasks`, `${GATEWAY_URL}/api/tasks/task-id`, `${GATEWAY_URL}/api/tasks/task-id`,
+    ]);
   });
 
   it("apiGet unwraps envelope { data: ... } successfully", async () => {

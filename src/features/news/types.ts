@@ -3,9 +3,10 @@ export interface NewsItem {
   title: string;
   summary: string;
   content: string;
-  date: string;
+  publishDate: string; // ISO YYYY-MM-DD (BE serialize trả về dạng này)
   tag: string;
-  tagTone: "danger" | "warning" | "success" | "primary" | "gray";
   pinned?: boolean;
-  branch?: string;
+  branchId: string | null;
+  authorName?: string; // BE tự gán từ phiên đăng nhập khi tạo tin
+  createdAt?: string; // ISO datetime, dùng làm tie-break khi hai tin cùng publishDate
 }

@@ -12,15 +12,16 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select, Input } from "@/components/ui/Form";
-import { formatDateTime, formatVND } from "@/lib/utils";
-import { apiGet, apiPut, createPayout, GatewayError } from "@/lib/api";
-import type { BankPartner, SoapTransaction } from "./types";
+import { formatVND } from "@/lib/utils";
+import { apiGet, createPayout, GatewayError } from "@/lib/api";
+import type { BankPartner } from "./types";
 
+// API trả raw status của payroll-service: pending_confirmation | confirmed | paid.
 interface PayslipRecord {
   id: string;
   employeeId: string;
   month: string;
-  netSalary: number;
+  netSalary: string | number;
   status: string;
   payoutId?: string | null;
 }
@@ -34,7 +35,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   partners: BankPartner[];
-  onDisburseSuccess: (newTx: SoapTransaction, deduped: boolean) => void;
+  onDisburseSuccess: () => void;
 }
 
 function newIdempotencyKey(): string {
@@ -43,11 +44,6 @@ function newIdempotencyKey(): string {
   } catch {
     return `KEY-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   }
-}
-
-function toDisplayDate(isoOrNow: string): string {
-  // Hiển thị DD/MM/YYYY HH:mm theo chuẩn chung của hệ thống
-  return formatDateTime(isoOrNow || new Date());
 }
 
 export default function CreatePayrollDisbursementModal({
@@ -71,7 +67,7 @@ export default function CreatePayrollDisbursementModal({
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [fetchingSlips, setFetchingSlips] = useState(false);
 
-  // Sinh idempotencyKey & tải các phiếu lương đã chốt mỗi khi mở modal
+  // Sinh idempotencyKey & tải các phiếu đã xác nhận mỗi khi mở modal
   useEffect(() => {
     if (!open) return;
     let ignore = false;
@@ -84,9 +80,9 @@ export default function CreatePayrollDisbursementModal({
           const map = new Map((emps || []).map((e) => [e.id, e.name]));
           setEmployeeMap(map);
 
-          // Chỉ lấy các phiếu lương đã chốt và chưa được gắn lệnh chi (payoutId)
+          // BE chỉ cho chi phiếu đã xác nhận (confirmed) và chưa gắn lệnh chi
           const closed = (slips || []).filter(
-            (s) => s.status === "đã chốt" && !s.payoutId
+            (s) => s.status === "confirmed" && !s.payoutId
           );
           setClosedSlips(closed);
 
@@ -94,7 +90,7 @@ export default function CreatePayrollDisbursementModal({
           if (months.length > 0) {
             setSelectedMonth(months[0]);
             const count = closed.filter((s) => s.month === months[0]).length;
-            setContent(`Chi lương tháng ${months[0]} (${count} nhân sự)`);
+            setContent(`Chi lương tháng ${months[0]} (${count} phiếu đã xác nhận)`);
           } else {
             setSelectedMonth("");
             setContent("Chi lương");
@@ -102,9 +98,10 @@ export default function CreatePayrollDisbursementModal({
           setFetchingSlips(false);
         }
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (!ignore) {
           setClosedSlips([]);
+          setError(e instanceof GatewayError ? e.message : "Không tải được danh sách phiếu lương từ gateway");
           setFetchingSlips(false);
         }
       });
@@ -124,17 +121,23 @@ export default function CreatePayrollDisbursementModal({
     return closedSlips.filter((s) => s.month === selectedMonth);
   }, [closedSlips, selectedMonth]);
 
-  // Tự động tính tổng số tiền từ các phiếu lương đã chốt
+  // Tự động tính tổng số tiền từ các phiếu đã xác nhận
   const calculatedAmount = useMemo(() => {
     return targetSlips.reduce((sum, s) => sum + (Number(s.netSalary) || 0), 0);
   }, [targetSlips]);
 
   const calculatedCount = targetSlips.length;
+  // beneficiaryCount phía BE tính theo employeeId duy nhất (một người có thể
+  // nhận nhiều kỳ trong cùng lệnh chi) — gửi số phiếu sẽ bị chặn "không khớp".
+  const calculatedRecipients = useMemo(
+    () => new Set(targetSlips.map((s) => s.employeeId)).size,
+    [targetSlips]
+  );
 
   const handleMonthChange = (m: string) => {
     setSelectedMonth(m);
     const count = (m === "all" ? closedSlips : closedSlips.filter((s) => s.month === m)).length;
-    setContent(m === "all" ? `Chi lương ${count} phiếu đã chốt` : `Chi lương tháng ${m} (${count} nhân sự)`);
+    setContent(m === "all" ? `Chi lương ${count} phiếu đã xác nhận` : `Chi lương tháng ${m} (${count} phiếu đã xác nhận)`);
   };
 
   const selectedBank = partners.find((p) => p.id === selectedBankId) || partners[0];
@@ -144,8 +147,8 @@ export default function CreatePayrollDisbursementModal({
       setError("Chưa có tài khoản ngân hàng doanh nghiệp nào được liên kết.");
       return;
     }
-    if (calculatedCount === 0 || calculatedAmount <= 0) {
-      setError("Không có phiếu lương đã chốt nào để thực hiện chi.");
+    if (calculatedCount === 0) {
+      setError("Không có phiếu đã xác nhận nào để thực hiện chi.");
       return;
     }
     if (selectedBank.balance < calculatedAmount) {
@@ -164,54 +167,19 @@ export default function CreatePayrollDisbursementModal({
     try {
       const res = (await createPayout({
         idempotencyKey: idempotencyKey.trim(),
+        // BE yêu cầu payslipIds và tự gắn payoutId + status "paid" trong
+        // transaction lệnh chi — FE không được PUT ngược vào từng phiếu.
+        payslipIds: targetSlips.map((s) => s.id),
         debitAccount: selectedBank.accountNumber,
         content: content.trim() || "Chi lương",
         totalAmount: calculatedAmount,
-        beneficiaryCount: calculatedCount,
-      })) as unknown as {
-        id: string;
-        bankReference: string;
-        debitAccount: string;
-        totalAmount: number;
-        content: string;
-        beneficiaryCount: number;
-        status: string;
-        createdAt: string;
-        deduped?: boolean;
-      };
+        beneficiaryCount: calculatedRecipients,
+      })) as unknown as { deduped?: boolean };
 
-      // Gắn payoutId cho các phiếu lương vừa được chi trả (qua apiPut để dùng chung
-      // cơ chế phiên + gateway envelope và tự ghi nhật ký thao tác vào backlog)
-      if (res.id && targetSlips.length > 0) {
-        await Promise.allSettled(
-          targetSlips.map((s) =>
-            apiPut(`/api/payroll/payslips/${encodeURIComponent(s.id)}`, { payoutId: res.id })
-          )
-        );
+      if (res?.deduped) {
+        alert("Trùng idempotencyKey — ngân hàng trả lại lệnh chi cũ, không trừ tiền lần hai.");
       }
-
-      const deduped = res.deduped === true;
-      const tx: SoapTransaction = {
-        id: res.id,
-        batchName: res.content || content,
-        bankName: selectedBank.shortName,
-        accountNumber: selectedBank.accountNumber,
-        accountName: selectedBank.accountName,
-        totalEmployees: res.beneficiaryCount,
-        totalAmount: res.totalAmount,
-        status: res.status === "success" ? "success" : "processing",
-        createdAt: toDisplayDate(res.createdAt),
-        completedAt: toDisplayDate(res.createdAt),
-        bankReference: res.bankReference,
-        soapAction: "CreatePayout (REST)",
-        xmlPayload: `REST POST /api/payroll/payouts\nidempotencyKey=${idempotencyKey}`,
-        xmlResponse: `transactionId=${res.id}\nbankReference=${res.bankReference}${deduped ? "\ndeduped=true" : ""}`,
-        deduped,
-      };
-      onDisburseSuccess(tx, deduped);
-      if (deduped) {
-        alert("Lệnh chi trùng, trả bản ghi cũ (deduped).");
-      }
+      onDisburseSuccess();
       onClose();
     } catch (e) {
       if (e instanceof GatewayError && e.code === "INSUFFICIENT_FUNDS") {
@@ -255,7 +223,7 @@ export default function CreatePayrollDisbursementModal({
             </Button>
             <Button
               onClick={handleDisburse}
-              disabled={loading || partners.length === 0 || calculatedCount === 0 || calculatedAmount <= 0}
+              disabled={loading || partners.length === 0 || calculatedCount === 0}
               className="text-xs"
             >
               <FontAwesomeIcon
@@ -281,7 +249,7 @@ export default function CreatePayrollDisbursementModal({
 
         {!fetchingSlips && closedSlips.length === 0 && (
           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-medium">
-            Chưa có phiếu lương nào được chốt.
+            Chưa có phiếu lương nào ở trạng thái đã xác nhận để chi.
           </div>
         )}
 
@@ -355,7 +323,7 @@ export default function CreatePayrollDisbursementModal({
             disabled={loading || availableMonths.length === 0}
           >
             {availableMonths.length === 0 ? (
-              <option value="">Chưa có phiếu lương đã chốt</option>
+              <option value="">Chưa có phiếu lương đã xác nhận</option>
             ) : (
               <>
                 {availableMonths.map((m) => {
@@ -363,13 +331,13 @@ export default function CreatePayrollDisbursementModal({
                   const mTotal = mSlips.reduce((sum, s) => sum + (Number(s.netSalary) || 0), 0);
                   return (
                     <option key={m} value={m}>
-                      Kỳ {m} ({mSlips.length} phiếu đã chốt — {formatVND(mTotal)})
+                      Kỳ {m} ({mSlips.length} phiếu đã xác nhận — {formatVND(mTotal)})
                     </option>
                   );
                 })}
                 {availableMonths.length > 1 && (
                   <option value="all">
-                    Tất cả các kỳ ({closedSlips.length} phiếu đã chốt — {formatVND(closedSlips.reduce((s, p) => s + (Number(p.netSalary) || 0), 0))})
+                    Tất cả các kỳ ({closedSlips.length} phiếu đã xác nhận — {formatVND(closedSlips.reduce((s, p) => s + (Number(p.netSalary) || 0), 0))})
                   </option>
                 )}
               </>
@@ -398,9 +366,9 @@ export default function CreatePayrollDisbursementModal({
           </Field>
           <Field label="Số lượng người nhận">
             <div className="h-10 px-3.5 rounded-lg bg-gray-50 border border-gray-200 flex items-center justify-between font-bold text-sm text-gray-800">
-              <span>{calculatedCount} nhân sự</span>
+              <span>{calculatedRecipients} nhân sự</span>
               <span className="text-[10px] font-normal text-gray-500 flex items-center gap-1">
-                <FontAwesomeIcon icon={faUsers} fontSize={11} /> Phiếu đã chốt
+                <FontAwesomeIcon icon={faUsers} fontSize={11} /> {calculatedCount} phiếu đã xác nhận
               </span>
             </div>
           </Field>
@@ -425,7 +393,7 @@ export default function CreatePayrollDisbursementModal({
                   <span className="text-[10px] text-gray-400 font-mono">({s.month})</span>
                 </div>
                 <span className="font-mono font-bold text-emerald-700">
-                  {formatVND(s.netSalary)}
+                  {formatVND(Number(s.netSalary) || 0)}
                 </span>
               </div>
             ))}

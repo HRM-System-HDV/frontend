@@ -8,10 +8,18 @@ import {
   faClock,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
+import Button from "@/components/ui/Button";
 import { useCurrentUser } from "@/context/AuthContext";
 import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { fetchBacklogs, type BacklogItem } from "@/lib/backlog";
+import { GatewayError } from "@/lib/api";
+import { formatDateTime } from "@/lib/utils";
+
+const ALL = "all";
+
+const errorMessage = (e: unknown, fallback: string) =>
+  e instanceof GatewayError ? e.message : fallback;
 
 export default function BacklogPage() {
   const { role } = useCurrentUser();
@@ -20,69 +28,64 @@ export default function BacklogPage() {
 
   const [logs, setLogs] = useState<BacklogItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   // Lưu trạng thái thao tác/bộ lọc vào localStorage
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_backlog_search", "");
-  const [actionFilter, setActionFilter] = useLocalStorageState<string>("hrm_backlog_action_filter", "all");
-  const [moduleFilter, setModuleFilter] = useLocalStorageState<string>("hrm_backlog_module_filter", "all");
+  const [actionFilter, setActionFilter] = useLocalStorageState<string>("hrm_backlog_action_filter", ALL);
+  const [moduleFilter, setModuleFilter] = useLocalStorageState<string>("hrm_backlog_module_filter", ALL);
 
-  const showToast = (text: string, tone: "success" | "danger" = "success") => {
-    setToast({ text, tone });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const refetch = () => setReloadToken((token) => token + 1);
 
+  // Bộ lọc không nằm trong deps: `listBacklog` của integration-service bỏ mọi
+  // query params và trả nguyên bảng, nên chỉ tải một lần rồi lọc ở đây
+  // (xem frontend/src/lib/backlog.ts).
   useEffect(() => {
     // Không tải nhật ký khi vai trò khác mở thẳng URL: trang đã chặn bằng
     // NoAccessNotice nên trạng thái tải/empty mặc định là đủ.
-    if (!isAdmin) return;
+    if (!isAdmin) return undefined;
     let ignore = false;
-    fetchBacklogs({
-      action: actionFilter,
-      module: moduleFilter,
-      search: searchQuery,
-    })
+    fetchBacklogs()
       .then((data) => {
-        if (!ignore) {
-          setLogs(data);
-          setLoading(false);
-        }
+        if (ignore) return;
+        setLogs(data);
+        setError(null);
+        setLoading(false);
       })
-      .catch(() => {
-        if (!ignore) {
-          showToast("Không thể tải nhật ký thao tác", "danger");
-          setLoading(false);
-        }
+      .catch((e) => {
+        if (ignore) return;
+        setError(errorMessage(e, "Không thể tải nhật ký thao tác"));
+        setLoading(false);
       });
     return () => {
       ignore = true;
     };
-  }, [isAdmin, actionFilter, moduleFilter, searchQuery]);
+  }, [isAdmin, reloadToken]);
 
-  // Danh sách các phân hệ duy nhất để lọc
-  const moduleOptions = useMemo(() => {
-    const set = new Set<string>();
-    logs.forEach((l) => {
-      if (l.module) set.add(l.module);
+  const { actionOptions, moduleOptions } = useMemo(() => {
+    const actions = new Set<string>();
+    const modules = new Set<string>();
+    logs.forEach((log) => {
+      if (log.action) actions.add(log.action);
+      if (log.module) modules.add(log.module);
     });
-    // Thêm các phân hệ phổ biến nếu chưa có
-    [
-      "Nhân sự",
-      "Phân ca làm việc",
-      "Khung ca mẫu",
-      "Đăng ký ca",
-      "Giao việc & Nhiệm vụ",
-      "Phê duyệt yêu cầu",
-      "Phiếu lương",
-      "Chi nhánh",
-      "Phòng ban",
-      "Bảng tin",
-      "Nội quy & Quy định",
-      "Cấu hình Wi-Fi",
-      "Cấu hình chấm công",
-    ].forEach((m) => set.add(m));
-    return Array.from(set);
+    return {
+      actionOptions: Array.from(actions).sort(),
+      moduleOptions: Array.from(modules).sort(),
+    };
   }, [logs]);
+
+  const filteredLogs = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return logs.filter((log) => {
+      if (actionFilter !== ALL && log.action !== actionFilter) return false;
+      if (moduleFilter !== ALL && log.module !== moduleFilter) return false;
+      if (!query) return true;
+      return [log.userName, log.targetName, log.action, log.module]
+        .some((field) => (field || "").toLowerCase().includes(query));
+    });
+  }, [logs, actionFilter, moduleFilter, searchQuery]);
 
   if (!canAccessPath(role, "/dashboard/backlog")) {
     return <NoAccessNotice />;
@@ -90,26 +93,19 @@ export default function BacklogPage() {
 
   return (
     <div className="space-y-4">
-      {/* Toast thông báo */}
-      {toast && (
-        <div
-          className={`fixed top-4 right-4 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border text-sm font-semibold transition-all ${
-            toast.tone === "success"
-              ? "bg-emerald-50 border-emerald-200 text-emerald-800"
-              : "bg-rose-50 border-rose-200 text-rose-800"
-          }`}
-        >
-          <span>{toast.text}</span>
-          <button onClick={() => setToast(null)} className="ml-2 text-xs opacity-60 hover:opacity-100">
-            ✕
-          </button>
-        </div>
-      )}
-
       {/* Tiêu đề trang */}
       <PageHeader
         breadcrumb={[{ label: "Hệ thống", href: "#" }, { label: "Lịch sử thao tác" }]}
       />
+
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-xl p-3.5 text-sm flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <Button variant="white" onClick={refetch} className="px-3 py-1.5 text-xs whitespace-nowrap">
+            Thử lại
+          </Button>
+        </div>
+      )}
 
       {/* Thanh lọc & tìm kiếm */}
       <div className="bg-white rounded-xl border border-gray-200 p-3.5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
@@ -118,7 +114,8 @@ export default function BacklogPage() {
           <div className="relative flex-1 min-w-0 max-w-sm">
             <input
               type="text"
-              placeholder="Tìm theo người, đối tượng, mô tả..."
+              aria-label="Tìm trong nhật ký thao tác"
+              placeholder="Tìm theo người, đối tượng, phân hệ..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full text-xs font-medium border border-gray-200 rounded-lg pl-8 pr-3 py-2 bg-white text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-primary"
@@ -142,11 +139,12 @@ export default function BacklogPage() {
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-xs font-semibold text-gray-500">Phân hệ:</span>
             <select
+              aria-label="Lọc theo phân hệ"
               value={moduleFilter}
               onChange={(e) => setModuleFilter(e.target.value)}
               className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
             >
-              <option value="all">Tất cả phân hệ</option>
+              <option value={ALL}>Tất cả phân hệ</option>
               {moduleOptions.map((m) => (
                 <option key={m} value={m}>
                   {m}
@@ -159,16 +157,17 @@ export default function BacklogPage() {
           <div className="flex flex-wrap items-center gap-1.5 min-w-0">
             <span className="text-xs font-semibold text-gray-500">Thao tác:</span>
             <select
+              aria-label="Lọc theo thao tác"
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
               className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-2 bg-white text-gray-700 focus:outline-none focus:border-primary cursor-pointer"
             >
-              <option value="all">Tất cả thao tác</option>
-              <option value="CREATE">Thêm mới</option>
-              <option value="UPDATE">Chỉnh sửa</option>
-              <option value="DELETE">Xóa</option>
-              <option value="APPROVE">Phê duyệt</option>
-              <option value="REJECT">Từ chối</option>
+              <option value={ALL}>Tất cả thao tác</option>
+              {actionOptions.map((a) => (
+                <option key={a} value={a}>
+                  {a}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -182,14 +181,17 @@ export default function BacklogPage() {
               <div key={i} className="h-12 bg-gray-100/80 rounded-lg animate-pulse" />
             ))}
           </div>
-        ) : logs.length === 0 ? (
+        ) : filteredLogs.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center mx-auto mb-3">
               <FontAwesomeIcon icon={faClockRotateLeft} fontSize={20} />
             </div>
-            <h6 className="font-semibold text-gray-800 text-sm">Chưa có thao tác nào trong nhật ký</h6>
+            <h6 className="font-semibold text-gray-800 text-sm">
+              {logs.length === 0 ? "Nhật ký chưa có mục nào" : "Không có bản ghi khớp bộ lọc"}
+            </h6>
             <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-              Mọi hành động thêm mới, chỉnh sửa, xóa đối tượng trên hệ thống sẽ tự động được ghi nhận tại đây.
+              Mỗi service ghi nhật ký khi có thao tác nghiệp vụ; hiện work-service ghi
+              mỗi lần cập nhật giờ chấm công.
             </p>
           </div>
         ) : (
@@ -206,15 +208,15 @@ export default function BacklogPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
-                {logs.map((item) => {
+                {filteredLogs.map((item) => {
                   const initialLetter = (item.userName || "U").charAt(0).toUpperCase();
                   return (
                     <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
-                      {/* Thời gian */}
+                      {/* Thời gian: cột `created_at` của Backlog, không có cột timestamp */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-gray-600 font-mono text-[11px]">
                           <FontAwesomeIcon icon={faClock} fontSize={12} className="text-gray-400" />
-                          <span>{item.timestamp}</span>
+                          <span>{formatDateTime(item.createdAt) || "—"}</span>
                         </div>
                       </td>
 
@@ -226,19 +228,18 @@ export default function BacklogPage() {
                           </span>
                           <div>
                             <span className="font-semibold text-gray-900 block">{item.userName}</span>
-                            <span className="text-[10px] text-gray-400 capitalize">{item.userRole || "Nhân viên"}</span>
+                            {/* userRole nullable trong schema: thiếu thì để trống, không gán "Nhân viên". */}
+                            <span className="text-[10px] text-gray-400 capitalize">{item.userRole || "—"}</span>
                           </div>
                         </div>
                       </td>
 
-                      {/* Thao tác */}
+                      {/* Thao tác: mã hành động nguyên bản do service ghi */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="font-medium text-gray-800">
-                          {item.actionLabel || item.action}
-                        </span>
+                        <span className="font-medium text-gray-800">{item.action}</span>
                       </td>
 
-                      {/* Phân hệ */}
+                      {/* Phân hệ: giá trị `module` nguyên bản từ Backlog */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 font-medium text-xs border border-gray-200">
                           {item.module}
@@ -252,7 +253,8 @@ export default function BacklogPage() {
                         </span>
                       </td>
 
-                      {/* Chi tiết */}
+                      {/* Chi tiết: `description` không có trong model Backlog nên
+                          dữ liệu hiện tại luôn hiển thị "—". */}
                       <td className="py-3 px-4">
                         <span className="text-gray-500 block max-w-md truncate" title={item.description}>
                           {item.description || "—"}
@@ -269,4 +271,3 @@ export default function BacklogPage() {
     </div>
   );
 }
-

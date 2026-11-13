@@ -7,6 +7,7 @@ import Badge from "@/components/ui/Badge";
 import StaffShiftDetailModal from "./ShiftDetail";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { apiGet } from "@/lib/api";
+import { configQuery } from "./attendanceConfig";
 import { formatDate, parseDate } from "@/lib/utils";
 import type { Branch } from "@/types";
 import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
@@ -14,12 +15,13 @@ import type { ShiftTemplate, WorkShift, WeeklyRegistration } from "./types";
 export interface StaffInShift {
   id: string;
   rawId?: string;
-  // Id nhân sự trong DB — bắt buộc để gọi đúng API chấm công
-  // (POST /api/attendance/checkin yêu cầu employeeId).
+  // Id nhân sự trong DB — trang cha cần để mở form giờ chấm công
+  // (PUT /api/attendance/:shiftId). Dòng suy ra từ đăng ký ca không có id này.
   employeeId?: string;
   name: string;
   role: string;
   branch: string;
+  branchId?: string;
   avatarLetter: string;
   phone: string;
   checkInStatus: "checked_in" | "in_progress" | "not_yet";
@@ -48,7 +50,9 @@ interface Props {
   onOpenAssignModal?: (templateId: string, date: string, branch: string) => void;
   onDeleteShift?: (shiftId: string) => void;
   onDeleteRegistration?: (regId: string) => void;
-  // Chấm công thật qua work-service (POST /api/attendance/checkin | /checkout).
+  // Chấm công do trang cha ghi qua work-service (PUT /api/attendance/:shiftId).
+  // Cả hai nút "vào ca"/"ra ca" đều mở cùng form giờ, vì BE bắt buộc gửi đủ
+  // checkIn lẫn checkOut trong một lần lưu.
   // Trang cha (dashboard/shifts) owns call vì có showToast + fetchData để cập nhật
   // lại lịch sau khi ghi; component chỉ suy ra employeeId/shiftId rồi gọi lên.
   onCheckIn?: (employeeId: string, shiftId: string) => void | Promise<void>;
@@ -135,11 +139,17 @@ export default function GeneralScheduleSection({
 
   useEffect(() => {
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
-    apiGet<any>("/api/attendance/config").then((cfg) => {
+  }, []);
+
+  // Cấu hình ân hạn lưu theo chi nhánh: xem chi nhánh nào lấy cấu hình chi nhánh đó
+  // ("all" với admin = mặc định hệ thống; manager/staff được BE suy ra chi nhánh mình).
+  useEffect(() => {
+    const query = selectedBranch && selectedBranch !== "all" ? configQuery(selectedBranch) : "";
+    apiGet<any>(`/api/attendance/config${query}`).then((cfg) => {
       const g = cfg?.gracePeriodMinutes ?? cfg?.data?.gracePeriodMinutes;
       if (typeof g === "number") setGracePeriodMinutes(g);
     }).catch(() => {});
-  }, []);
+  }, [selectedBranch]);
 
   // Tính toán các ngày trong tuần được chọn (tuần hiện tại thật + offset)
   const weekDays = useMemo(() => {
@@ -195,6 +205,7 @@ export default function GeneralScheduleSection({
       name: ws.employee,
       role: ws.templateName || "Nhân viên trực ca",
       branch: ws.branch,
+      branchId: ws.branchId,
       avatarLetter: (ws.employee || "?").charAt(0).toUpperCase(),
       phone: ws.phone || "",
       checkInStatus: ws.checkIn && ws.checkIn !== "—" ? "checked_in" : "not_yet",
@@ -255,10 +266,7 @@ export default function GeneralScheduleSection({
       const registered = (registrations || [])
         .filter((r) => {
           if (selectedBranch !== "all") {
-            const cleanSelected = selectedBranch.toLowerCase().replace("-", "");
-            const cleanBranch = (r.branch || "").toLowerCase().replace("-", "");
-            const cleanSlug = (r.branchSlug || "").toLowerCase().replace("-", "");
-            if (cleanBranch !== cleanSelected && cleanSlug !== cleanSelected) {
+            if (r.branchId !== selectedBranch) {
               return false;
             }
           }
@@ -270,6 +278,7 @@ export default function GeneralScheduleSection({
           name: r.employeeName,
           role: r.role || "Nhân sự",
           branch: r.branch,
+          branchId: r.branchId,
           avatarLetter: (r.employeeName || "?").charAt(0).toUpperCase(),
           phone: "",
           checkInStatus: "not_yet",
@@ -291,7 +300,7 @@ export default function GeneralScheduleSection({
       const filteredByBranch =
         selectedBranch === "all"
           ? withOverrides
-          : withOverrides.filter((s) => s.branch.toLowerCase().replace("-", "") === selectedBranch.toLowerCase().replace("-", ""));
+          : withOverrides.filter((s) => s.branchId === selectedBranch);
       return {
         id: `shift_${ti}`,
         templateId: t.id,
@@ -391,8 +400,8 @@ export default function GeneralScheduleSection({
                 >
                   <option value="all">Tất cả chi nhánh</option>
                   {branches.map((b) => (
-                    <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                      {b.name || b.slug.toUpperCase()}
+                    <option key={b.id} value={b.id}>
+                      {b.name || b.id}
                     </option>
                   ))}
                 </select>
@@ -680,7 +689,7 @@ export default function GeneralScheduleSection({
                                 <div className="text-xs text-gray-500 truncate">
                                   {staff.role} • Chi nhánh{" "}
                                   {branches.find(
-                                    (b) => b.slug.toLowerCase() === (staff.branch || "").toLowerCase()
+                                    (b) => b.id === staff.branchId
                                   )?.name ||
                                     staff.branch ||
                                     "—"}

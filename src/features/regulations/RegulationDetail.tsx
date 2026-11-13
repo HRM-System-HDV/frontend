@@ -10,8 +10,8 @@ import {
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { apiGet } from "@/lib/api";
-import type { Regulation, Branch } from "@/types";
+import { apiDownload, apiGet } from "@/lib/api";
+import type { Regulation, RegulationFile, Branch } from "@/types";
 import { getStatusTone, getCategoryColor } from "./helpers";
 import { formatDate } from "@/lib/utils";
 
@@ -31,15 +31,56 @@ export default function RegulationDetailModal({
   onTogglePin,
 }: Props) {
   // Component không nhận branches từ page cha (page không fetch) -> tự tải
-  // bảng chi nhánh để map slug -> tên, giống RegulationList.
+  // bảng chi nhánh để map branchId -> tên, giống RegulationList.
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [files, setFiles] = useState<RegulationFile[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+  const [fileError, setFileError] = useState("");
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const itemId = item?.id;
+
+  useEffect(() => {
+    if (!itemId) return;
+    let ignore = false;
+    setFiles([]);
+    setFileError("");
+    setLoadingFiles(true);
+    apiGet<Regulation>(`/api/regulations/${encodeURIComponent(itemId)}`)
+      .then(detail => { if (!ignore) setFiles(detail.files || []); })
+      .catch(error => { if (!ignore) setFileError(error instanceof Error ? error.message : "Không thể tải danh sách tài liệu."); })
+      .finally(() => { if (!ignore) setLoadingFiles(false); });
+    return () => { ignore = true; };
+  }, [itemId]);
+
+  const fileName = (file: RegulationFile) => {
+    const extension = { "application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" }[file.mime];
+    return `${file.publicId.split("/").pop()}${extension ? `.${extension}` : ""}`;
+  };
+  const downloadFile = async (file: RegulationFile) => {
+    setDownloading(file.id);
+    setFileError("");
+    try {
+      const path = file.publicId.split("/").map(encodeURIComponent).join("/");
+      const blob = await apiDownload(`/api/files/${path}`);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName(file);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "Không thể tải tài liệu.");
+    } finally { setDownloading(null); }
+  };
 
   useEffect(() => {
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
   }, []);
 
-  const getBranchDisplayName = (slug?: string) =>
-    branches.find((b) => b.slug.toLowerCase() === (slug || "").toLowerCase())?.name || slug;
+  const getBranchDisplayName = (branchId?: string | null) =>
+    branches.find((b) => b.id === branchId)?.name || branchId;
 
   return (
     <Modal
@@ -67,10 +108,13 @@ export default function RegulationDetailModal({
               </span>
             )}
             <span className="text-xs text-slate-500 font-medium">
-              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scope)}</strong>
+              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scopeBranchId) || "Toàn công ty"}</strong>
             </span>
             <span className="text-xs text-slate-500 font-medium">
               Hiệu lực: <strong className="text-slate-700">{formatDate(item.effectiveDate)}</strong>
+            </span>
+            <span className="text-xs text-slate-500 font-medium">
+              Hết hiệu lực: <strong className="text-slate-700">{item.expiryDate ? formatDate(item.expiryDate) : "Không xác định"}</strong>
             </span>
           </div>
         ) : (
@@ -150,23 +194,26 @@ export default function RegulationDetailModal({
           </div>
 
           {/* Tài liệu đính kèm */}
-          {item.attachments && item.attachments > 0 && (
             <div>
               <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
                 Tài liệu đính kèm ban hành:
               </h4>
               <div className="space-y-2">
-                <div className="flex items-center justify-between p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
+                {loadingFiles && <p className="text-sm text-slate-500">Đang tải danh sách tài liệu...</p>}
+                {fileError && <p role="alert" className="text-sm text-red-600">{fileError}</p>}
+                {!loadingFiles && !fileError && files.length === 0 && <p className="text-sm text-slate-500">Chưa có tài liệu đính kèm.</p>}
+                {files.map(file => (
+                <div key={file.id} className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-xs">
                   <span className="flex items-center gap-2 font-medium text-slate-700">
-                    📄 {item.code}_Chinh_Thuc_Ky_Duyet.pdf
+                    📄 {fileName(file)}
                   </span>
-                  <Button variant="ghost" size="sm" onClick={() => alert("Đang tải file PDF...")}>
-                    Tải về (1.2 MB)
+                  <Button variant="ghost" size="sm" disabled={!!downloading} onClick={() => downloadFile(file)}>
+                    {downloading === file.id ? "Đang tải..." : `Tải về (${Math.ceil(file.bytes / 1024)} KB)`}
                   </Button>
                 </div>
+                ))}
               </div>
             </div>
-          )}
         </div>
       )}
     </Modal>

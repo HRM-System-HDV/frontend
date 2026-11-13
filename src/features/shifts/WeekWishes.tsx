@@ -17,23 +17,21 @@ interface Props {
 }
 
 export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration, isManager = false }: Props) {
-  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter", "all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter_by_id", "all");
 
   const filteredRegistrations = useMemo(() => {
     if (branchFilter === "all") return registrations;
     return registrations.filter(
-      (r) => r.branch.toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", "")
+      (r) => r.branchId === branchFilter
     );
   }, [registrations, branchFilter]);
 
   const branches = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     for (const r of registrations) {
-      // r.branch là TÊN chi nhánh (trang cha đã map slug -> tên qua /api/branches);
-      // giữ nguyên hoa/thường để in tên bình thường, không uppercase.
-      if (r.branch && r.branch !== "—") set.add(r.branch);
+      if (r.branchId) map.set(r.branchId, r.branch);
     }
-    return Array.from(set);
+    return Array.from(map, ([id, name]) => ({ id, name }));
   }, [registrations]);
 
   const columns: Column<WeeklyRegistration>[] = [
@@ -106,8 +104,8 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b} value={b}>
-                    Chi nhánh {b}
+                  <option key={b.id} value={b.id}>
+                    Chi nhánh {b.name}
                   </option>
                 ))}
               </select>

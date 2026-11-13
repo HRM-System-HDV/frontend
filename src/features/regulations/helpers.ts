@@ -1,4 +1,8 @@
-import type { RegulationStatus } from "@/types";
+import type { Regulation, RegulationStatus } from "@/types";
+
+export function canManageRegulation(role: string, branchId: string | null | undefined, item: Regulation) {
+  return role === "admin" || (role === "manager" && !!branchId && item.scopeBranchId === branchId);
+}
 
 export function getStatusTone(status: RegulationStatus) {
   switch (status) {

@@ -59,29 +59,26 @@ export default function EmployeeSection({
         e.email.toLowerCase().includes(q) ||
         (e.department && e.department.toLowerCase().includes(q));
 
-      const matchesBranch = branchFilter === "all" || e.branch === branchFilter;
+      const matchesBranch = branchFilter === "all" || e.branchId === branchFilter;
       const matchesDepartment =
-        departmentFilter === "all" || e.department === departmentFilter;
+        departmentFilter === "all" || e.departmentId === departmentFilter;
 
       return matchesSearch && matchesBranch && matchesDepartment;
     });
   }, [employees, searchQuery, branchFilter, departmentFilter]);
 
-    const branchMap = useMemo(() => {
+  const branchMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const b of branches) {
-      const slugKey = (b.slug || "").toLowerCase().replace(/-/g, "");
-      if (slugKey) map.set(slugKey, b.name);
-      if (b.id) map.set(b.id.toLowerCase().replace(/-/g, ""), b.name);
-      if (b.name) map.set(b.name.toLowerCase().replace(/-/g, ""), b.name);
+      if (b.id) map.set(b.id, b.name);
     }
     return map;
   }, [branches]);
 
-  const getBranchDisplayName = (slugOrName?: string) => {
-    if (!slugOrName) return "—";
-    const key = slugOrName.toLowerCase().replace(/-/g, "");
-    return branchMap.get(key) || slugOrName;
+  const getBranchDisplayName = (branchId?: string | null) => {
+    if (!branchId) return "—";
+    const key = branchId;
+    return branchMap.get(key) || branchId;
   };
 
   const columns: Column<Employee>[] = [
@@ -111,7 +108,7 @@ export default function EmployeeSection({
     {
       key: "branch",
       header: "Chi nhánh",
-      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branch)}</Badge>,
+      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branchId)}</Badge>,
     },
     {
       key: "department",
@@ -177,8 +174,8 @@ export default function EmployeeSection({
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {getBranchDisplayName(b.slug)}
+                  <option key={b.id} value={b.id}>
+                    {getBranchDisplayName(b.id)}
                   </option>
                 ))}
               </select>
@@ -195,7 +192,7 @@ export default function EmployeeSection({
             >
               <option value="all">Tất cả phòng ban</option>
               {departments.map((d) => (
-                <option key={d.id} value={d.name}>
+                <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
               ))}

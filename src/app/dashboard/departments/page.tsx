@@ -11,22 +11,19 @@ import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
-import type { Department, Employee } from "@/types";
+import type { Department } from "@/types";
 import DepartmentList from "@/features/departments/DepartmentList";
-import DepartmentModal from "@/features/departments/DepartmentForm";
+import DepartmentModal, { type DepartmentFormPayload } from "@/features/departments/DepartmentForm";
 import { useCurrentUser } from "@/context/AuthContext";
 import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
-import { getTodayVN } from "@/lib/utils";
 
 export default function DepartmentsPage() {
   const { role } = useCurrentUser();
-  const isManager = role === "manager";
   // Ghi phòng ban (WRITE /api/departments) là nghiệp vụ vận hành: manager +
   // admin làm được, nhân viên không thấy control nào.
   const canWriteDepartments = role !== "staff";
 
   const [deptList, setDeptList] = useState<Department[]>([]);
-  const [empList, setEmpList] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
@@ -48,18 +45,14 @@ export default function DepartmentsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [deptData, empData] = await Promise.all([
-        apiGet<Department[]>("/api/departments"),
-        apiGet<Employee[]>("/api/employees").catch(() => []),
-      ]);
+      const deptData = await apiGet<Department[]>("/api/departments");
       const normalizedDepts = (deptData || []).map((d) => ({
         ...d,
         status: d.status || "hoạt động",
+        manager: d.manager || "",
         staff: d.staff ?? 0,
-        createdAt: d.createdAt || getTodayVN(),
       }));
       setDeptList(normalizedDepts);
-      setEmpList(empData || []);
     } catch (e: unknown) {
       const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách phòng ban";
       setError(msg);
@@ -70,62 +63,29 @@ export default function DepartmentsPage() {
   }, []);
 
   useEffect(() => {
-    let ignore = false;
-    Promise.all([
-      apiGet<Department[]>("/api/departments"),
-      apiGet<Employee[]>("/api/employees").catch(() => []),
-    ])
-      .then(([deptData, empData]) => {
-        if (!ignore) {
-          const normalizedDepts = (deptData || []).map((d) => ({
-            ...d,
-            status: d.status || "hoạt động",
-            staff: d.staff ?? 0,
-            createdAt: d.createdAt || getTodayVN(),
-          }));
-          setDeptList(normalizedDepts);
-          setEmpList(empData || []);
-          setLoading(false);
-        }
-      })
-      .catch((e: unknown) => {
-        if (!ignore) {
-          const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách phòng ban";
-          setError(msg);
-          showToast(msg, "danger");
-          setLoading(false);
-        }
-      });
-    return () => {
-      ignore = true;
-    };
-  }, []);
+    void fetchData();
+  }, [fetchData]);
 
-  const handleSave = async (data: Omit<Department, "id"> & { id?: string }) => {
+  const handleSave = async (data: DepartmentFormPayload) => {
     try {
       setActionInProgress(true);
       if (editing && editing.id) {
         const updated = await apiPut<Department>(`/api/departments/${encodeURIComponent(editing.id)}`, {
           name: data.name,
-          manager: data.manager,
+          managerId: data.managerId || null,
           status: data.status,
-          staff: data.staff,
+          departmentCode: data.departmentCode,
         });
-        setDeptList((prev) =>
-          prev.map((d) => (d.id === editing.id ? (updated || { ...d, ...data }) : d))
-        );
+        if (!updated?.id) throw new Error("Phản hồi phòng ban không hợp lệ");
         showToast("Cập nhật phòng ban thành công!", "success");
       } else {
         const created = await apiPost<Department>("/api/departments", {
           name: data.name,
-          manager: data.manager,
+          managerId: data.managerId || null,
           status: data.status || "hoạt động",
-          staff: data.staff ?? 0,
+          departmentCode: data.departmentCode,
         });
-        setDeptList((prev) => [
-          ...prev,
-          created || { id: `dept-${Date.now()}`, ...data, staff: 0, createdAt: getTodayVN() },
-        ]);
+        if (!created?.id) throw new Error("Phản hồi phòng ban không hợp lệ");
         showToast("Thêm phòng ban mới thành công!", "success");
       }
       setModalOpen(false);
@@ -147,9 +107,6 @@ export default function DepartmentsPage() {
       await apiPut(`/api/departments/${encodeURIComponent(lockTarget.id)}`, {
         status: nextStatus,
       });
-      setDeptList((prev) =>
-        prev.map((d) => (d.id === lockTarget.id ? { ...d, status: nextStatus as "hoạt động" | "tạm dừng" } : d))
-      );
       // Đồng bộ lại danh sách từ server (số nhân sự/phòng ban có thể đã đổi).
       await fetchData();
       showToast(
@@ -170,7 +127,6 @@ export default function DepartmentsPage() {
     try {
       setActionInProgress(true);
       await apiDelete(`/api/departments/${encodeURIComponent(deleteTarget.id)}`);
-      setDeptList((prev) => prev.filter((d) => d.id !== deleteTarget.id));
       await fetchData();
       showToast(`Đã xóa vĩnh viễn phòng ban "${deleteTarget.name}"`, "success");
     } catch (e: any) {
@@ -259,14 +215,12 @@ export default function DepartmentsPage() {
       ) : (
         <DepartmentList
           departments={deptList}
-          employees={empList}
           onEdit={(d) => {
             if (canWriteDepartments) {
               setEditing(d);
               setModalOpen(true);
             }
           }}
-          isManager={isManager}
         />
       )}
 
@@ -279,7 +233,6 @@ export default function DepartmentsPage() {
             setEditing(null);
           }}
           department={editing}
-          employees={empList}
           onSave={handleSave}
           onLock={canWriteDepartments ? (d) => {
             setModalOpen(false);

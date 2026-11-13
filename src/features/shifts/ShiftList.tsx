@@ -24,7 +24,7 @@ interface Props {
 
 export default function WorkShiftSection({ workShifts, onDelete, onAddShift, isManager = false }: Props) {
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
-  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_shift_list_branch_filter", "all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_shift_list_branch_filter_by_id", "all");
   const [dateFilter, setDateFilter] = useLocalStorageState<string>("hrm_shift_list_date_filter", "");
   const [branches, setBranches] = useState<Branch[]>([]);
 
@@ -36,7 +36,7 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift, isM
     return workShifts.filter((s) => {
       if (
         branchFilter !== "all" &&
-        s.branch.toLowerCase().replace("-", "") !== branchFilter.toLowerCase().replace("-", "")
+        s.branchId !== branchFilter
       ) {
         return false;
       }
@@ -92,8 +92,8 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift, isM
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {b.slug.toUpperCase()}
+                  <option key={b.id} value={b.id}>
+                    {b.branchCode || b.id}
                   </option>
                 ))}
               </Select>
