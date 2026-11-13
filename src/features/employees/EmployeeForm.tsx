@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
 import type { Branch, Department, Employee, Position } from "@/types";
+import { uploadImageFile } from "@/lib/imageUpload";
 
 export type EmployeePayload = Omit<Employee, "id" | "employeeCode" | "createdAt">;
 const textFields = [
@@ -27,6 +28,16 @@ export default function EmployeeForm({ employee, branches, departments, position
   const [days, setDays] = useState(employee?.standardWorkDays?.toString() ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  async function uploadPhoto(key: TextKey, file?: File) {
+    if (!file || busy) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > 10 * 1024 * 1024) { setError("Chọn ảnh JPG, PNG hoặc WEBP tối đa 10 MB."); return; }
+    setBusy(true); setError("");
+    try {
+      const url = await uploadImageFile(file, key === "avatar" ? "hrm/avatars" : "hrm/cccd");
+      setText(previous => ({ ...previous, [key]: url }));
+    } catch (e) { setError(e instanceof Error ? e.message : "Không tải được ảnh. Vui lòng thử lại."); }
+    finally { setBusy(false); }
+  }
   async function save() {
     if (busy) return;
     if (!text.name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text.email.trim())) { setError("Vui lòng nhập họ tên và email hợp lệ."); return; }
@@ -41,7 +52,13 @@ export default function EmployeeForm({ employee, branches, departments, position
   return <Modal open onClose={() => !busy && onClose()} title={employee ? `Hồ sơ ${employee.employeeCode}` : "Thêm nhân viên"} size="xl" footer={<><Button variant="white" disabled={busy} onClick={onClose}>Hủy</Button><Button disabled={busy || (!!managerBranchId && !branchId)} onClick={save}>{busy ? "Đang lưu..." : "Lưu hồ sơ"}</Button></>}>
     {error && <p role="alert" className="mb-4 text-red-700">{error}</p>}
     <div className="grid grid-cols-1 gap-x-5 sm:grid-cols-2">
-      {textFields.map(([key, label]) => <Field key={key} label={label} required={key === "name" || key === "email"} hint={key === "email" && employee && managerBranchId ? "Chỉ admin được đổi email đăng nhập." : undefined}><Input aria-label={label} disabled={key === "email" && !!employee && !!managerBranchId} type={key.endsWith("Date") || key === "resignedAt" ? "date" : key === "email" ? "email" : "text"} value={text[key]} onChange={e => setText(old => ({ ...old, [key]: e.target.value }))} /></Field>)}
+      {textFields.map(([key, label]) => <Field key={key} label={label} required={key === "name" || key === "email"} hint={key === "email" && employee && managerBranchId ? "Chỉ admin được đổi email đăng nhập." : undefined}>
+        <Input aria-label={label} disabled={busy || (key === "email" && !!employee && !!managerBranchId)} type={key.endsWith("Date") || key === "resignedAt" ? "date" : key === "email" ? "email" : "text"} value={text[key]} onChange={e => setText(old => ({ ...old, [key]: e.target.value }))} />
+        {(key === "avatar" || key === "cccdFront" || key === "cccdBack") && <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input aria-label={`Tải ${label.toLocaleLowerCase()}`} className="max-w-full text-xs" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={e => { void uploadPhoto(key, e.target.files?.[0]); e.target.value = ""; }} />
+          {/^https?:\/\//i.test(text[key]) && <a className="text-xs text-primary underline" href={text[key]} target="_blank" rel="noopener noreferrer">Xem ảnh</a>}
+        </div>}
+      </Field>)}
       <Field label="Chi nhánh"><Select aria-label="Chi nhánh" disabled={!!managerBranchId} value={branchId} onChange={e => setBranch(e.target.value)}><option value="">Chưa gán</option>{branches.map(b => <option key={b.id} value={b.id}>{b.branchCode} — {b.name}</option>)}</Select></Field>
       <Field label="Phòng ban"><Select aria-label="Phòng ban" value={departmentId} onChange={e => { setDepartment(e.target.value); setPosition(""); }}><option value="">Chưa gán</option>{departments.map(d => <option key={d.id} value={d.id}>{d.departmentCode} — {d.name}</option>)}</Select></Field>
       <Field label="Vị trí"><Select aria-label="Vị trí" value={positionId} onChange={e => setPosition(e.target.value)}><option value="">Chưa gán</option>{positions.filter(p => !p.departmentId || p.departmentId === departmentId).map(p => <option key={p.id} value={p.id}>{p.positionCode} — {p.name}</option>)}</Select></Field>

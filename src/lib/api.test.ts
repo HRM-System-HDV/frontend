@@ -22,9 +22,9 @@ describe("Gateway client", () => {
         await apiPut("/api/departments/" + id, { name: "Vận hành" });
         await apiDelete("/api/departments/" + id);
         expect(fetch).toHaveBeenCalledTimes(3);
-        expect(fetch.mock.calls.map(call => call[1].method)).toEqual(["POST", "PUT", "DELETE"]);
+        expect(fetch.mock.calls.map((call: unknown[]) => (call[1] as RequestInit).method)).toEqual(["POST", "PUT", "DELETE"]);
         expect(fetch.mock.calls[0][1]).toMatchObject({ credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "Nhân sự" }) });
-        expect(fetch.mock.calls.some(call => String(call[0]).includes("/backlog"))).toBe(false);
+        expect(fetch.mock.calls.some((call: unknown[]) => String(call[0]).includes("/backlog"))).toBe(false);
     });
     it("giữ mã lỗi và thông điệp BE", async () => {
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response({ error: { code: "FORBIDDEN", message: "Không có quyền" } }, 403)));
@@ -34,7 +34,7 @@ describe("Gateway client", () => {
         let release!: (res: Response) => void;
         const refreshed = new Promise<Response>(resolve => { release = resolve; });
         const hits = new Map<string, number>();
-        const fetch = vi.fn(async (url: string) => {
+        const fetch = vi.fn(async (url: string, init?: RequestInit) => { void init;
             if (url.endsWith("/api/auth/refresh")) return refreshed;
             const count = (hits.get(url) || 0) + 1;
             hits.set(url, count);
@@ -42,11 +42,11 @@ describe("Gateway client", () => {
         });
         vi.stubGlobal("fetch", fetch);
         const first = apiGet("/api/branches"), second = apiGet("/api/employees");
-        await vi.waitFor(() => expect(fetch.mock.calls.filter(call => call[0].endsWith("/api/auth/refresh"))).toHaveLength(1));
+        await vi.waitFor(() => expect(fetch.mock.calls.filter((call: unknown[]) => String(call[0]).endsWith("/api/auth/refresh"))).toHaveLength(1));
         release(response({ data: { ok: true } }));
         expect(await Promise.all([first, second])).toEqual([{ ok: true }, { ok: true }]);
         expect(fetch.mock.calls).toHaveLength(5);
-        expect(fetch.mock.calls.find(call => call[0].endsWith("/api/auth/refresh"))?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ clientPlatform: "web" }) });
+        expect(fetch.mock.calls.find((call: unknown[]) => String(call[0]).endsWith("/api/auth/refresh"))?.[1]).toMatchObject({ method: "POST", body: JSON.stringify({ clientPlatform: "web" }) });
     });
     it("refresh thất bại trả lỗi 401 và không lặp vô hạn", async () => {
         const fetch = vi.fn().mockResolvedValue(response({ error: { code: "UNAUTHORIZED", message: "Phiên hết hạn" } }, 401));

@@ -9,7 +9,7 @@ import { useCurrentUser } from "@/context/AuthContext";
 import { NoAccessNotice, roleLabel } from "@/lib/permissions";
 import type { UserAccount, UserRole, Branch } from "@/types";
 export default function AccountsPage() {
-  const { role, user, reloadSession } = useCurrentUser();
+  const { role, user, logout } = useCurrentUser();
   const [accounts, setAccounts] = useState<UserAccount[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [search, setSearch] = useState("");
@@ -36,7 +36,7 @@ export default function AccountsPage() {
       const updated = await apiPut<UserAccount>(`/api/auth/users/${editing.id}`, { systemRole: nextRole });
       setAccounts(previous => previous.map(account => account.id === updated.id ? updated : account));
       setEditing(null);
-      if (updated.id === user.userId) await reloadSession();
+      if (updated.id === user.userId) await logout();
     } catch (e) { setError(e instanceof Error ? e.message : "Không cập nhật được quyền."); }
     finally { setBusy(false); }
   }

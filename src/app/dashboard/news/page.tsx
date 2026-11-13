@@ -9,6 +9,7 @@ import { apiGet, apiPost, apiPut, apiDelete } from "@/lib/api";
 import NewsForm, { type NewsPayload } from "@/features/news/NewsForm";
 import NewsList from "@/features/news/NewsList";
 import NewsDetail from "@/features/news/NewsDetail";
+import NotificationTools from "@/features/news/NotificationTools";
 import type { News, Branch } from "@/types";
 
 export default function NewsPage() {
@@ -26,6 +27,8 @@ export default function NewsPage() {
   const [scope, setScope] = useState("all");
   const canWrite = (item?: News) => role === "admin" || role === "manager" && !!branchId && (!item || item.branchId === branchId);
   const load = useCallback(async () => { setLoading(true); setError(""); try { const [news, units] = await Promise.all([apiGet<News[]>("/api/news"), apiGet<Branch[]>("/api/branches")]); setItems(news); setBranches(units); } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải bản tin."); } finally { setLoading(false); } }, []);
+  // Khởi tạo dữ liệu máy chủ khi phiên đăng nhập đã sẵn sàng.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (role === "admin" || role === "manager") void load(); }, [role, load]);
   if (role !== "admin" && role !== "manager") return <p>Không có quyền truy cập.</p>;
   function update(row: News) { setItems(old => old.map(n => n.id === row.id ? row : n)); if (selected?.id === row.id) setSelected(row); }
@@ -35,10 +38,11 @@ export default function NewsPage() {
   const filtered = items.filter(n => (role === "admin" || !n.branchId || n.branchId === branchId) && (scope === "all" || (scope === "global" ? !n.branchId : n.branchId === scope)) && `${n.title} ${n.summary} ${n.content}`.toLocaleLowerCase().includes(search.toLocaleLowerCase()));
   return <div className="space-y-4"><PageHeader title="Bảng tin nội bộ" actions={canWrite() ? <Button onClick={() => setEditing(null)}>Đăng bản tin</Button> : undefined} />
     {error && <p role="alert" className="text-red-700">{error}<Button variant="link" onClick={load}>Thử lại</Button></p>}{notice && <p role="status" className="text-green-700">{notice}</p>}
+    <NotificationTools role={role} branchId={branchId} branches={branches} />
     <div className="flex flex-wrap gap-3"><Input aria-label="Tìm bản tin" className="sm:max-w-sm" placeholder="Tìm nội dung..." value={search} onChange={e => setSearch(e.target.value)} /><Select aria-label="Lọc phạm vi" className="sm:max-w-xs" value={scope} onChange={e => setScope(e.target.value)}><option value="all">Tất cả phạm vi</option><option value="global">Toàn công ty</option>{branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</Select></div>
     {loading ? <p role="status">Đang tải bảng tin...</p> : <NewsList items={filtered} branches={branches} onSelect={setSelected} />}
     {editing !== undefined && canWrite(editing ?? undefined) && <NewsForm key={editing?.id ?? "new"} item={editing} branches={branches} managerBranchId={role === "manager" ? branchId : undefined} onSave={save} onClose={() => setEditing(undefined)} />}
-    {selected && <NewsDetail item={selected} canWrite={canWrite(selected)} busy={busy} onClose={() => setSelected(null)} onEdit={() => { setEditing(selected); setSelected(null); }} onDelete={() => { setDeleting(selected); setSelected(null); }} onPin={pin} />}
+    {selected && <NewsDetail item={selected} canWrite={canWrite(selected)} busy={busy} error={error} onClose={() => setSelected(null)} onEdit={() => { setEditing(selected); setSelected(null); }} onDelete={() => { setDeleting(selected); setSelected(null); }} onPin={pin} />}
     {deleting && <Modal open title="Xóa bản tin" onClose={() => !busy && setDeleting(null)} footer={<><Button variant="white" disabled={busy} onClick={() => setDeleting(null)}>Hủy</Button><Button variant="danger" disabled={busy} onClick={remove}>{busy ? "Đang xóa..." : "Xác nhận xóa"}</Button></>}><p>Xóa bản tin “{deleting.title}”?</p>{error && <p role="alert" className="text-red-700">{error}</p>}</Modal>}
   </div>;
 }

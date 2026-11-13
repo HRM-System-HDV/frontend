@@ -64,6 +64,8 @@ export default function CatalogPage({ kind }: { kind: Kind }) {
     try { const [items, people, depts] = await Promise.all([apiGet<Catalog[]>(`/api/${kind}`), apiGet<Employee[]>("/api/employees"), apiGet<Department[]>("/api/departments")]); setRows(items); setEmployees(people); setDepartments(depts); }
     catch (e) { setError(e instanceof Error ? e.message : "Không thể tải danh mục."); } finally { setLoading(false); }
   }, [kind]);
+  // Khởi tạo danh mục máy chủ khi phiên đăng nhập đã sẵn sàng.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (role === "admin" || role === "manager") void load(); }, [load, role]);
   if (role !== "admin" && role !== "manager") return <p>Không có quyền truy cập.</p>;
   async function save(payload: CatalogPayload) {

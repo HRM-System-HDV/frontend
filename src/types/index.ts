@@ -40,7 +40,7 @@ export interface AttendanceConfig {
 export interface Task {
   id: string; title: string; description?: string | null; assignedTo: string | null;
   branchId?: string | null; workDate?: string | null; templateId?: string | null; dueDate?: string | null;
-  assignedBy?: string | null; assignedByName?: string | null; assignedToName?: string | null; shiftName?: string | null;
+  assignedBy?: string | null; assignedByName?: string | null;
   status: "pending" | "in_progress" | "done"; priority?: string | null;
   requirePhoto: boolean; proofPhotoUrl?: string | null; photoSubmittedBy?: string | null;
   photoSubmittedAt?: string | null; completedAt?: string | null; createdAt?: string;

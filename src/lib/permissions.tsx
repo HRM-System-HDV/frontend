@@ -66,10 +66,8 @@ const ADMIN_MENU: SidebarItem[] = [
   menu("Lịch sử thao tác", "/dashboard/backlog", faClockRotateLeft),
 ];
 
-// Manager: nghiệp vụ vận hành chi nhánh. Bị chặn tính năng hệ thống nên mất
-// "Kết nối Ngân hàng" (số tài khoản + lệnh chi + SOAP), "Thông tin Chi nhánh",
-// "Wi-Fi chi nhánh" và "Lịch sử thao tác"; bảng lương chỉ còn chế độ xem vì
-// ghi lương đã chuyển sang admin.
+// Manager vận hành chi nhánh, được xác nhận phiếu lương trong chi nhánh.
+// Các chức năng hệ thống, ngân hàng và lệnh chi chỉ dành cho admin.
 const MANAGER_MENU: SidebarItem[] = [
   menu("Tổng quan Dashboard", "/dashboard", faChartPie),
   menu("Nhân sự chi nhánh", "/dashboard/employees", faUsers),
@@ -83,9 +81,7 @@ const MANAGER_MENU: SidebarItem[] = [
   menu("Nội quy & Quy định", "/dashboard/regulations", faGavel),
 ];
 
-// Staff: chỉ luồng tự phục vụ mà gateway mở cho mọi vai trò — đọc bảng tin và
-// nội quy, xem đơn của mình, cập nhật nhiệm vụ được giao, xem phiếu lương của
-// chính mình (payroll-service tự scope theo employeeId).
+// Staff chỉ dùng Mobile, không có menu Web.
 
 const MENUS: Record<AppRole, { title: string; items: SidebarItem[] }> = {
   admin: { title: "QUẢN TRỊ TOÀN CÔNG TY", items: ADMIN_MENU },

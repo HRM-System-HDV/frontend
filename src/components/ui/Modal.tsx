@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useId, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faXmark } from "@fortawesome/free-solid-svg-icons";
@@ -31,6 +31,7 @@ export default function Modal({
   children,
   footer,
 }: ModalProps) {
+  const titleId = useId();
   // Chỉ render phía client (createPortal cần document.body) — tránh lỗi hydration
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -57,6 +58,7 @@ export default function Modal({
       <div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         className={cn(
           "relative bg-white rounded-xl shadow-xl w-full flex flex-col max-h-[90vh] z-10",
           sizeClasses[size]
@@ -64,7 +66,7 @@ export default function Modal({
       >
         {title && (
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <div className="min-w-0 flex-1 mr-4">
+            <div id={titleId} className="min-w-0 flex-1 mr-4">
               {typeof title === "string" ? (
                 <h5 className="mb-0 font-semibold">{title}</h5>
               ) : (

@@ -1,6 +1,6 @@
 import type { Payslip } from "@/types";
 import type { PayoutPayload } from "@/lib/api";
-export const eligibleSlips = (slips: Payslip[]) => slips.filter(p => p.status === "confirmed" && !p.payoutId && !!p.confirmedBy && !!p.confirmedAt && BigInt(p.netSalary) > BigInt(0));
+export const eligibleSlips = (slips: Payslip[]) => slips.filter(p => p.status === "confirmed" && !p.payoutId && !!p.confirmedBy && !!p.confirmedAt && BigInt(p.netSalary) >= BigInt(0));
 export function payoutPayload(slips: Payslip[], debitAccountId: string, idempotencyKey: string, content: string): PayoutPayload {
     return { payslipIds: slips.map(p => p.id).sort(), debitAccountId, idempotencyKey, content, totalAmount: slips.reduce((sum, p) => sum + BigInt(p.netSalary), BigInt(0)).toString(), beneficiaryCount: new Set(slips.map(p => p.employeeId)).size };
 }

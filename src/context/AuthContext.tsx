@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!(err instanceof GatewayError) || ![401, 403].includes(err.status)) setError(err instanceof Error ? err.message : "Không tải được phiên đăng nhập.");
     } finally { setLoading(false); }
   }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Synchronize the session with the Gateway on mount.
   useEffect(() => { void reloadSession(); }, [reloadSession]);
   useEffect(() => { if (!loading && !authenticated && !error && pathname.startsWith("/dashboard")) router.replace(`/login?from=${encodeURIComponent(pathname)}`); }, [loading, authenticated, error, pathname, router]);
   const login = useCallback(async (email: string, password: string) => {
@@ -38,9 +39,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const next = session(result.user); setUser(next); setAuthenticated(true); setError(null);
   }, []);
   const logout = useCallback(async () => {
-    try { await apiPost("/api/auth/logout", {}); }
-    catch { /* Đóng phiên giao diện khi mạng gián đoạn; cookie vẫn do BE quản lý. */ }
-    finally { setUser(anonymous); setAuthenticated(false); setError(null); router.replace("/login"); }
+    await apiPost("/api/auth/logout", {});
+    setUser(anonymous); setAuthenticated(false); setError(null); router.replace("/login");
   }, [router]);
   return <AuthContext.Provider value={{ user, name: user.name, role: user.role, branchId: user.branchId, loading, authenticated, error, login, logout, reloadSession }}>{children}</AuthContext.Provider>;
 }

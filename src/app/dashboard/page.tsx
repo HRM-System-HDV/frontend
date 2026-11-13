@@ -21,6 +21,7 @@ export default function DashboardPage() {
     const result = await Promise.allSettled(definitions.map(item => item.fetch()));
     setMetrics(definitions.map((item, index) => { const outcome = result[index]; return { label: item.label, href: item.href, value: outcome.status === "fulfilled" ? outcome.value : null, error: outcome.status === "rejected" ? (outcome.reason instanceof Error ? outcome.reason.message : "Không tải được dữ liệu") : undefined }; })); setLoading(false);
   }, []);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Initial server data load; also reused by the refresh button.
   useEffect(() => { void load(); }, [load]);
   return <div className="space-y-6"><PageHeader title="Tổng quan" actions={<Button onClick={() => void load()} disabled={loading}>{loading ? "Đang tải…" : "Làm mới"}</Button>} />
     <div className="rounded-2xl bg-primary text-white p-6"><p className="text-sm opacity-80">{role === "admin" ? "Quản trị toàn công ty" : "Vận hành chi nhánh"}</p><h2 className="text-2xl font-semibold mt-1">Xin chào, {user.name}</h2><p className="mt-2 text-sm opacity-90">Theo dõi nhân sự, ca làm và các hồ sơ cần xử lý.</p></div>

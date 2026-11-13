@@ -30,9 +30,9 @@ export default function TasksPage() {
  }, [load]);
  async function change(operation: () => Promise<unknown>, message: string) { await operation(); setNotice(message); await load(); }
  function assignee(task: Task): string {
-  if (task.assignedTo) { const employee = employees.find(e => e.id === task.assignedTo); return employee ? employeeLabel(employee) : task.assignedToName || "Nhân viên ngoài danh mục hiện tại"; }
+  if (task.assignedTo) { const employee = employees.find(e => e.id === task.assignedTo); return employee ? employeeLabel(employee) : task.assignedByName ? `Người giao ${task.assignedByName} · nhân viên ngoài danh mục hiện tại` : "Nhân viên ngoài danh mục hiện tại"; }
   const branch = branches.find(b => b.id === task.branchId), template = templates.find(t => t.id === task.templateId);
-  return `${branch ? `${branch.branchCode} · ${branch.name}` : "Chi nhánh được giao"} / ${displayDate(task.workDate)} / ${template ? templateLabel(template) : task.shiftName || "Ca mẫu ngoài danh mục hiện tại"}`;
+  return `${branch ? `${branch.branchCode} · ${branch.name}` : "Chi nhánh được giao"} / ${displayDate(task.workDate)} / ${template ? templateLabel(template) : "Ca mẫu ngoài danh mục hiện tại"}`;
  }
  const shown = tasks.filter(task => (!status || task.status === status) && (!kind || (kind === "common" ? task.assignedTo === null : task.assignedTo !== null)) && (!branchFilter || task.branchId === branchFilter) && (!query.trim() || `${task.title} ${task.description || ""} ${assignee(task)}`.toLocaleLowerCase("vi").includes(query.trim().toLocaleLowerCase("vi"))));
  if (!allowed) return <p className="p-6 text-sm">Bạn không có quyền truy cập trang này.</p>;

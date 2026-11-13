@@ -8,6 +8,7 @@ import { faBell, faRightFromBracket } from "@fortawesome/free-solid-svg-icons";
 import { cn } from "@/lib/utils";
 import NotificationPanel, { NotificationItem } from "./NotificationPanel";
 import { apiGet, apiPut } from "@/lib/api";
+import AccountSecurity from "@/features/accounts/AccountSecurity";
 
 interface TopbarProps {
   title?: string;
@@ -37,6 +38,8 @@ export default function Topbar({
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [notificationError, setNotificationError] = useState("");
   const [notificationBusy, setNotificationBusy] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const [securityOpen, setSecurityOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -158,12 +161,13 @@ export default function Topbar({
                     <div className="font-semibold text-gray-800 text-sm">{userName}</div>
                     <div className="text-xs text-gray-500">{userRole}</div>
                   </div>
+                  {onLogout && <button type="button" onClick={() => { setUserMenuOpen(false); setSecurityOpen(true); }} className="w-full px-4 py-2 text-left text-sm text-gray-600 hover:bg-gray-100">Bảo mật tài khoản</button>}
                   <Link
                     href={logoutHref}
                     onClick={async (e) => {
                       if (onLogout) {
                         e.preventDefault();
-                        await onLogout();
+                        try { await onLogout(); } catch (error) { setLogoutError(error instanceof Error ? error.message : "Không đăng xuất được. Vui lòng thử lại."); }
                       }
                     }}
                     className="flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:bg-gray-100"
@@ -171,12 +175,14 @@ export default function Topbar({
                     <FontAwesomeIcon icon={faRightFromBracket} fontSize={18} />
                     Đăng xuất
                   </Link>
+                  {logoutError && <p role="alert" className="px-4 py-2 text-xs text-red-700">{logoutError}</p>}
                 </div>
               </>
             )}
           </div>
         </div>
       </div>
+      {securityOpen && onLogout && <AccountSecurity onClose={() => setSecurityOpen(false)} onPasswordChanged={async () => { await onLogout(); setSecurityOpen(false); }} />}
     </header>
   );
 }

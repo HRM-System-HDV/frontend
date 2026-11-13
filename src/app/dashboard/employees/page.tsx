@@ -30,6 +30,8 @@ export default function EmployeesPage() {
       setEmployees(people); setBranches(units); setDepartments(depts); setPositions(jobs);
     } catch (e) { setError(e instanceof Error ? e.message : "Không thể tải hồ sơ nhân sự."); } finally { setLoading(false); }
   }, []);
+  // Khởi tạo dữ liệu máy chủ khi phiên đăng nhập đã sẵn sàng.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (role === "admin" || role === "manager") void load(); }, [role, load]);
   if (role !== "admin" && role !== "manager") return <p>Không có quyền truy cập.</p>;
   const scopedEmployees = role === "manager" ? employees.filter(e => !!branchId && e.branchId === branchId) : employees;
