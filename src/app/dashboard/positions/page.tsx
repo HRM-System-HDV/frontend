@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus, faTriangleExclamation, faCircleCheck } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -36,6 +37,7 @@ export default function PositionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
+  const detail = useApiDetail();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Position | null>(null);
   const [lockTarget, setLockTarget] = useState<Position | null>(null);
@@ -173,6 +175,7 @@ export default function PositionsPage() {
         </div>
       )}
 
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Vị trí" }]}
         actions={
@@ -217,8 +220,10 @@ export default function PositionsPage() {
           positions={positionList}
           departments={departments}
           onEdit={(p) => {
-            setEditing(p);
-            setModalOpen(true);
+            void detail.loadDetail<Position>(`/api/positions/${encodeURIComponent(p.id)}`, (row) => {
+              setEditing(normalizePosition(row));
+              setModalOpen(true);
+            });
           }}
         />
       )}

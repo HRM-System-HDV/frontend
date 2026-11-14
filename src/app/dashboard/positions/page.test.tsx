@@ -21,7 +21,7 @@ describe("Positions page", () => {
   beforeEach(() => {
     currentUser.role = "admin";
     apiGet.mockReset().mockImplementation(async (path: string) =>
-      path === "/api/positions" ? [position] : path === "/api/departments" ? [{ id: position.departmentId, name: "IT", departmentCode: "PB-IT", manager: "", status: "hoạt động" }] : []);
+      path === "/api/positions" ? [position] : path === `/api/positions/${position.id}` ? position : path === "/api/departments" ? [{ id: position.departmentId, name: "IT", departmentCode: "PB-IT", manager: "", status: "hoạt động" }] : []);
     apiPost.mockReset().mockResolvedValue(position);
     apiPut.mockReset().mockResolvedValue(position);
     apiDelete.mockReset().mockResolvedValue({ ok: true });
@@ -39,10 +39,10 @@ describe("Positions page", () => {
   it("updates and deletes using the position UUID in the route", async () => {
     render(<PositionsPage />);
     fireEvent.click(await screen.findByRole("button", { name: position.name }));
-    fireEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Lưu thay đổi" }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith(`/api/positions/${position.id}`, expect.objectContaining({ positionCode: position.positionCode })));
     fireEvent.click(await screen.findByRole("button", { name: position.name }));
-    fireEvent.click(screen.getByRole("button", { name: "Xóa" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa" }));
     expect(await screen.findByText(/2 hồ sơ nhân sự đang dùng chức danh này/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Xác nhận xóa" }));
     await waitFor(() => expect(apiDelete).toHaveBeenCalledWith(`/api/positions/${position.id}`));

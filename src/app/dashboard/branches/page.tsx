@@ -7,6 +7,7 @@ import {
   faTriangleExclamation,
   faCircleCheck,
 } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -31,6 +32,7 @@ export default function BranchesPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
+  const detail = useApiDetail();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
   const [lockTarget, setLockTarget] = useState<Branch | null>(null);
@@ -181,6 +183,7 @@ export default function BranchesPage() {
         </div>
       )}
 
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Chi nhánh" }]}
         actions={
@@ -233,10 +236,10 @@ export default function BranchesPage() {
         <BranchSection
           branches={list}
           onEdit={(b) => {
-            if (canWriteBranches) {
-              setEditing(b);
+            if (canWriteBranches) void detail.loadDetail<Branch>(`/api/branches/${encodeURIComponent(b.id)}`, (row) => {
+              setEditing(row);
               setModalOpen(true);
-            }
+            });
           }}
         />
       )}

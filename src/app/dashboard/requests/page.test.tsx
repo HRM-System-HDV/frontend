@@ -2,15 +2,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import RequestsPage from "./page";
 
-const { apiGet, apiPut, currentUser } = vi.hoisted(() => ({
+const { apiGet, apiPut, apiDelete, currentUser } = vi.hoisted(() => ({
   apiGet: vi.fn(),
   apiPut: vi.fn(),
+  apiDelete: vi.fn(),
   currentUser: { role: "manager", branchId: "" },
 }));
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
   apiGet,
   apiPut,
+  apiDelete,
 }));
 vi.mock("@/context/AuthContext", () => ({ useCurrentUser: () => currentUser }));
 
@@ -31,7 +33,7 @@ const pendingRequest = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const renderWithRequest = async (overrides: Record<string, unknown> = {}) => {
+const renderWithRequest = async (overrides: Record<string, unknown> = {}, openDetail = true) => {
   const row = pendingRequest(overrides);
   // Manager bị ghim chi nhánh nên trang gọi /api/requests?branchId=...
   apiGet.mockImplementation(async (path: string) =>
@@ -44,7 +46,8 @@ const renderWithRequest = async (overrides: Record<string, unknown> = {}) => {
           : null,
   );
   render(<RequestsPage />);
-  fireEvent.click(await screen.findByRole("button", { name: "Chi tiết" }));
+  if (openDetail) fireEvent.click(await screen.findByRole("button", { name: "Chi tiết" }));
+  else await screen.findByText("Không có yêu cầu nào");
   return row;
 };
 
@@ -56,6 +59,7 @@ describe("Requests page — quyền duyệt theo chế độ đổi ca", () => {
     currentUser.role = "manager";
     currentUser.branchId = branchId;
     apiGet.mockReset();
+    apiDelete.mockReset().mockResolvedValue({ deleted: true });
     apiPut.mockReset().mockResolvedValue({ ok: true });
     localStorage.clear();
   });
@@ -103,5 +107,45 @@ describe("Requests page — quyền duyệt theo chế độ đổi ca", () => {
         reviewNote: "Đã duyệt yêu cầu",
       }),
     );
+  });
+});
+
+describe("request deletion", () => {
+  beforeEach(() => {
+    currentUser.role = "manager"; currentUser.branchId = branchId;
+    apiGet.mockReset(); apiDelete.mockReset().mockResolvedValue({ deleted: true }); localStorage.clear();
+  });
+  it("confirms before deleting a pending request and removes it from the list", async () => {
+    const row = await renderWithRequest();
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa đơn" }));
+    expect(apiDelete).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận xóa" }));
+    await waitFor(() => expect(apiDelete).toHaveBeenCalledExactlyOnceWith(`/api/requests/${row.id}`));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Chi tiết" })).not.toBeInTheDocument());
+    expect(screen.getByText("Đã xóa đơn yêu cầu")).toBeInTheDocument();
+  });
+  it("cancelling does not send a delete request", async () => {
+    await renderWithRequest();
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa đơn" }));
+    fireEvent.click(screen.getByRole("button", { name: "Hủy" }));
+    expect(apiDelete).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Xóa đơn" })).toBeInTheDocument();
+  });
+  it("keeps the record and shows server errors if deletion fails", async () => {
+    apiDelete.mockRejectedValueOnce(new Error("Đơn đã được xử lý"));
+    await renderWithRequest();
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa đơn" }));
+    fireEvent.click(screen.getByRole("button", { name: "Xác nhận xóa" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Đơn đã được xử lý");
+    fireEvent.click(screen.getByRole("button", { name: "Hủy" }));
+    expect(screen.getByRole("button", { name: "Chi tiết" })).toBeInTheDocument();
+  });
+  it.each(["approved", "rejected"])("does not offer deletion for %s requests", async status => {
+    await renderWithRequest({ status });
+    expect(screen.queryByRole("button", { name: "Xóa đơn" })).not.toBeInTheDocument();
+  });
+  it("does not offer a manager deletion outside their branch", async () => {
+    await renderWithRequest({ branchId: "other-branch" }, false);
+    expect(screen.queryByRole("button", { name: "Xóa đơn" })).not.toBeInTheDocument();
   });
 });

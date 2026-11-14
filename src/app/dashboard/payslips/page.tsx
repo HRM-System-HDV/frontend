@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear, faPencil, faLock, faFileExcel } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import type { Payslip, Branch } from "@/types";
@@ -12,7 +13,7 @@ import ExportPayslipModal from "@/features/payslips/PayslipExport";
 import GeneratePayslipModal, { type GenerateInput } from "@/features/payslips/PayslipGenerate";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
 import { configQuery, mapApiToConfig, mapConfigToApi } from "@/features/shifts/attendanceConfig";
-import { EditPayslipModal, ConfirmClosePayslipDialog, PrintPayslipModal } from "@/features/payslips/PayslipEdit";
+import { EditPayslipModal, ConfirmClosePayslipDialog, PayslipDetailModal } from "@/features/payslips/PayslipEdit";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { apiGet, apiPost, apiPut, GatewayError } from "@/lib/api";
@@ -49,6 +50,25 @@ const currentPeriod = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 };
 
+function mapPayslip(r: PayslipRow, emp?: EmployeeRow): Payslip {
+  return {
+    id: r.id,
+    employee: emp?.name || r.employeeId,
+    branch: r.branchId || undefined,
+    month: r.month,
+    days: r.workedShifts,
+    salaryType: r.salaryType,
+    workedHours: r.workedHours == null ? null : Number(r.workedHours),
+    penaltyOverride: r.penaltyOverride == null ? null : Number(r.penaltyOverride),
+    salary: Number(r.baseSalary) || 0,
+    bonus: Number(r.bonus) || 0,
+    penalty: Number(r.totalPenalty) || 0,
+    total: Number(r.netSalary) || 0,
+    reason: r.adjustmentReason || undefined,
+    status: (["confirmed", "paid"].includes(r.status) ? "đã chốt" : "chưa chốt") as Payslip["status"],
+  };
+}
+
 export default function PayslipsPage() {
   const { role, branchId, name: currentUserName } = useCurrentUser();
   const isManager = role === "manager";
@@ -80,7 +100,8 @@ export default function PayslipsPage() {
   const [editPenaltyStr, setEditPenaltyStr] = useState("");
   const [editReasonStr, setEditReasonStr] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
-  const [printSlipTarget, setPrintSlipTarget] = useState<Payslip | null>(null);
+  const detail = useApiDetail();
+  const [detailSlipTarget, setDetailSlipTarget] = useState<Payslip | null>(null);
   const [confirmCloseSlipTarget, setConfirmCloseSlipTarget] = useState<Payslip | null>(null);
   const [closingOne, setClosingOne] = useState(false);
   const [attConfigSaving, setAttConfigSaving] = useState(false);
@@ -120,22 +141,7 @@ export default function PayslipsPage() {
       setSlips(
         (rows || []).map((r) => {
           const emp = nameById.get(r.employeeId);
-          return {
-            id: r.id,
-            employee: emp?.name || r.employeeId,
-            branch: r.branchId || undefined,
-            month: r.month,
-            days: r.workedShifts,
-            salaryType: r.salaryType,
-            workedHours: r.workedHours == null ? null : Number(r.workedHours),
-            penaltyOverride: r.penaltyOverride == null ? null : Number(r.penaltyOverride),
-            salary: Number(r.baseSalary) || 0,
-            bonus: Number(r.bonus) || 0,
-            penalty: Number(r.totalPenalty) || 0,
-            total: Number(r.netSalary) || 0,
-            reason: r.adjustmentReason || undefined,
-            status: (["confirmed", "paid"].includes(r.status) ? "đã chốt" : "chưa chốt") as Payslip["status"],
-          };
+          return mapPayslip(r, emp);
         })
       );
     } catch (e) {
@@ -234,7 +240,7 @@ export default function PayslipsPage() {
     if (!confirmCloseSlipTarget || closingOne) return;
     setClosingOne(true);
     try {
-      await apiPut(`/api/payroll/payslips/${confirmCloseSlipTarget.id}/status`, { status: "confirmed" });
+      await apiPost(`/api/payroll/payslips/${confirmCloseSlipTarget.id}/confirm`, {});
       setSlips((prev) => prev.map((s) => (s.id === confirmCloseSlipTarget.id ? { ...s, status: "đã chốt" as const } : s)));
       setConfirmCloseSlipTarget(null);
     } catch (e) {
@@ -253,7 +259,7 @@ export default function PayslipsPage() {
     setBulkSaving(true);
     try {
       const results = await Promise.allSettled(
-        targets.map((t) => apiPut(`/api/payroll/payslips/${t.id}/status`, { status: "confirmed" }))
+        targets.map((t) => apiPost(`/api/payroll/payslips/${t.id}/confirm`, {}))
       );
       const okCount = results.filter((r) => r.status === "fulfilled").length;
       await fetchData(selectedMonth);
@@ -354,6 +360,7 @@ export default function PayslipsPage() {
 
   return (
     <div>
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
@@ -409,18 +416,20 @@ export default function PayslipsPage() {
       ) : (
         <PayslipSection
           payslips={visibleSlips}
-          onEdit={
-            canWritePayroll
-              ? (p) => {
-                  setEditSlipTarget(p);
-                  setEditBonusStr(p.bonus ? String(p.bonus) : "");
-                  setEditPenaltyStr(p.penalty ? String(p.penalty) : "");
-                  setEditReasonStr(p.reason ?? "");
-                }
-              : undefined
-          }
-          onView={setPrintSlipTarget}
-          onPrint={setPrintSlipTarget}
+          onView={(p) => {
+            void detail.loadDetail<PayslipRow>(`/api/payroll/payslips/${encodeURIComponent(p.id)}`, (row) => {
+              const fresh = mapPayslip(row, employees.find((employee) => employee.id === row.employeeId));
+              setSlips((items) => items.map((item) => item.id === fresh.id ? fresh : item));
+              if (canWritePayroll && fresh.status !== "đã chốt") {
+                setEditSlipTarget(fresh);
+                setEditBonusStr(fresh.bonus ? String(fresh.bonus) : "");
+                setEditPenaltyStr(fresh.penalty ? String(fresh.penalty) : "");
+                setEditReasonStr(fresh.reason ?? "");
+              } else {
+                setDetailSlipTarget(fresh);
+              }
+            });
+          }}
           selectedMonth={selectedMonth}
           onMonthChange={setSelectedMonth}
           monthOptions={monthOptions}
@@ -491,11 +500,6 @@ export default function PayslipsPage() {
         onReasonChange={setEditReasonStr}
         onClose={() => setEditSlipTarget(null)}
         onSave={handleSavePayslipEdit}
-        onPrint={() => {
-          const target = editSlipTarget;
-          setEditSlipTarget(null);
-          if (target) setPrintSlipTarget(target);
-        }}
         onClosePayslip={
           canWritePayroll
             ? () => {
@@ -511,7 +515,7 @@ export default function PayslipsPage() {
         onConfirm={handleConfirmCloseOne}
         onCancel={() => setConfirmCloseSlipTarget(null)}
       />
-      <PrintPayslipModal payslip={printSlipTarget} onClose={() => setPrintSlipTarget(null)} />
+      <PayslipDetailModal payslip={detailSlipTarget} onClose={() => setDetailSlipTarget(null)} />
       <ExportPayslipModal
         open={exportOpen}
         onClose={() => setExportOpen(false)}

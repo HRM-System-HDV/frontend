@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faPlus,
+  faPlus, faGear,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import BankHeaderStats from "@/features/bank/BankStats";
 import BankPartnersList from "@/features/bank/BankPartners";
 import SoapTransactionsTable from "@/features/bank/SoapHistory";
+import SoapConfigForm from "@/features/bank/SoapConfigForm";
 import SoapTestModal from "@/features/bank/SoapTest";
 import SoapPayloadDetailModal from "@/features/bank/PayloadDetail";
 import CreatePayrollDisbursementModal from "@/features/bank/PayoutCreate";
@@ -17,7 +18,7 @@ import BankConfigModal, { CreateBankAccountModal } from "@/features/bank/BankFor
 import { DEFAULT_SOAP_GATEWAY_CONFIG } from "@/features/bank/constants";
 import type { BankPartner, SoapTransaction, SoapGatewayConfig } from "@/features/bank/types";
 import type { Branch } from "@/types";
-import { apiGet, apiPut, GatewayError } from "@/lib/api";
+import { apiGet, apiPost, apiPut, GatewayError } from "@/lib/api";
 import { useCurrentUser } from "@/context/AuthContext";
 import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
@@ -118,6 +119,9 @@ export default function BankIntegrationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [soapConfigOpen, setSoapConfigOpen] = useState(false);
+  const [pinging, setPinging] = useState(false);
+  const [pingMessage, setPingMessage] = useState<string | null>(null);
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [createDisburseOpen, setCreateDisburseOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
@@ -128,8 +132,6 @@ export default function BankIntegrationPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
       const [accounts, payouts, branchRows, configData] = await Promise.all([
         apiGet<BankAccountRow[]>("/api/payroll/bank-accounts"),
         apiGet<PayoutRow[]>("/api/payroll/payouts"),
@@ -137,6 +139,7 @@ export default function BankIntegrationPage() {
         apiGet<Record<string, unknown>>("/api/soap-config").catch(() => null),
       ]);
 
+      setError(null);
       const currentConfig = parseSoapConfig(configData);
       setGatewayConfig(currentConfig);
       const branchList = Array.isArray(branchRows) ? branchRows : [];
@@ -156,8 +159,27 @@ export default function BankIntegrationPage() {
     // Vai trò khác admin đã bị NoAccessNotice chặn ở return dưới đây,
     // nên chỉ cần tải dữ liệu khi là admin.
     if (!isAdmin) return;
-    void fetchData();
+    let active = true;
+    void Promise.resolve().then(() => { if (active) return fetchData(); });
+    return () => { active = false; };
   }, [isAdmin, fetchData]);
+
+  const handlePing = async () => {
+    if (pinging) return;
+    setPinging(true);
+    setError(null);
+    setPingMessage(null);
+    try {
+      const result = parseSoapConfig(await apiPost<Record<string, unknown>>("/api/soap-config/ping", {}));
+      setGatewayConfig(result);
+      setPartners((rows) => rows.map((partner) => ({ ...partner, connectionStatus: result.status === "healthy" ? "connected" : "disconnected" })));
+      setPingMessage(result.status === "healthy" ? "Kiểm tra kết nối thành công." : result.status === "degraded" ? "Dịch vụ đã phản hồi nhưng trả lỗi." : "Không kết nối được dịch vụ SOAP.");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Không kiểm tra được kết nối SOAP");
+    } finally {
+      setPinging(false);
+    }
+  };
 
   const handleSetPrimary = async (bankId: string) => {
     try {
@@ -186,7 +208,11 @@ export default function BankIntegrationPage() {
       <PageHeader
         title="Tích hợp Ngân hàng & Cổng thanh toán"
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="white" disabled={loading || pinging} onClick={() => setSoapConfigOpen(true)}>
+              <FontAwesomeIcon icon={faGear} fontSize={11} /> Cấu hình SOAP
+            </Button>
+            <Button variant="white" onClick={() => setTestModalOpen(true)}>Gửi lệnh SOAP</Button>
             <Button
               key="btn-add-bank" variant="white"
               onClick={() => setCreateAccountOpen(true)}
@@ -209,6 +235,7 @@ export default function BankIntegrationPage() {
         </div>
       )}
 
+      {pingMessage && <div role="status" className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">{pingMessage}</div>}
       {/* Header Metrics */}
       {loading ? (
         <div className="bg-white border border-gray-200 rounded-2xl p-6 animate-pulse space-y-3">
@@ -221,7 +248,8 @@ export default function BankIntegrationPage() {
             gatewayConfig={gatewayConfig}
             partners={partners}
             transactions={transactions}
-            onTestSoap={() => setTestModalOpen(true)}
+            onTestSoap={handlePing}
+            pinging={pinging}
           />
 
           {/* Partner Banks Grid */}
@@ -239,6 +267,11 @@ export default function BankIntegrationPage() {
       )}
 
       {/* Modals */}
+      {soapConfigOpen && <SoapConfigForm config={gatewayConfig} onClose={() => setSoapConfigOpen(false)} onSaved={() => {
+        setSoapConfigOpen(false);
+        setPingMessage(null);
+        void fetchData();
+      }} />}
       <SoapTestModal
         open={testModalOpen}
         onClose={() => {

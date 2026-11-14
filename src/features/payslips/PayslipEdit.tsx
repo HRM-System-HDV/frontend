@@ -1,7 +1,7 @@
 "use client";
 
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faLock, faPrint } from "@fortawesome/free-solid-svg-icons";
+import { faLock } from "@fortawesome/free-solid-svg-icons";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
@@ -20,22 +20,15 @@ interface EditProps {
   onReasonChange: (v: string) => void;
   onClose: () => void;
   onSave: () => void;
-  /** In phiếu lương từ modal chi tiết. */
-  onPrint?: () => void;
   /** Chốt phiếu lương từ modal chi tiết (ẩn khi phiếu đã chốt). */
   onClosePayslip?: () => void;
 }
 
-export function EditPayslipModal({ payslip, bonusStr, penaltyStr, reasonStr, onBonusChange, onPenaltyChange, onReasonChange, onClose, onSave, onPrint, onClosePayslip }: EditProps) {
+export function EditPayslipModal({ payslip, bonusStr, penaltyStr, reasonStr, onBonusChange, onPenaltyChange, onReasonChange, onClose, onSave, onClosePayslip }: EditProps) {
   return (
     <Modal open={!!payslip} onClose={onClose} title={`Chi tiết phiếu lương — ${payslip?.employee ?? ""}`} size="lg" footer={
       <div className="flex flex-wrap items-center justify-between gap-2 w-full">
         <div className="flex flex-wrap items-center gap-2">
-          {onPrint && (
-            <Button variant="white" onClick={onPrint}>
-              <FontAwesomeIcon icon={faPrint} fontSize={14} /> In phiếu lương
-            </Button>
-          )}
           {onClosePayslip && payslip?.status !== "đã chốt" && (
             <Button variant="white" onClick={onClosePayslip} className="text-amber-700 border-amber-300 hover:bg-amber-50">
               <FontAwesomeIcon icon={faLock} fontSize={14} /> Chốt phiếu lương
@@ -60,7 +53,7 @@ export function EditPayslipModal({ payslip, bonusStr, penaltyStr, reasonStr, onB
             </div>
             <Field label="Tiền Thưởng (VNĐ)"><Input type="number" value={bonusStr} onChange={(e) => onBonusChange(e.target.value)} placeholder="Nhập số tiền thưởng (VD: 500000)" /></Field>
             <Field label="Tiền Phạt (VNĐ)"><Input type="number" value={penaltyStr} onChange={(e) => onPenaltyChange(e.target.value)} placeholder="Nhập số tiền phạt (VD: 100000)" /></Field>
-            <Field label="Lý do điều chỉnh (bắt buộc khi thưởng/phạt)" required={bonusVal > 0 || penaltyVal > 0} hint="Lý do này sẽ được in trực tiếp lên phiếu lương của nhân viên">
+            <Field label="Lý do điều chỉnh (bắt buộc khi thưởng/phạt)" required={bonusVal > 0 || penaltyVal > 0} hint="Lý do điều chỉnh được lưu cùng phiếu lương của nhân viên">
               <Input value={reasonStr} onChange={(e) => onReasonChange(e.target.value)} placeholder="VD: Thưởng vượt KPIs / Phạt trễ 2 lần..." />
             </Field>
             <div className="rounded-lg border border-primary-200 bg-primary-50/60 p-3 text-sm flex justify-between items-center">
@@ -93,14 +86,14 @@ export function ConfirmClosePayslipDialog({ payslip, onConfirm, onCancel }: Conf
   );
 }
 
-interface PrintProps {
+interface DetailProps {
   payslip: Payslip | null;
   onClose: () => void;
 }
 
-export function PrintPayslipModal({ payslip, onClose }: PrintProps) {
+export function PayslipDetailModal({ payslip, onClose }: DetailProps) {
   return (
-    <Modal open={!!payslip} onClose={onClose} title={`Phiếu lương chi tiết — ${payslip?.employee ?? ""}`} size="lg" footer={<><Button variant="white" onClick={onClose}>Đóng</Button><Button onClick={() => { alert(`Đang kết nối máy in để in phiếu lương cho ${payslip?.employee}...`); onClose(); }}><FontAwesomeIcon icon={faPrint} fontSize={16} /> In phiếu lương</Button></>}>
+    <Modal open={!!payslip} onClose={onClose} title={`Phiếu lương chi tiết — ${payslip?.employee ?? ""}`} size="lg" footer={<Button variant="white" onClick={onClose}>Đóng</Button>}>
       {payslip && (
         <div className="p-4 border border-gray-200 rounded-xl bg-white space-y-4">
           <div className="text-center pb-3 border-b border-gray-200">

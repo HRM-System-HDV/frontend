@@ -16,7 +16,6 @@ interface Props {
   /** Mở modal xem chi tiết (dùng cho vai trò không có quyền chỉnh sửa). */
   onView?: (p: Payslip) => void;
   onCloseOne?: (p: Payslip) => void;
-  onPrint: (p: Payslip) => void;
   onBulkClose?: () => void;
   onGenerate?: () => void;
   selectedMonth: string;
@@ -28,15 +27,14 @@ export default function PayslipSection({
   payslips,
   onEdit,
   onView,
-  onPrint,
   onBulkClose,
   onGenerate,
   selectedMonth,
   onMonthChange,
   monthOptions,
 }: Props) {
-  // Chỉ 1 nút Chi tiết trong cột Thao tác; chỉnh sửa/in/chốt nằm trong modal chi tiết.
-  const openDetail = onEdit ?? onView ?? onPrint;
+  // Chỉ 1 nút Chi tiết trong cột Thao tác; chỉnh sửa/chốt nằm trong modal chi tiết.
+  const openDetail = onEdit ?? onView;
 
   const columns: Column<Payslip>[] = [
     {
@@ -83,7 +81,7 @@ export default function PayslipSection({
       header: "Trạng thái",
       render: (p) => <StatusBadge status={p.status} />,
     },
-    // Nút Chi tiết mở modal đầy đủ chức năng (chỉnh thưởng/phạt, in, chốt).
+    // Nút Chi tiết mở modal đầy đủ chức năng (chỉnh thưởng/phạt, chốt).
     // Vai trò chỉ xem vẫn mở được modal chi tiết ở chế độ đọc.
     ...(openDetail
       ? [
