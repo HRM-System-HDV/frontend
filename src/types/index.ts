@@ -60,6 +60,12 @@ export interface ShiftRequest {
   to: string;
   reason: string;
   status: "chờ duyệt" | "đã duyệt" | "từ chối";
+  /**
+   * Bản chụp chế độ duyệt mà BE gắn vào đơn lúc tạo (Request.shiftSwapMode);
+   * chỉ có với loại đổi ca. "mutual_acceptance" = người được nhờ tự phản hồi,
+   * BE chặn manager duyệt/từ chối (chỉ admin qua được).
+   */
+  shiftSwapMode?: "mutual_acceptance" | "manager_approval";
   createdAt?: string;
   // Thông tin xử lý đơn do BE lưu khi duyệt/từ chối.
   reviewedByName?: string;

@@ -63,6 +63,7 @@ function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
     to,
     reason: r.content || r.title || "",
     status,
+    shiftSwapMode: r.shiftSwapMode ?? undefined,
     createdAt: r.createdAt ? formatDateTime(r.createdAt) : "—",
     reviewedByName: r.reviewedByName || undefined,
     reviewNote: r.reviewNote || undefined,
@@ -438,6 +439,7 @@ export default function RequestsPage() {
           requests={filteredRequests}
           onApprove={canReviewRequests ? handleApprove : undefined}
           onReject={canReviewRequests ? handleReject : undefined}
+          canReviewPeerAcceptedSwap={isAdmin}
           branchLabel={(branchId) =>
             branches.find((b) => b.id === branchId)?.name || branchId || "—"
           }

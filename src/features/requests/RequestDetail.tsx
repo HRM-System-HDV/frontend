@@ -14,6 +14,8 @@ interface RequestDetailModalProps {
   /** Không truyền = vai trò này không duyệt đơn (nhân viên chỉ xem đơn của mình). */
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  /** Cho phép duyệt đơn đổi ca ở chế độ tự chấp nhận (chỉ admin). */
+  canReviewPeerAcceptedSwap?: boolean;
   /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
   branchLabel?: (branchId: string) => string;
 }
@@ -24,6 +26,7 @@ export default function RequestDetailModal({
   request,
   onApprove,
   onReject,
+  canReviewPeerAcceptedSwap,
   branchLabel,
 }: RequestDetailModalProps) {
   if (!request) return null;
@@ -31,7 +34,12 @@ export default function RequestDetailModal({
   const isPending = request.status === "chờ duyệt";
   const isApproved = request.status === "đã duyệt";
   const isRejected = request.status === "từ chối";
-  const canReview = Boolean(onApprove || onReject);
+  // BE từ chối manager duyệt/từ chối đơn đổi ca ở chế độ tự chấp nhận
+  // (integration-service reviewRequest, peer=false → 403). Ẩn control để quản lý
+  // không bấm rồi nhận lỗi, trừ admin vẫn được ghi hộ.
+  const peerResponds =
+    request.type === "đổi ca" && request.shiftSwapMode === "mutual_acceptance";
+  const canReview = Boolean(onApprove || onReject) && (!peerResponds || canReviewPeerAcceptedSwap === true);
 
   const handleConfirmApprove = () => {
     if (!onApprove) return;
@@ -145,6 +153,14 @@ export default function RequestDetailModal({
             <StatusBadge status={request.status} />
           </div>
         </div>
+
+        {/* Chế độ tự chấp nhận: quyền phản hồi thuộc nhân viên đích nên BE chặn
+            manager duyệt — giải thích để không nhầm là hệ thống lỗi. */}
+        {isPending && peerResponds && !canReview && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3.5 text-sm text-blue-800">
+            Đơn đổi ca này do nhân viên được nhờ tự phản hồi.
+          </div>
+        )}
 
         {/* Thông tin người gửi & Chi nhánh */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">

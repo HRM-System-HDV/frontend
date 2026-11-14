@@ -13,12 +13,21 @@ interface Props {
   requests: ShiftRequest[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  /** Cho phép thao tác trên đơn đổi ca ở chế độ tự chấp nhận (chỉ admin). */
+  canReviewPeerAcceptedSwap?: boolean;
   emptyMessage?: string;
   /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
   branchLabel?: (branchId: string) => string;
 }
 
-export default function ShiftRequestSection({ requests, onApprove, onReject, emptyMessage, branchLabel }: Props) {
+export default function ShiftRequestSection({
+  requests,
+  onApprove,
+  onReject,
+  canReviewPeerAcceptedSwap,
+  emptyMessage,
+  branchLabel,
+}: Props) {
   const [selectedRequest, setSelectedRequest] = useState<ShiftRequest | null>(null);
   const pendingCount = requests.filter((r) => r.status === "chờ duyệt").length;
 
@@ -135,6 +144,7 @@ export default function ShiftRequestSection({ requests, onApprove, onReject, emp
         request={currentSelectedRequest}
         onApprove={onApprove}
         onReject={onReject}
+        canReviewPeerAcceptedSwap={canReviewPeerAcceptedSwap}
         branchLabel={branchLabel}
       />
     </>
