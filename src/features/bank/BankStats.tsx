@@ -7,7 +7,7 @@ import {
   faMoneyBillWave,
   faShieldHalved,
 } from "@fortawesome/free-solid-svg-icons";
-import { formatVND } from "@/lib/utils";
+import { formatVND, formatDateTime } from "@/lib/utils";
 import type { BankPartner, SoapGatewayConfig, SoapTransaction } from "./types";
 
 interface Props {
@@ -15,6 +15,7 @@ interface Props {
   partners: BankPartner[];
   transactions: SoapTransaction[];
   onTestSoap: () => void;
+  pinging?: boolean;
 }
 
 export default function BankHeaderStats({
@@ -22,6 +23,7 @@ export default function BankHeaderStats({
   partners,
   transactions,
   onTestSoap,
+  pinging = false,
 }: Props) {
   const primaryBank = partners.find((p) => p.isPrimary) || partners[0];
   const totalBalance = partners.reduce((sum, p) => sum + p.balance, 0);
@@ -31,8 +33,8 @@ export default function BankHeaderStats({
 
   // Trạng thái lấy từ kết quả ping thật của integration-service, không ghi cứng.
   const connection = {
-    healthy: { badge: "Thông suốt 24/7", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", title: "Sẵn sàng chi lương tự động" },
-    degraded: { badge: "Kết nối chậm", tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", title: "Ngân hàng phản hồi nhưng quá cảnh báo" },
+    healthy: { badge: "Kết nối thành công", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", title: "Sẵn sàng chi lương tự động" },
+    degraded: { badge: "Phản hồi lỗi", tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", title: "Dịch vụ phản hồi mã lỗi" },
     down: { badge: "Mất kết nối", tone: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500", title: "Không gọi được cổng ngân hàng" },
     unknown: { badge: "Chưa kiểm tra", tone: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400", title: "Chưa có lần ping thành công nào" },
   }[gatewayConfig.status] ?? {
@@ -66,6 +68,7 @@ export default function BankHeaderStats({
             </span>
           </div>
         </div>
+        {gatewayConfig.lastPingTime && <div className="mt-2 text-xs text-gray-500">Kiểm tra gần nhất: {formatDateTime(gatewayConfig.lastPingTime)}</div>}
         <div className="mt-4 flex items-center justify-between text-xs border-t border-gray-100 pt-3 text-gray-600">
           <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
             <FontAwesomeIcon icon={faShieldHalved} className="text-xs" />
@@ -73,9 +76,10 @@ export default function BankHeaderStats({
           </span>
           <button
             onClick={onTestSoap}
+            disabled={pinging}
             className="text-primary hover:underline font-semibold cursor-pointer px-2 py-0.5 rounded hover:bg-primary-50 transition-colors"
           >
-            Kiểm tra đường truyền →
+            {pinging ? "Đang kiểm tra..." : "Kiểm tra đường truyền →"}
           </button>
         </div>
       </div>

@@ -13,6 +13,8 @@ interface Props {
   requests: ShiftRequest[];
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  onDelete?: (id: string) => Promise<void>;
+  canDelete?: (request: ShiftRequest) => boolean;
   /** Cho phép thao tác trên đơn đổi ca ở chế độ tự chấp nhận (chỉ admin). */
   canReviewPeerAcceptedSwap?: boolean;
   emptyMessage?: string;
@@ -24,6 +26,8 @@ export default function ShiftRequestSection({
   requests,
   onApprove,
   onReject,
+  onDelete,
+  canDelete,
   canReviewPeerAcceptedSwap,
   emptyMessage,
   branchLabel,
@@ -139,11 +143,13 @@ export default function ShiftRequestSection({
 
       {/* Modal Chi tiết yêu cầu & 2 nút xác nhận Phê duyệt / Từ chối */}
       <RequestDetailModal
+        key={currentSelectedRequest?.id ?? "none"}
         open={!!currentSelectedRequest}
         onClose={() => setSelectedRequest(null)}
         request={currentSelectedRequest}
         onApprove={onApprove}
         onReject={onReject}
+        onDelete={currentSelectedRequest && canDelete?.(currentSelectedRequest) ? onDelete : undefined}
         canReviewPeerAcceptedSwap={canReviewPeerAcceptedSwap}
         branchLabel={branchLabel}
       />

@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowRightArrowLeft, faCalendar, faCheck, faClock, faCoins, faFileLines, faPen, faStore, faUmbrellaBeach, faUser, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faArrowRightArrowLeft, faCalendar, faCheck, faClock, faCoins, faFileLines, faPen, faStore, faUmbrellaBeach, faUser, faXmark, faTrashCan } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
@@ -14,6 +15,7 @@ interface RequestDetailModalProps {
   /** Không truyền = vai trò này không duyệt đơn (nhân viên chỉ xem đơn của mình). */
   onApprove?: (id: string) => void;
   onReject?: (id: string) => void;
+  onDelete?: (id: string) => Promise<void>;
   /** Cho phép duyệt đơn đổi ca ở chế độ tự chấp nhận (chỉ admin). */
   canReviewPeerAcceptedSwap?: boolean;
   /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
@@ -26,10 +28,29 @@ export default function RequestDetailModal({
   request,
   onApprove,
   onReject,
+  onDelete,
   canReviewPeerAcceptedSwap,
   branchLabel,
 }: RequestDetailModalProps) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   if (!request) return null;
+
+  const deleteRequest = async () => {
+    if (deleting || !onDelete || request.status !== "chờ duyệt") return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await onDelete(request.id);
+      setConfirmDelete(false);
+      onClose();
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : "Không xóa được đơn yêu cầu");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const isPending = request.status === "chờ duyệt";
   const isApproved = request.status === "đã duyệt";
@@ -102,16 +123,20 @@ export default function RequestDetailModal({
   const typeInfo = getTypeInfo(request.type);
 
   return (
+    <>
     <Modal
-      open={open}
+      open={open && !confirmDelete}
       onClose={onClose}
       title="Chi tiết yêu cầu & Phê duyệt ca"
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
-          <Button variant="white" onClick={onClose}>
-            Đóng
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="white" onClick={onClose}>Đóng</Button>
+            {isPending && onDelete && <Button variant="danger" onClick={() => { setDeleteError(null); setConfirmDelete(true); }}>
+              <FontAwesomeIcon icon={faTrashCan} fontSize={14} /> Xóa đơn
+            </Button>}
+          </div>
 
           {isPending && canReview ? (
             <div className="flex items-center gap-2">
@@ -255,5 +280,11 @@ export default function RequestDetailModal({
         ) : null}
       </div>
     </Modal>
+    <Modal open={open && confirmDelete} onClose={() => { if (!deleting) setConfirmDelete(false); }} title="Xác nhận xóa đơn yêu cầu" size="md"
+      footer={<><Button variant="white" disabled={deleting} onClick={() => setConfirmDelete(false)}>Hủy</Button><Button variant="danger" disabled={deleting} onClick={deleteRequest}>{deleting ? "Đang xóa..." : "Xác nhận xóa"}</Button></>}>
+      <p className="text-sm text-gray-600">Xóa đơn đang chờ của {request.employee}? Thao tác này không thể hoàn tác.</p>
+      {deleteError && <p role="alert" className="mt-3 text-sm text-red-700">{deleteError}</p>}
+    </Modal>
+    </>
   );
 }

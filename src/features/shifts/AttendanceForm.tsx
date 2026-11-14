@@ -162,7 +162,7 @@ export default function AttendanceConfigModal({
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
               </div>
             </Field>
-            <Field label="Chấm công kép: sớm nhất (phút sau giờ kết thúc ca trước)">
+            <Field label="Chấm công kép: sớm nhất (phút trước mốc nối ca)">
               <div className="relative">
                 <Input
                   type="number"
@@ -174,7 +174,7 @@ export default function AttendanceConfigModal({
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
               </div>
             </Field>
-            <Field label="Chấm công kép: muộn nhất (phút sau giờ kết thúc ca trước)">
+            <Field label="Chấm công kép: muộn nhất (phút sau mốc nối ca)">
               <div className="relative">
                 <Input
                   type="number"

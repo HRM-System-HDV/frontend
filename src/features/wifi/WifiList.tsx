@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTrashCan, faWifi } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -80,6 +81,7 @@ interface Props {
 }
 
 export default function WifiTableSection({ configs, onDelete, branchLabel }: Props) {
+  const detail = useApiDetail();
   const [viewingConfig, setViewingConfig] = useState<WifiConfig | null>(null);
   const [deletingConfig, setDeletingConfig] = useState<WifiConfig | null>(null);
   const label = (branchId: string) => (branchLabel ? branchLabel(branchId) : branchId);
@@ -118,7 +120,10 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
       render: (w) => (
         <button
           type="button"
-          onClick={() => setViewingConfig(w)}
+          onClick={() => {
+            setViewingConfig(null);
+            void detail.loadDetail<WifiConfig>(`/api/wifi-configs/${encodeURIComponent(w.id)}`, setViewingConfig);
+          }}
           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
         >
           Chi tiết
@@ -129,6 +134,7 @@ export default function WifiTableSection({ configs, onDelete, branchLabel }: Pro
 
   return (
     <>
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <Card>
         <CardHeader>
           <CardTitle>Danh sách Wi-Fi chấm công</CardTitle>

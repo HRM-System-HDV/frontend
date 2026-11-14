@@ -60,7 +60,7 @@ export default function SoapTestModal({ open, onClose, config }: Props) {
       setResponse(text);
       setLastMs(Date.now() - t0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Lỗi kiểm tra đường truyền.");
+      setError(e instanceof Error ? e.message : "Lỗi gửi lệnh SOAP.");
     } finally {
       setTesting(false);
     }
@@ -75,7 +75,7 @@ export default function SoapTestModal({ open, onClose, config }: Props) {
     <Modal
       open={open}
       onClose={onClose}
-      title="Kiểm tra Đường truyền Kết nối Ngân hàng (SOAP)"
+      title="Gửi lệnh chi lương qua SOAP"
       size="lg"
       footer={
         <div className="flex items-center justify-between w-full">
@@ -87,7 +87,7 @@ export default function SoapTestModal({ open, onClose, config }: Props) {
               icon={testing ? faArrowsRotate : faPlay}
               className={testing ? "animate-spin" : ""}
             />
-            {testing ? "Đang gửi SOAP..." : "Gửi SOAP kiểm tra"}
+            {testing ? "Đang gửi SOAP..." : "Gửi lệnh chi SOAP"}
           </Button>
         </div>
       }
@@ -99,7 +99,7 @@ export default function SoapTestModal({ open, onClose, config }: Props) {
           </div>
           <div>
             <h4 className="text-sm font-bold text-emerald-900">
-              Kịch bản demo SOAP
+              Lệnh chi lương SOAP
             </h4>
             <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
               Thay <span className="font-mono font-bold">payslipId</span> bằng id phiếu THẬT ở trạng thái

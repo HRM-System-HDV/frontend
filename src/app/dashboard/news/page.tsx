@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPlus } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import type { NewsItem } from "@/features/news/types";
@@ -25,6 +26,7 @@ export default function NewsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<NewsItem | null>(null);
   const [saving, setSaving] = useState(false);
+  const detail = useApiDetail();
   const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
 
   const fetchData = useCallback(async () => {
@@ -52,9 +54,12 @@ export default function NewsPage() {
 
   const handleOpenEdit = (item: NewsItem) => {
     if (!canManageNews(role, branchId, item)) return;
-    setSelectedNews(null);
-    setEditingItem(item);
-    setModalOpen(true);
+    void detail.loadDetail<NewsItem>(`/api/news/${encodeURIComponent(item.id)}`, (row) => {
+      setSelectedNews(null);
+      if (!canManageNews(role, branchId, row)) return;
+      setEditingItem(row);
+      setModalOpen(true);
+    });
   };
 
   const handleSubmit = async (payload: NewsFormPayload) => {
@@ -109,6 +114,7 @@ export default function NewsPage() {
 
   return (
     <div className="space-y-6">
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
@@ -145,7 +151,13 @@ export default function NewsPage() {
       ) : (
         <NewsSection
           items={newsList}
-          onSelect={setSelectedNews}
+          onSelect={(item) => {
+            setSelectedNews(null);
+            void detail.loadDetail<NewsItem>(`/api/news/${encodeURIComponent(item.id)}`, (row) => {
+              setNewsList((items) => items.map((item) => item.id === row.id ? row : item));
+              setSelectedNews(row);
+            });
+          }}
           onEdit={canWriteNews ? handleOpenEdit : undefined}
           onTogglePin={canWriteNews ? handleTogglePin : undefined}
         />

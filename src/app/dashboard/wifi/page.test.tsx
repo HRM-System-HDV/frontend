@@ -29,7 +29,7 @@ describe("Wi-Fi page", () => {
   beforeEach(() => {
     currentUser.role = "admin";
     apiGet.mockReset().mockImplementation(async (path: string) =>
-      path === "/api/wifi-configs" ? [wifi] : path === "/api/branches" ? [{ id: branchId, name: "Hà Nội 1", branchCode: "CN-00001", address: "", manager: "", managerId: null, staff: 0, status: "hoạt động" }] : [],
+      path === "/api/wifi-configs" ? [wifi] : path === `/api/wifi-configs/${wifi.id}` ? wifi : path === "/api/branches" ? [{ id: branchId, name: "Hà Nội 1", branchCode: "CN-00001", address: "", manager: "", managerId: null, staff: 0, status: "hoạt động" }] : [],
     );
     apiDelete.mockReset().mockResolvedValue({ ok: true });
   });
@@ -43,7 +43,7 @@ describe("Wi-Fi page", () => {
   it("deletes from the detail modal and refetches instead of trusting the local row", async () => {
     render(<WifiPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Chi tiết" }));
-    fireEvent.click(screen.getByRole("button", { name: "Xóa Wi-Fi" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa Wi-Fi" }));
     fireEvent.click(await screen.findByRole("button", { name: "Xóa" }));
     const before = wifiRequests();
     await waitFor(() => expect(apiDelete).toHaveBeenCalledWith(`/api/wifi-configs/${wifi.id}`));

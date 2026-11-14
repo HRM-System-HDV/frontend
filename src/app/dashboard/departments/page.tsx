@@ -7,6 +7,7 @@ import {
   faTriangleExclamation,
   faCircleCheck,
 } from "@fortawesome/free-solid-svg-icons";
+import { useApiDetail, DetailLoadStatus } from "@/hooks/useApiDetail";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
@@ -28,6 +29,7 @@ export default function DepartmentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
+  const detail = useApiDetail();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Department | null>(null);
   const [lockTarget, setLockTarget] = useState<Department | null>(null);
@@ -167,6 +169,7 @@ export default function DepartmentsPage() {
         </div>
       )}
 
+      <DetailLoadStatus loading={detail.loading} error={detail.error} />
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phòng ban" }]}
         actions={
@@ -216,10 +219,10 @@ export default function DepartmentsPage() {
         <DepartmentList
           departments={deptList}
           onEdit={(d) => {
-            if (canWriteDepartments) {
-              setEditing(d);
+            if (canWriteDepartments) void detail.loadDetail<Department>(`/api/departments/${encodeURIComponent(d.id)}`, (row) => {
+              setEditing(row);
               setModalOpen(true);
-            }
+            });
           }}
         />
       )}

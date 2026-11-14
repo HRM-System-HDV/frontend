@@ -19,7 +19,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   localStorage.clear();
   currentUser.mockReturnValue({ role: "manager", branchId: "branch-1" });
-  apiGet.mockImplementation(async (path: string) => path === "/api/news" ? [globalNews, ownNews] : []);
+  apiGet.mockImplementation(async (path: string) => path === "/api/news" ? [globalNews, ownNews] : path === "/api/news/global" ? globalNews : path === "/api/news/own" ? ownNews : []);
 });
 
 describe("news permissions and pinning", () => {
@@ -40,7 +40,7 @@ describe("news permissions and pinning", () => {
     apiPut.mockResolvedValue({ ...ownNews, pinned: true });
     render(<NewsPage />);
     fireEvent.click(await screen.findByRole("heading", { name: ownNews.title }));
-    expect(screen.getByRole("button", { name: "Sửa thông báo" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Sửa thông báo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Xóa thông báo" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Ghim đầu trang" }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith("/api/news/own", { pinned: true }));
@@ -85,5 +85,27 @@ describe("news permissions and pinning", () => {
     await waitFor(() => expect(apiGet).toHaveBeenCalled());
     const titles = (await screen.findAllByRole("heading")).map(h => h.textContent);
     expect(titles).toEqual(["Tin ghim ngày cũ", "Tin cùng ngày đăng sau", "Thông báo toàn công ty", old.title]);
+  });
+});
+
+describe("news detail API", () => {
+  it("shows fresh content from the selected ID instead of the cached list item", async () => {
+    apiGet.mockImplementation(async (path: string) => path === "/api/news" ? [ownNews] : path === "/api/news/own" ? { ...ownNews, content: "Nội dung vừa cập nhật" } : []);
+    render(<NewsPage />);
+    fireEvent.click(await screen.findByRole("heading", { name: ownNews.title }));
+    expect(await screen.findByText("Nội dung vừa cập nhật")).toBeInTheDocument();
+    expect(apiGet).toHaveBeenCalledWith("/api/news/own");
+  });
+
+  it("does not open cached details if the record was deleted", async () => {
+    apiGet.mockImplementation(async (path: string) => {
+      if (path === "/api/news") return [ownNews];
+      if (path === "/api/news/own") throw new Error("Tin đã bị xóa");
+      return [];
+    });
+    render(<NewsPage />);
+    fireEvent.click(await screen.findByRole("heading", { name: ownNews.title }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tin đã bị xóa");
+    expect(screen.queryByText("Tóm tắt thông báo:")).not.toBeInTheDocument();
   });
 });

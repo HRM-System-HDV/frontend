@@ -11,7 +11,7 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import { Input } from "@/components/ui/Form";
-import { apiGet, apiPut, GatewayError } from "@/lib/api";
+import { apiGet, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { ShiftRequest, Employee, Branch } from "@/types";
 import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
@@ -280,6 +280,15 @@ export default function RequestsPage() {
     }
   };
 
+  const canDeleteRequest = (request: ShiftRequest) => request.status === "chờ duyệt" && (isAdmin || (isManager && request.branch === branchId));
+  const handleDeleteRequest = async (id: string) => {
+    const request = requests.find((request) => request.id === id);
+    if (!request || !canDeleteRequest(request)) throw new Error("Không được xóa đơn này");
+    await apiDelete(`/api/requests/${encodeURIComponent(id)}`);
+    setRequests((rows) => rows.filter((row) => row.id !== id));
+    showToast("Đã xóa đơn yêu cầu", "success");
+  };
+
   // Lưu cấu hình chấm công vào backend DB
   const handleSaveAttendanceConfig = async () => {
     try {
@@ -439,6 +448,8 @@ export default function RequestsPage() {
           requests={filteredRequests}
           onApprove={canReviewRequests ? handleApprove : undefined}
           onReject={canReviewRequests ? handleReject : undefined}
+          onDelete={handleDeleteRequest}
+          canDelete={canDeleteRequest}
           canReviewPeerAcceptedSwap={isAdmin}
           branchLabel={(branchId) =>
             branches.find((b) => b.id === branchId)?.name || branchId || "—"

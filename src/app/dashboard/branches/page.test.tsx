@@ -14,7 +14,7 @@ const branch = { id: "019a7a00-0000-7000-8000-000000000001", branchCode: "CN-000
 describe("Branch mutation IDs", () => {
   beforeEach(() => {
     currentUser.role = "admin"; currentUser.branchId = "";
-    apiGet.mockReset().mockImplementation(async (path: string) => path === "/api/branches" ? [branch] : []);
+    apiGet.mockReset().mockImplementation(async (path: string) => path === "/api/branches" ? [branch] : path === `/api/branches/${branch.id}` ? branch : []);
     apiPut.mockReset().mockResolvedValue(branch);
     apiDelete.mockReset().mockResolvedValue({ ok: true });
   });
@@ -33,6 +33,7 @@ describe("Branch mutation IDs", () => {
     currentUser.role = "manager"; currentUser.branchId = "another";
     render(<BranchesPage />);
     fireEvent.click(await screen.findByRole("button", { name: branch.name }));
+    await screen.findAllByRole("button", { name: "Đóng" });
     expect(screen.queryByRole("button", { name: "Lưu" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Xóa" })).not.toBeInTheDocument();
     expect(apiGet).not.toHaveBeenCalledWith(`/api/branches/${branch.id}/manager-candidates`);
@@ -47,7 +48,7 @@ describe("Branch mutation IDs", () => {
   it("deletes the branch using its UUID in the route", async () => {
     render(<BranchesPage />);
     fireEvent.click(await screen.findByRole("button", { name: branch.name }));
-    fireEvent.click(screen.getByRole("button", { name: "Xóa" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Xóa" }));
     fireEvent.click(screen.getByRole("button", { name: "Xác nhận xóa" }));
     await waitFor(() => expect(apiDelete).toHaveBeenCalledWith(`/api/branches/${branch.id}`));
   });
