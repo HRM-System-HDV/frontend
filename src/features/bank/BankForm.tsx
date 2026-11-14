@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBuildingColumns,
@@ -12,31 +12,27 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Select } from "@/components/ui/Form";
 import { formatDate, formatVND } from "@/lib/utils";
-import { GATEWAY_URL, GatewayError } from "@/lib/api";
+import { apiDelete, apiPut, apiPost, GatewayError } from "@/lib/api";
+import type { Branch } from "@/types";
 import type { BankPartner } from "./types";
 
 interface Props {
   partner: BankPartner | null;
+  /** Danh sách chi nhánh (organization-service) để gán branchId cho tài khoản. */
+  branches: Branch[];
   onClose: () => void;
-  onSaved?: (updated: BankPartner) => void;
-  onDeleted?: (id: string) => void;
+  onSaved?: () => void;
+  onDeleted?: () => void;
+  /** Đặt tài khoản làm nguồn chi lương chính (nút nằm trong modal chi tiết). */
+  onSetPrimary?: (id: string) => void;
 }
 
-export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }: Props) {
-  const [accountName, setAccountName] = useState("");
-  const [branch, setBranch] = useState("");
-  const [status, setStatus] = useState("hoạt động");
+export default function BankConfigModal({ partner, branches, onClose, onSaved, onDeleted, onSetPrimary }: Props) {
+  const [accountName, setAccountName] = useState(partner?.accountName || "");
+  const [bankBranch, setBankBranch] = useState(partner?.bankBranch || "");
+  const [branchId, setBranchId] = useState(partner?.branchId || "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (partner) {
-      setAccountName(partner.accountName || "");
-      setBranch(partner.branch || "");
-      setStatus(partner.status === "active" ? "hoạt động" : "vô hiệu hóa");
-      setError(null);
-    }
-  }, [partner]);
 
   if (!partner) return null;
 
@@ -47,17 +43,11 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts/${partner.id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) {
-        throw new Error("Lỗi xóa tài khoản");
-      }
-      onDeleted?.(partner.id);
+      await apiDelete(`/api/payroll/bank-accounts/${encodeURIComponent(partner.id)}`);
+      onDeleted?.();
       onClose();
-    } catch (e: any) {
-      setError(e.message || "Lỗi xóa tài khoản.");
+    } catch (e: unknown) {
+      setError(e instanceof GatewayError ? e.message : "Lỗi xóa tài khoản.");
     } finally {
       setSaving(false);
     }
@@ -67,35 +57,13 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts/${partner.id}`, {
-        method: "PUT",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountName: accountName.trim(),
-          branch: branch.trim(),
-          status,
-        }),
+      // Whitelist PUT /api/payroll/bank-accounts/:id: accountName, bankName, bankBranch, branchId, isPrimary.
+      await apiPut(`/api/payroll/bank-accounts/${encodeURIComponent(partner.id)}`, {
+        accountName: accountName.trim(),
+        bankBranch: bankBranch.trim() || null,
+        branchId: branchId || null,
       });
-      const text = await res.text();
-      let body: unknown = null;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = null;
-      }
-      if (!res.ok) {
-        const err = (body as { error?: { code: string; message: string } } | null)?.error;
-        throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-      }
-      const data = (body as { data: unknown } | null)?.data ?? body;
-      const row = data as { accountName?: string; bankName?: string; branch?: string; balance?: number; status?: string };
-      onSaved?.({
-        ...partner,
-        accountName: row.accountName ?? accountName.trim() ?? partner.accountName,
-        branch: row.branch ?? branch.trim() ?? partner.branch,
-        name: row.bankName ?? partner.name,
-      });
+      onSaved?.();
       onClose();
     } catch (e) {
       setError(e instanceof GatewayError ? e.message : "Lỗi cập nhật cấu hình ngân hàng.");
@@ -118,6 +86,19 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
             <Button variant="white" onClick={onClose} disabled={saving} className="text-xs">
               Đóng
             </Button>
+            {onSetPrimary && !partner.isPrimary && (
+              <Button
+                variant="white"
+                onClick={() => {
+                  onSetPrimary(partner.id);
+                  onClose();
+                }}
+                disabled={saving}
+                className="text-xs text-amber-700 border-amber-300 hover:bg-amber-50"
+              >
+                Chọn làm nguồn chính
+              </Button>
+            )}
             {onDeleted && (
               <Button variant="danger" onClick={handleDelete} disabled={saving} className="text-xs">
                 Xóa tài khoản
@@ -150,19 +131,23 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
           <Input value={accountName} onChange={(e) => setAccountName(e.target.value)} disabled={saving} />
         </Field>
 
-        <Field label="Chi nhánh mở tài khoản (Người dùng tự nhập)">
+        <Field label="Nơi mở tài khoản (ngân hàng / phòng giao dịch)">
           <Input
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            placeholder="Ví dụ: Chi nhánh Ba Đình - Hà Nội"
+            value={bankBranch}
+            onChange={(e) => setBankBranch(e.target.value)}
+            placeholder="Ví dụ: Sở giao dịch Ba Đình - Hà Nội"
             disabled={saving}
           />
         </Field>
 
-        <Field label="Trạng thái tài khoản">
-          <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={saving}>
-            <option value="hoạt động">hoạt động</option>
-            <option value="vô hiệu hóa">vô hiệu hóa</option>
+        <Field label="Chi nhánh công ty sở hữu tài khoản">
+          <Select value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={saving}>
+            <option value="">— Chưa gán chi nhánh —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
           </Select>
         </Field>
 
@@ -198,11 +183,11 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
           </div>
           <div className="flex justify-between text-gray-700">
             <span>Kênh truyền dữ liệu:</span>
-            <span className="font-medium text-gray-800">{partner.channel || "Gateway"}</span>
+            <span className="font-medium text-gray-800">Qua api-gateway (:4000)</span>
           </div>
           <div className="flex items-center gap-1.5 text-gray-500">
             <FontAwesomeIcon icon={faBuildingColumns} fontSize={11} />
-            Chi nhánh đăng ký: <span className="font-semibold text-gray-800">{branch || "Chưa nhập chi nhánh"}</span>
+            Nơi mở tài khoản: <span className="font-semibold text-gray-800">{bankBranch || "Chưa nhập"}</span>
           </div>
         </div>
       </div>
@@ -212,6 +197,7 @@ export default function BankConfigModal({ partner, onClose, onSaved, onDeleted }
 
 interface CreateModalProps {
   open: boolean;
+  branches: Branch[];
   onClose: () => void;
   onCreated: () => void;
   isFirstAccount?: boolean;
@@ -231,6 +217,7 @@ const COMMON_BANKS = [
 
 export function CreateBankAccountModal({
   open,
+  branches,
   onClose,
   onCreated,
   isFirstAccount = false,
@@ -239,24 +226,12 @@ export function CreateBankAccountModal({
   const [customBankName, setCustomBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("CÔNG TY CỔ PHẦN HRM SYSTEM");
-  const [branch, setBranch] = useState("Chi nhánh Ba Đình - Hà Nội");
+  const [bankBranch, setBankBranch] = useState("");
+  const [branchId, setBranchId] = useState("");
   const [balanceStr, setBalanceStr] = useState("500000000");
   const [isPrimary, setIsPrimary] = useState(isFirstAccount);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setBankName("Vietcombank (VCB)");
-      setCustomBankName("");
-      setAccountNumber("");
-      setAccountName("CÔNG TY CỔ PHẦN HRM SYSTEM");
-      setBranch("Chi nhánh Ba Đình - Hà Nội");
-      setBalanceStr("500000000");
-      setIsPrimary(isFirstAccount);
-      setError(null);
-    }
-  }, [open, isFirstAccount]);
 
   const handleSubmit = async () => {
     const finalBank = bankName === "Khác" ? customBankName.trim() : bankName;
@@ -272,42 +247,28 @@ export function CreateBankAccountModal({
       setError("Vui lòng nhập tên chủ tài khoản / doanh nghiệp.");
       return;
     }
-    const balanceNum = Number(balanceStr);
-    if (!Number.isFinite(balanceNum) || balanceNum < 0) {
-      setError("Số dư ban đầu không hợp lệ (phải >= 0).");
+    if (!/^\d+$/.test(balanceStr.trim())) {
+      setError("Số dư ban đầu phải là số VNĐ nguyên, không âm.");
       return;
     }
 
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(`${GATEWAY_URL}/api/payroll/bank-accounts`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bankName: finalBank,
-          accountNumber: accountNumber.trim(),
-          accountName: accountName.trim(),
-          branch: branch.trim(),
-          balance: balanceNum,
-          isPrimary,
-        }),
+      // balance gửi dạng chuỗi nguyên không dấu — BE money() chỉ chấp nhận /^\d+$/.
+      await apiPost("/api/payroll/bank-accounts", {
+        bankName: finalBank,
+        accountNumber: accountNumber.trim(),
+        accountName: accountName.trim(),
+        bankBranch: bankBranch.trim() || null,
+        branchId: branchId || null,
+        balance: balanceStr.trim(),
+        isPrimary,
       });
-      const text = await res.text();
-      let body: any = null;
-      try {
-        body = text ? JSON.parse(text) : null;
-      } catch {
-        body = null;
-      }
-      if (!res.ok) {
-        throw new Error(body?.error?.message || `HTTP_${res.status}`);
-      }
       onCreated();
       onClose();
-    } catch (e: any) {
-      setError(e.message || "Lỗi tạo tài khoản ngân hàng");
+    } catch (e: unknown) {
+      setError(e instanceof GatewayError ? e.message : "Lỗi tạo tài khoản ngân hàng");
     } finally {
       setSaving(false);
     }
@@ -375,13 +336,24 @@ export function CreateBankAccountModal({
           />
         </Field>
 
-        <Field label="Chi nhánh mở tài khoản (Tự nhập)">
+        <Field label="Nơi mở tài khoản (ngân hàng / phòng giao dịch)">
           <Input
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            placeholder="Ví dụ: Chi nhánh Ba Đình - Hà Nội"
+            value={bankBranch}
+            onChange={(e) => setBankBranch(e.target.value)}
+            placeholder="Ví dụ: Sở giao dịch Ba Đình - Hà Nội"
             disabled={saving}
           />
+        </Field>
+
+        <Field label="Chi nhánh công ty sở hữu tài khoản">
+          <Select value={branchId} onChange={(e) => setBranchId(e.target.value)} disabled={saving}>
+            <option value="">— Chưa gán chi nhánh —</option>
+            {branches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </Select>
         </Field>
 
         <Field label="Số dư ban đầu khả dụng (VNĐ)" required>

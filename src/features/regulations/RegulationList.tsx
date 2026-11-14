@@ -8,6 +8,7 @@ import { Card, CardBody } from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Regulation, Branch } from "@/types";
 import { getStatusTone, getCategoryColor } from "./helpers";
 import { formatDate } from "@/lib/utils";
@@ -21,21 +22,31 @@ interface Props {
 }
 
 export default function RegulationSection({ items, onView }: Props) {
+  const { role, branchId } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_regulations_search", "");
   const [categoryFilter, setCategoryFilter] = useLocalStorageState<string>("hrm_regulations_category_filter", "all");
   const [statusFilter, setStatusFilter] = useLocalStorageState<string>("hrm_regulations_status_filter", "all");
-  const [scopeFilter, setScopeFilter] = useLocalStorageState<string>("hrm_regulations_scope_filter", "all");
+  const [scopeFilter, setScopeFilter] = useLocalStorageState<string>("hrm_regulations_scope_filter_by_id", "all");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
     apiGet<Branch[]>("/api/branches").then((d) => setBranches(d || [])).catch(() => {});
   }, []);
 
+  // Đổi branchId chi nhánh thành tên hiển thị; không map được (vd "Toàn công ty") thì hiện giá trị gốc.
+  const getBranchDisplayName = (branchId?: string | null) =>
+    branches.find((b) => b.id === branchId)?.name || branchId;
+
+  // Tài khoản bị ghim không còn control: phạm vi chốt theo session, vẫn kèm văn bản toàn công ty.
+  const sameBranchId = (a?: string, b?: string) =>
+    (a || "") === (b || "");
+
   // Filtered items
   const filteredItems = items.filter((item) => {
     const matchSearch =
       item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.regulationCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.summary.toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchCategory =
@@ -44,8 +55,10 @@ export default function RegulationSection({ items, onView }: Props) {
     const matchStatus =
       statusFilter === "all" || item.status === statusFilter;
 
-    const matchScope =
-      scopeFilter === "all" || item.scope === scopeFilter;
+    const itemScope = item.scopeBranchId || "Toàn công ty";
+    const matchScope = isAdmin
+      ? scopeFilter === "all" || itemScope === scopeFilter
+      : itemScope === "Toàn công ty" || sameBranchId(itemScope, branchId);
 
     return matchSearch && matchCategory && matchStatus && matchScope;
   });
@@ -102,21 +115,23 @@ export default function RegulationSection({ items, onView }: Props) {
               </select>
             </div>
 
-            <div>
-              <select
-                value={scopeFilter}
-                onChange={(e) => setScopeFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-              >
-                <option value="all">Tất cả phạm vi áp dụng</option>
-                <option value="Toàn công ty">Toàn công ty</option>
-                {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <select
+                  value={scopeFilter}
+                  onChange={(e) => setScopeFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                >
+                  <option value="all">Tất cả phạm vi áp dụng</option>
+                  <option value="Toàn công ty">Toàn công ty</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Chi nhánh {b.name} ({b.branchCode || b.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -160,7 +175,7 @@ export default function RegulationSection({ items, onView }: Props) {
                         </span>
                       )}
                       <span className="text-xs text-slate-500 font-medium">
-                        Phạm vi: <strong className="text-slate-700">{item.scope}</strong>
+                        Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.scopeBranchId) || "Toàn công ty"}</strong>
                       </span>
                     </div>
 
@@ -181,6 +196,7 @@ export default function RegulationSection({ items, onView }: Props) {
                         <FontAwesomeIcon icon={faCalendar} fontSize={14} className="text-slate-400" />
                         Hiệu lực: <strong className="text-slate-700">{formatDate(item.effectiveDate)}</strong>
                       </span>
+                      {item.expiryDate && <span>Hết hiệu lực: <strong className="text-slate-700">{formatDate(item.expiryDate)}</strong></span>}
                     </div>
                   </div>
 

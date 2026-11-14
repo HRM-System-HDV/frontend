@@ -5,6 +5,7 @@ import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Input, Textarea, Select } from "@/components/ui/Form";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 
@@ -13,9 +14,8 @@ export interface NewsFormPayload {
   summary: string;
   content: string;
   tag: string;
-  tagTone: NewsItem["tagTone"];
   pinned: boolean;
-  branch: string;
+  branchId: string | null;
 }
 
 interface Props {
@@ -26,13 +26,6 @@ interface Props {
   onSubmit: (payload: NewsFormPayload) => void;
 }
 
-function toneForTag(tag: string): NewsItem["tagTone"] {
-  if (tag === "Khẩn cấp" || tag === "Nghỉ lễ") return "danger";
-  if (tag === "Khen thưởng") return "warning";
-  if (tag === "Vận hành") return "success";
-  return "primary";
-}
-
 export default function CreateNewsModal({
   open,
   onClose,
@@ -41,45 +34,41 @@ export default function CreateNewsModal({
   onSubmit,
 }: Props) {
   const isEdit = Boolean(initial);
-  const [newTitle, setNewTitle] = useState("");
-  const [newTag, setNewTag] = useState("Thông báo");
-  const [newSummary, setNewSummary] = useState("");
-  const [newContent, setNewContent] = useState("");
-  const [newPinned, setNewPinned] = useState(false);
-  const [newBranch, setNewBranch] = useState("Toàn công ty");
+  const { role, branchId } = useCurrentUser();
+  const isAdmin = role === "admin";
+  const [newTitle, setNewTitle] = useState(initial?.title || "");
+  const [newTag, setNewTag] = useState(initial?.tag || "Thông báo");
+  const [newSummary, setNewSummary] = useState(initial?.summary || "");
+  const [newContent, setNewContent] = useState(initial?.content || "");
+  const [newPinned, setNewPinned] = useState(Boolean(initial?.pinned));
+  // Tài khoản bị ghim không có control nhưng giá trị vẫn phải vào payload.
+  const [newBranch, setNewBranch] = useState(
+    initial?.branchId || (isAdmin ? "Toàn công ty" : branchId)
+  );
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
+    let ignore = false;
     apiGet<Branch[]>("/api/branches")
-      .then((d) => setBranches(d || []))
+      .then((d) => {
+        if (!ignore) setBranches(d || []);
+      })
       .catch(() => {});
+    return () => {
+      ignore = true;
+    };
   }, []);
-
-  useEffect(() => {
-    if (open) {
-      setNewTitle(initial?.title || "");
-      setNewTag(initial?.tag || "Thông báo");
-      setNewSummary(initial?.summary || "");
-      setNewContent(initial?.content || "");
-      setNewPinned(Boolean(initial?.pinned));
-      setNewBranch(initial?.branch || "Toàn công ty");
-    }
-  }, [open, initial]);
 
   const handleSubmit = () => {
     if (!newTitle.trim() || !newContent.trim()) {
       alert("Vui lòng nhập đầy đủ tiêu đề và nội dung thông báo.");
       return;
-    }
-    const tone = toneForTag(newTag);
-    onSubmit({
+    }    onSubmit({
       title: newTitle.trim(),
       summary: newSummary.trim() || `${newContent.trim().substring(0, 120)}...`,
       content: newContent.trim(),
-      tag: newTag,
-      tagTone: tone,
-      pinned: newPinned || newTag === "Khẩn cấp",
-      branch: newBranch,
+      tag: newTag,      pinned: newPinned,
+      branchId: newBranch === "Toàn công ty" ? null : newBranch,
     });
   };
 
@@ -135,20 +124,22 @@ export default function CreateNewsModal({
             </Select>
           </Field>
 
-          <Field label="Chi nhánh áp dụng" className="mb-0">
-            <Select
-              value={newBranch}
-              onChange={(e) => setNewBranch(e.target.value)}
-              disabled={saving}
-            >
-              <option value="Toàn công ty">Toàn công ty</option>
-              {branches.map((b) => (
-                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                </option>
-              ))}
-            </Select>
-          </Field>
+          {isAdmin && (
+            <Field label="Chi nhánh áp dụng" className="mb-0">
+              <Select
+                value={newBranch}
+                onChange={(e) => setNewBranch(e.target.value)}
+                disabled={saving}
+              >
+                <option value="Toàn công ty">Toàn công ty</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    Chi nhánh {b.name} ({b.branchCode || b.id})
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
         </div>
 
         {/* 3. Tóm tắt ngắn */}

@@ -1,13 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faCode,
   faFileInvoiceDollar,
-  faFilter,
-  faPlus,
   faCheckCircle,
   faClock,
 } from "@fortawesome/free-solid-svg-icons";
@@ -22,7 +19,6 @@ import type { SoapTransaction } from "./types";
 interface Props {
   transactions: SoapTransaction[];
   onViewPayload: (t: SoapTransaction) => void;
-  onCreateDisbursement?: () => void;
 }
 
 export default function SoapTransactionsTable({
@@ -51,11 +47,6 @@ export default function SoapTransactionsTable({
         <div>
           <div className="font-mono font-bold text-xs text-primary flex items-center gap-1.5">
             {t.id}
-            {t.deduped && (
-              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                Trùng
-              </span>
-            )}
           </div>
           <div className="text-[11px] text-gray-500 font-mono">Mã đối soát: {t.bankReference}</div>
         </div>
@@ -119,19 +110,17 @@ export default function SoapTransactionsTable({
     },
     {
       key: "actions",
-      header: "Chứng từ",
+      header: "Thao tác",
       render: (t) => (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="white"
-            size="sm"
-            onClick={() => onViewPayload(t)}
-            className="text-xs flex items-center gap-1.5 text-gray-700 hover:text-primary"
-            title="Xem phiếu ủy nhiệm chi điện tử"
-          >
-            <FontAwesomeIcon icon={faFileInvoiceDollar} fontSize={12} className="text-primary" /> Xem ủy nhiệm chi
-          </Button>
-        </div>
+        <Button
+          variant="white"
+          size="sm"
+          onClick={() => onViewPayload(t)}
+          className="text-xs flex items-center gap-1.5 text-gray-700 hover:text-primary"
+          title="Xem chi tiết lệnh chi / ủy nhiệm chi điện tử"
+        >
+          <FontAwesomeIcon icon={faFileInvoiceDollar} fontSize={12} className="text-primary" /> Chi tiết
+        </Button>
       ),
     },
   ];

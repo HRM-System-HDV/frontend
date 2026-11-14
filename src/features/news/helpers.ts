@@ -1,3 +1,9 @@
+import type { NewsItem } from "./types";
+
+export function canManageNews(role: string, branchId: string | null | undefined, item: NewsItem) {
+  return role === "admin" || (role === "manager" && !!branchId && item.branchId === branchId);
+}
+
 export function getTagColor(tag: string) {
   switch (tag) {
     case "Khẩn cấp":

@@ -10,73 +10,20 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
-import type { Department, Employee } from "@/types";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import type { Department } from "@/types";
 import DepartmentList from "@/features/departments/DepartmentList";
-import DepartmentModal from "@/features/departments/DepartmentForm";
+import DepartmentModal, { type DepartmentFormPayload } from "@/features/departments/DepartmentForm";
 import { useCurrentUser } from "@/context/AuthContext";
-import { getTodayVN } from "@/lib/utils";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
 export default function DepartmentsPage() {
   const { role } = useCurrentUser();
-  const isManager = role === "manager";
+  // Ghi phòng ban (WRITE /api/departments) là nghiệp vụ vận hành: manager +
+  // admin làm được, nhân viên không thấy control nào.
+  const canWriteDepartments = role !== "staff";
 
   const [deptList, setDeptList] = useState<Department[]>([]);
-  const [empList, setEmpList] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
@@ -98,20 +45,16 @@ export default function DepartmentsPage() {
     try {
       setLoading(true);
       setError(null);
-      const [deptData, empData] = await Promise.all([
-        apiGet<Department[]>("/api/departments"),
-        apiGet<Employee[]>("/api/employees").catch(() => []),
-      ]);
-      const normalizedDepts = (deptData || []).map((d: any) => ({
+      const deptData = await apiGet<Department[]>("/api/departments");
+      const normalizedDepts = (deptData || []).map((d) => ({
         ...d,
         status: d.status || "hoạt động",
+        manager: d.manager || "",
         staff: d.staff ?? 0,
-        createdAt: d.createdAt || getTodayVN(),
       }));
       setDeptList(normalizedDepts);
-      setEmpList(empData || []);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách phòng ban";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách phòng ban";
       setError(msg);
       showToast(msg, "danger");
     } finally {
@@ -120,34 +63,29 @@ export default function DepartmentsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
-  const handleSave = async (data: Omit<Department, "id"> & { id?: string }) => {
+  const handleSave = async (data: DepartmentFormPayload) => {
     try {
       setActionInProgress(true);
       if (editing && editing.id) {
         const updated = await apiPut<Department>(`/api/departments/${encodeURIComponent(editing.id)}`, {
           name: data.name,
-          manager: data.manager,
+          managerId: data.managerId || null,
           status: data.status,
-          staff: data.staff,
+          departmentCode: data.departmentCode,
         });
-        setDeptList((prev) =>
-          prev.map((d) => (d.id === editing.id ? (updated || { ...d, ...data }) : d))
-        );
+        if (!updated?.id) throw new Error("Phản hồi phòng ban không hợp lệ");
         showToast("Cập nhật phòng ban thành công!", "success");
       } else {
         const created = await apiPost<Department>("/api/departments", {
           name: data.name,
-          manager: data.manager,
+          managerId: data.managerId || null,
           status: data.status || "hoạt động",
-          staff: data.staff ?? 0,
+          departmentCode: data.departmentCode,
         });
-        setDeptList((prev) => [
-          ...prev,
-          created || { id: `dept-${Date.now()}`, ...data, staff: 0, createdAt: getTodayVN() },
-        ]);
+        if (!created?.id) throw new Error("Phản hồi phòng ban không hợp lệ");
         showToast("Thêm phòng ban mới thành công!", "success");
       }
       setModalOpen(false);
@@ -169,9 +107,8 @@ export default function DepartmentsPage() {
       await apiPut(`/api/departments/${encodeURIComponent(lockTarget.id)}`, {
         status: nextStatus,
       });
-      setDeptList((prev) =>
-        prev.map((d) => (d.id === lockTarget.id ? { ...d, status: nextStatus as "hoạt động" | "tạm dừng" } : d))
-      );
+      // Đồng bộ lại danh sách từ server (số nhân sự/phòng ban có thể đã đổi).
+      await fetchData();
       showToast(
         `Đã chuyển trạng thái "${lockTarget.name}" sang ${nextStatus === "hoạt động" ? "Hoạt động" : "Tạm dừng"}`,
         "success"
@@ -190,7 +127,7 @@ export default function DepartmentsPage() {
     try {
       setActionInProgress(true);
       await apiDelete(`/api/departments/${encodeURIComponent(deleteTarget.id)}`);
-      setDeptList((prev) => prev.filter((d) => d.id !== deleteTarget.id));
+      await fetchData();
       showToast(`Đã xóa vĩnh viễn phòng ban "${deleteTarget.name}"`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa phòng ban";
@@ -200,6 +137,10 @@ export default function DepartmentsPage() {
       setDeleteTarget(null);
     }
   };
+
+  if (!canAccessPath(role, "/dashboard/departments")) {
+    return <NoAccessNotice description="Cơ cấu phòng ban chỉ dành cho Quản trị viên và Quản lý Chi nhánh." />;
+  }
 
   return (
     <div className="space-y-4">
@@ -229,7 +170,7 @@ export default function DepartmentsPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phòng ban" }]}
         actions={
-          !isManager ? (
+          canWriteDepartments ? (
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => {
@@ -274,34 +215,37 @@ export default function DepartmentsPage() {
       ) : (
         <DepartmentList
           departments={deptList}
-          employees={empList}
           onEdit={(d) => {
-            if (!isManager) {
+            if (canWriteDepartments) {
               setEditing(d);
               setModalOpen(true);
             }
           }}
-          onLock={!isManager ? setLockTarget : undefined}
-          onDelete={!isManager ? setDeleteTarget : undefined}
-          isManager={isManager}
         />
       )}
 
-      <DepartmentModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
-        department={editing}
-        employees={empList}
-        onSave={handleSave}
-        onDelete={!isManager ? (d) => {
-          setModalOpen(false);
-          setEditing(null);
-          setDeleteTarget(d);
-        } : undefined}
-      />
+      {modalOpen && (
+        <DepartmentModal
+          key={editing?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditing(null);
+          }}
+          department={editing}
+          onSave={handleSave}
+          onLock={canWriteDepartments ? (d) => {
+            setModalOpen(false);
+            setEditing(null);
+            setLockTarget(d);
+          } : undefined}
+          onDelete={canWriteDepartments ? (d) => {
+            setModalOpen(false);
+            setEditing(null);
+            setDeleteTarget(d);
+          } : undefined}
+        />
+      )}
 
       {/* Confirm Lock / Toggle status */}
       <ConfirmDialog

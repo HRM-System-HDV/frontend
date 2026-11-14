@@ -4,7 +4,6 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBuildingColumns,
   faCircleCheck,
-  faNetworkWired,
   faMoneyBillWave,
   faShieldHalved,
 } from "@fortawesome/free-solid-svg-icons";
@@ -30,6 +29,19 @@ export default function BankHeaderStats({
     .filter((t) => t.status === "success")
     .reduce((sum, t) => sum + t.totalAmount, 0);
 
+  // Trạng thái lấy từ kết quả ping thật của integration-service, không ghi cứng.
+  const connection = {
+    healthy: { badge: "Thông suốt 24/7", tone: "bg-emerald-50 text-emerald-700 border-emerald-200", dot: "bg-emerald-500", title: "Sẵn sàng chi lương tự động" },
+    degraded: { badge: "Kết nối chậm", tone: "bg-amber-50 text-amber-700 border-amber-200", dot: "bg-amber-500", title: "Ngân hàng phản hồi nhưng quá cảnh báo" },
+    down: { badge: "Mất kết nối", tone: "bg-red-50 text-red-700 border-red-200", dot: "bg-red-500", title: "Không gọi được cổng ngân hàng" },
+    unknown: { badge: "Chưa kiểm tra", tone: "bg-gray-50 text-gray-600 border-gray-200", dot: "bg-gray-400", title: "Chưa có lần ping thành công nào" },
+  }[gatewayConfig.status] ?? {
+    badge: "Chưa kiểm tra",
+    tone: "bg-gray-50 text-gray-600 border-gray-200",
+    dot: "bg-gray-400",
+    title: "Chưa có lần ping thành công nào",
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {/* 1. Trạng thái kết nối ngân hàng */}
@@ -39,18 +51,18 @@ export default function BankHeaderStats({
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
               Kết nối Trực tiếp Ngân hàng
             </span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Thông suốt 24/7
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${connection.tone}`}>
+              <span className={`w-2 h-2 rounded-full ${connection.dot}`} />
+              {connection.badge}
             </span>
           </div>
           <div className="text-lg font-bold text-gray-900">
-            Sẵn sàng chi lương tự động
+            {connection.title}
           </div>
           <div className="text-xs text-gray-500 mt-0.5">
             Thời gian phản hồi máy chủ:{" "}
             <span className="font-semibold text-gray-800">
-              {gatewayConfig.avgResponseTime}
+              {gatewayConfig.avgResponseTime || "—"}
             </span>
           </div>
         </div>
@@ -90,9 +102,9 @@ export default function BankHeaderStats({
           </div>
         </div>
         <div className="mt-4 flex items-center justify-between text-xs border-t border-gray-100 pt-3 text-gray-600">
-          <span>Chi nhánh mở tài khoản:</span>
+          <span>Nơi mở tài khoản:</span>
           <span className="font-semibold text-gray-800">
-            {primaryBank?.branch || "—"}
+            {primaryBank?.bankBranch || "—"}
           </span>
         </div>
       </div>

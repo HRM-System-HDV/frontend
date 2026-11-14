@@ -6,144 +6,83 @@ import {
   faGear,
   faTriangleExclamation,
   faCircleCheck,
-  faFilter,
-  faClock,
-  faCheck,
-  faXmark,
-  faListCheck,
+  faMagnifyingGlass,
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { Input } from "@/components/ui/Form";
+import { apiGet, apiPut, GatewayError } from "@/lib/api";
 import type { ShiftRequest, Employee, Branch } from "@/types";
 import ShiftRequestSection from "@/features/requests/RequestList";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
+import { configQuery, mapApiToConfig, mapConfigToApi } from "@/features/shifts/attendanceConfig";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { formatDate, formatDateTime } from "@/lib/utils";
 
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// BE chỉ trả 4 giá trị enum RequestType (integration-service).
+const TYPE_LABELS: Record<string, ShiftRequest["type"]> = {
+  leave: "nghỉ phép",
+  advance: "tạm ứng",
+  shift_swap: "đổi ca",
+  work_supplement: "bổ sung công",
+};
 
 function mapBackendRequest(r: any, empMap?: Map<string, string>): ShiftRequest {
-  const empName =
-    (r.employeeId && empMap?.get(r.employeeId)) ||
-    r.employee ||
-    r.employeeName ||
-    r.employeeId ||
-    "Nhân sự";
+  const empName = (r.employeeId && empMap?.get(r.employeeId)) || r.employeeId || "—";
+  const type: ShiftRequest["type"] = TYPE_LABELS[r.type] ?? "đổi ca";
+  const status: ShiftRequest["status"] =
+    r.status === "approved" ? "đã duyệt" : r.status === "rejected" ? "từ chối" : "chờ duyệt";
 
-  let type: ShiftRequest["type"] = "đổi ca";
-  if (r.type === "leave" || r.type === "nghỉ phép") {
-    type = "nghỉ phép";
-  } else if (r.type === "work_supplement" || r.type === "bổ sung công") {
-    type = "bổ sung công";
-  } else if (r.type === "advance" || r.type === "tạm ứng") {
-    type = "tạm ứng";
-  } else {
-    type = "đổi ca";
+  // BE không có cột from/to: suy từ ngày nghỉ (leaveStartDate/leaveEndDate,
+  // YYYY-MM-DD) hoặc giờ đề nghị bổ sung công (requestedCheckIn/Out, ISO).
+  let from = "—";
+  let to = "—";
+  if (r.leaveStartDate || r.leaveEndDate) {
+    from = r.leaveStartDate ? formatDate(r.leaveStartDate) : "—";
+    to = r.leaveEndDate ? formatDate(r.leaveEndDate) : "—";
+  } else if (r.requestedCheckIn || r.requestedCheckOut) {
+    from = r.requestedCheckIn ? formatDateTime(r.requestedCheckIn) : "—";
+    to = r.requestedCheckOut ? formatDateTime(r.requestedCheckOut) : "—";
   }
 
-  let status: ShiftRequest["status"] = "chờ duyệt";
-  if (r.status === "approved" || r.status === "đã duyệt") {
-    status = "đã duyệt";
-  } else if (r.status === "rejected" || r.status === "từ chối") {
-    status = "từ chối";
-  } else {
-    status = "chờ duyệt";
-  }
-
-  const createdDate = r.createdAt ? formatDate(r.createdAt) : "—";
-  const from = r.from || `${createdDate} 08:00`;
-  const to = r.to || `${createdDate} 17:30`;
-
-  let amount: string | undefined;
-  if (r.amount) {
-    amount = String(r.amount);
-  } else if (r.title && typeof r.title === "string") {
-    const match = r.title.match(/Tạm ứng(?: lương)?:\s*(.+)$/i);
-    if (match && match[1]) {
-      amount = match[1].trim();
-    }
-  }
+  // advanceAmount là chuỗi Decimal (số nguyên VNĐ) do BE serialize.
+  const amount =
+    r.advanceAmount != null && Number.isFinite(Number(r.advanceAmount))
+      ? `${Number(r.advanceAmount).toLocaleString("vi-VN")} ₫`
+      : undefined;
 
   return {
     id: r.id,
     employee: empName,
-    branch: r.branchSlug || r.branch || "HN-1",
+    branch: r.branchId || "",
     type,
     title: r.title,
     amount,
     from,
     to,
-    reason: r.content || r.title || r.reason || "Yêu cầu nội bộ cần phê duyệt",
+    reason: r.content || r.title || "",
     status,
-    createdAt: r.createdAt ? formatDateTime(r.createdAt) : createdDate,
+    shiftSwapMode: r.shiftSwapMode ?? undefined,
+    createdAt: r.createdAt ? formatDateTime(r.createdAt) : "—",
+    reviewedByName: r.reviewedByName || undefined,
+    reviewNote: r.reviewNote || undefined,
+    reviewedAt: r.reviewedAt ? formatDateTime(r.reviewedAt) : undefined,
   };
 }
 
 export default function RequestsPage() {
-  const { role, branchSlug, name: currentUserRealName } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   const isAdmin = role === "admin";
   const isManager = role === "manager";
-  const managerBranch = branchSlug.toUpperCase();
+  // Duyệt/từ chối đơn và cấu hình chấm công là nghiệp vụ quản lý (MANAGERS ở
+  // gateway) — nhân viên chỉ xem đơn của mình nên control không được render.
+  const canReviewRequests = role !== "staff";
+  const managerBranch = branchId;
 
   const [requests, setRequests] = useState<ShiftRequest[]>([]);
-  const [empList, setEmpList] = useState<Employee[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [actionInProgress, setActionInProgress] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
 
@@ -153,30 +92,48 @@ export default function RequestsPage() {
     "all"
   );
   const [typeFilter, setTypeFilter] = useLocalStorageState<string>("hrm_requests_type_filter", "all");
-  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_requests_branch_filter", "all");
-  const branchFilter = isManager ? managerBranch : savedBranchFilter;
+  const [savedBranchFilter, setSavedBranchFilter] = useLocalStorageState<string>("hrm_requests_branch_filter_by_id", "all");
+  const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_requests_search", "");
+  // Chỉ admin được chọn chi nhánh; manager và staff bị ghim chi nhánh của token
+  // nên không gửi branchId do người dùng chọn (gateway đã suy ra từ token).
+  const branchFilter = isAdmin ? savedBranchFilter : managerBranch;
   const setBranchFilter = useCallback(
     (b: string) => {
-      if (!isManager) setSavedBranchFilter(b);
+      if (isAdmin) setSavedBranchFilter(b);
     },
-    [isManager, setSavedBranchFilter]
+    [isAdmin, setSavedBranchFilter]
   );
 
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [attConfigSaving, setAttConfigSaving] = useState(false);
   const [attConfig, setAttConfig] = useState<AttendanceConfigState>({
     gracePeriod: "5",
-    shiftSwapMode: "Nhân viên tự xác nhận",
+    shiftSwapMode: "manager_approval",
     requireReasonSwap: true,
     allowDoubleCheckin: true,
     latePenaltyPct: "10",
     earlyLeavePenaltyPct: "10",
     earlyCheckinMinutes: "15",
-    maxPenaltiesPerMonth: "10 lần",
-    deductOnCheckout: true,
-    maxCheckinsPerDay: "3 lần",
-    maxSwapsPerMonth: "3 lần",
+    checkoutWindowMinutes: "60",
+    doubleCheckinEarlyMinutes: "0",
+    doubleCheckinLateMinutes: "0",
   });
+  // Admin chọn cấu hình mặc định hệ thống ("") hoặc theo chi nhánh; manager bị ghim chi nhánh mình.
+  const [attBranch, setAttBranch] = useState("");
+  const effectiveAttBranch = isManager ? managerBranch || "" : attBranch;
+
+  const fetchAttConfig = useCallback(async () => {
+    try {
+      const c = await apiGet<any>(`/api/attendance/config${configQuery(effectiveAttBranch)}`);
+      if (c) setAttConfig((prev) => mapApiToConfig(c, prev));
+    } catch {
+      // Không đọc được cấu hình thì giữ giá trị mặc định của form.
+    }
+  }, [effectiveAttBranch]);
+
+  useEffect(() => {
+    void fetchAttConfig();
+  }, [fetchAttConfig]);
 
   const showToast = (text: string, tone: "success" | "danger" = "success") => {
     setToast({ text, tone });
@@ -185,31 +142,23 @@ export default function RequestsPage() {
     }, 4000);
   };
 
-  const empNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const e of empList) {
-      map.set(e.id, e.name);
-    }
-    return map;
-  }, [empList]);
-
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const effectiveBranch = isManager ? managerBranch : (branchFilter === "all" ? "" : branchFilter);
+      const effectiveBranch = branchFilter === "all" ? "" : branchFilter;
       const queryParams = new URLSearchParams();
-      if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
-      if (statusFilter !== "all") queryParams.set("status", statusFilter);
-      if (typeFilter !== "all") queryParams.set("type", typeFilter);
+      if (effectiveBranch) queryParams.set("branchId", effectiveBranch);
+      // Không lọc status/type ở server: mảng trả về phải chứa đủ đơn để badge
+      // đếm đúng (trước đây server lọc trước nên badge "Đã duyệt" luôn 0).
+      // Việc lọc hiển thị vẫn thực hiện ở client (filteredRequests).
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-      const [requestsRes, employeesRes, configRes, branchesRes] = await Promise.allSettled([
+      const [requestsRes, employeesRes, branchesRes] = await Promise.allSettled([
         apiGet<any[]>(`/api/requests${queryString}`),
         apiGet<Employee[]>("/api/employees"),
-        apiGet<any>("/api/attendance/config"),
         apiGet<Branch[]>("/api/branches"),
       ]);
 
@@ -221,7 +170,6 @@ export default function RequestsPage() {
       if (employeesRes.status === "fulfilled" && Array.isArray(employeesRes.value)) {
         employeesData = employeesRes.value;
       }
-      setEmpList(employeesData);
 
       const currentEmpMap = new Map<string, string>();
       for (const e of employeesData) {
@@ -230,34 +178,13 @@ export default function RequestsPage() {
 
       if (requestsRes.status === "fulfilled" && Array.isArray(requestsRes.value)) {
         setRequests(requestsRes.value.map((r) => mapBackendRequest(r, currentEmpMap)));
-      }
-
-      if (configRes.status === "fulfilled" && configRes.value) {
-        const c = configRes.value;
-        const mapMode = (m?: string) => {
-          if (!m || m === "manual") return "Nhân viên tự xác nhận";
-          if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
-          return m;
-        };
-        const formatOption = (val: any, fallback: string) => {
-          if (val === 0) return "Không giới hạn";
-          if (val != null) return `${val} lần`;
-          return fallback;
-        };
-        setAttConfig((prev) => ({
-          ...prev,
-          gracePeriod: String(c.gracePeriodMinutes ?? prev.gracePeriod),
-          shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
-          requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
-          allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
-          latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
-          earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
-          earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
-          maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
-          deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
-          maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
-          maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
-        }));
+      } else if (requestsRes.status === "rejected") {
+        // Lỗi mạng/403 không được hiển thị như "không có yêu cầu nào".
+        setError(
+          requestsRes.reason instanceof GatewayError
+            ? requestsRes.reason.message
+            : "Không thể tải danh sách yêu cầu từ gateway"
+        );
       }
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách yêu cầu từ gateway";
@@ -265,21 +192,24 @@ export default function RequestsPage() {
     } finally {
       setLoading(false);
     }
-  }, [isManager, managerBranch, branchFilter, statusFilter, typeFilter]);
+  }, [branchFilter]);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   // Lọc hiển thị theo chi nhánh & trạng thái
   const filteredRequests = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
     return requests.filter((r) => {
-      // Chi nhánh
+      // Chi nhánh (manager không xác định được chi nhánh trong token -> xem toàn công ty)
       if (isManager) {
-        const match = r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "") || r.branch === "HN-1";
-        if (!match) return false;
+        if (branchId) {
+          const match = r.branch === branchId;
+          if (!match) return false;
+        }
       } else if (branchFilter !== "all") {
-        if (r.branch.toLowerCase().replace("-", "") !== branchFilter.toLowerCase().replace("-", "")) return false;
+        if (r.branch !== branchFilter) return false;
       }
 
       // Trạng thái
@@ -293,70 +223,60 @@ export default function RequestsPage() {
       if (typeFilter === "work_supplement" && r.type !== "bổ sung công") return false;
       if (typeFilter === "advance" && r.type !== "tạm ứng") return false;
 
+      // Tìm kiếm tự do trên các trường hiển thị ở bảng
+      if (q) {
+        const haystack = [r.employee, r.branch, r.type, r.title, r.reason, r.from, r.to, r.status, r.amount]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+
       return true;
     });
-  }, [requests, isManager, branchSlug, branchFilter, statusFilter, typeFilter]);
+  }, [requests, isManager, branchId, branchFilter, statusFilter, typeFilter, searchQuery]);
 
   // Bộ đếm
   const counts = useMemo(() => {
-    const list = isManager
-      ? requests.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.toLowerCase().replace("-", "") || r.branch === "HN-1")
-      : requests;
+    const list =
+      isManager && branchId
+        ? requests.filter(
+            (r) => r.branch === branchId
+          )
+        : requests;
     return {
       all: list.length,
       pending: list.filter((r) => r.status === "chờ duyệt").length,
       approved: list.filter((r) => r.status === "đã duyệt").length,
       rejected: list.filter((r) => r.status === "từ chối").length,
     };
-  }, [requests, isManager, branchSlug]);
-
-  const currentUserName =
-    currentUserRealName && currentUserRealName !== "Đang tải..."
-      ? `${currentUserRealName} (${isAdmin ? "Admin" : "Quản lý"})`
-      : isAdmin
-        ? "Quản trị viên"
-        : "Quản lý chi nhánh";
+  }, [requests, isManager, branchId]);
 
   // Duyệt yêu cầu (PUT /api/requests/:id/approve)
-  const handleApprove = async (id: string, note?: string) => {
+  const handleApprove = async (id: string) => {
     try {
-      setActionInProgress(true);
       await apiPut(`/api/requests/${encodeURIComponent(id)}/approve`, {
-        reviewedBy: currentUserName,
-        reviewNote: note || "Đã duyệt yêu cầu",
+        reviewNote: "Đã duyệt yêu cầu",
       });
-      setRequests((prev) =>
-        prev.map((x) => (x.id === id ? { ...x, status: "đã duyệt" as const } : x))
-      );
       showToast("Đã phê duyệt yêu cầu thành công! Thông báo tự động đã được gửi.", "success");
-      // Tải lại danh sách để đồng bộ trạng thái mới nhất từ backend
       fetchData();
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi phê duyệt yêu cầu";
       showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
     }
   };
 
   // Từ chối yêu cầu (PUT /api/requests/:id/reject)
-  const handleReject = async (id: string, note?: string) => {
+  const handleReject = async (id: string) => {
     try {
-      setActionInProgress(true);
       await apiPut(`/api/requests/${encodeURIComponent(id)}/reject`, {
-        reviewedBy: currentUserName,
-        reviewNote: note || "Từ chối yêu cầu",
+        reviewNote: "Từ chối yêu cầu",
       });
-      setRequests((prev) =>
-        prev.map((x) => (x.id === id ? { ...x, status: "từ chối" as const } : x))
-      );
       showToast("Đã từ chối yêu cầu. Thông báo tự động đã được gửi.", "success");
       fetchData();
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi từ chối yêu cầu";
       showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
     }
   };
 
@@ -364,24 +284,7 @@ export default function RequestsPage() {
   const handleSaveAttendanceConfig = async () => {
     try {
       setAttConfigSaving(true);
-      const parseLimit = (str: string) => {
-        if (!str || str.includes("Không giới hạn")) return 0;
-        const num = parseInt(str, 10);
-        return isNaN(num) ? 0 : num;
-      };
-      await apiPut("/api/attendance/config", {
-        gracePeriodMinutes: parseInt(attConfig.gracePeriod, 10) || 5,
-        shiftSwapMode: attConfig.shiftSwapMode,
-        requireReasonSwap: attConfig.requireReasonSwap,
-        allowDoubleCheckin: attConfig.allowDoubleCheckin,
-        latePenaltyPct: parseInt(attConfig.latePenaltyPct, 10) || 0,
-        earlyLeavePenaltyPct: parseInt(attConfig.earlyLeavePenaltyPct, 10) || 0,
-        earlyCheckinMinutes: parseInt(attConfig.earlyCheckinMinutes, 10) || 0,
-        maxPenaltiesPerMonth: parseLimit(attConfig.maxPenaltiesPerMonth),
-        deductOnCheckout: attConfig.deductOnCheckout,
-        maxCheckinsPerDay: parseLimit(attConfig.maxCheckinsPerDay),
-        maxSwapsPerMonth: parseLimit(attConfig.maxSwapsPerMonth),
-      });
+      await apiPut(`/api/attendance/config${configQuery(effectiveAttBranch)}`, mapConfigToApi(attConfig));
       showToast("Đã lưu cấu hình chấm công vào hệ thống", "success");
       setAttendanceOpen(false);
     } catch (e: any) {
@@ -419,7 +322,7 @@ export default function RequestsPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phê duyệt yêu cầu" }]}
         actions={
-          !isManager ? (
+          canReviewRequests ? (
             <div className="flex items-center gap-2">
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
@@ -442,60 +345,54 @@ export default function RequestsPage() {
         </div>
       )}
 
-      {/* Thanh lọc trạng thái, loại yêu cầu & chi nhánh */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        {/* Bộ lọc trạng thái */}
-        <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
-          <button
-            type="button"
-            onClick={() => setStatusFilter("all")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "all" ? "bg-white text-primary shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faListCheck} fontSize={14} />
-            <span>Tất cả ({counts.all})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("pending")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "pending" ? "bg-white text-amber-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faClock} fontSize={14} />
-            <span>Chờ duyệt ({counts.pending})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("approved")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "approved" ? "bg-white text-emerald-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faCheck} fontSize={14} />
-            <span>Đã duyệt ({counts.approved})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setStatusFilter("rejected")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all cursor-pointer ${
-              statusFilter === "rejected" ? "bg-white text-red-600 shadow-xs" : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <FontAwesomeIcon icon={faXmark} fontSize={14} />
-            <span>Từ chối ({counts.rejected})</span>
-          </button>
-        </div>
+      {/* Thanh tìm kiếm & bộ lọc: trạng thái, loại yêu cầu, chi nhánh */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 min-w-0">
+          {/* Tìm kiếm tự do, khớp cách làm ở danh sách Phòng ban & Chi nhánh */}
+          <div className="relative w-64 min-w-0">
+            <FontAwesomeIcon
+              icon={faMagnifyingGlass}
+              fontSize={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+            />
+            <Input
+              placeholder="Tìm theo nhân viên, lý do, thời gian..."
+              className="pl-8 pr-7 py-1.5 text-xs"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs"
+                title="Xóa tìm kiếm"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          {/* Bộ lọc trạng thái (gộp từ 4 tab Tất cả/Chờ duyệt/Đã duyệt/Từ chối) */}
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <select
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as "all" | "pending" | "approved" | "rejected")
+              }
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+            >
+              <option value="all">Tất cả trạng thái ({counts.all})</option>
+              <option value="pending">Chờ duyệt ({counts.pending})</option>
+              <option value="approved">Đã duyệt ({counts.approved})</option>
+              <option value="rejected">Từ chối ({counts.rejected})</option>
+            </select>
+          </div>
 
-        {/* Lọc loại yêu cầu & Chi nhánh */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-500">Loại đơn:</span>
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+              className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
             >
               <option value="all">Tất cả loại đơn</option>
               <option value="shift_swap">Đổi ca</option>
@@ -505,18 +402,17 @@ export default function RequestsPage() {
             </select>
           </div>
 
-          {!isManager && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-gray-500">Chi nhánh:</span>
+          {isAdmin && (
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
+                className="min-w-0 max-w-full text-xs font-medium border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:border-primary"
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {b.name} ({b.slug.toUpperCase()})
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.branchCode || b.id})
                   </option>
                 ))}
               </select>
@@ -541,8 +437,17 @@ export default function RequestsPage() {
       ) : (
         <ShiftRequestSection
           requests={filteredRequests}
-          onApprove={handleApprove}
-          onReject={handleReject}
+          onApprove={canReviewRequests ? handleApprove : undefined}
+          onReject={canReviewRequests ? handleReject : undefined}
+          canReviewPeerAcceptedSwap={isAdmin}
+          branchLabel={(branchId) =>
+            branches.find((b) => b.id === branchId)?.name || branchId || "—"
+          }
+          emptyMessage={
+            searchQuery.trim()
+              ? `Không tìm thấy yêu cầu phù hợp với "${searchQuery.trim()}"`
+              : "Không có yêu cầu nào"
+          }
         />
       )}
 
@@ -553,6 +458,10 @@ export default function RequestsPage() {
         saving={attConfigSaving}
         config={attConfig}
         setConfig={setAttConfig}
+        configBranchId={effectiveAttBranch}
+        onConfigBranchChange={setAttBranch}
+        configBranchLocked={isManager}
+        branchOptions={isManager ? branches.filter((b) => b.id === branchId) : branches}
       />
     </div>
   );

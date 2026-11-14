@@ -5,49 +5,17 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear, faPencil, faLock, faFileExcel } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import type { Payslip } from "@/types";
+import type { Payslip, Branch } from "@/types";
 import PayslipSection from "@/features/payslips/PayslipList";
 import BulkClosePayslipModal from "@/features/payslips/PayslipClose";
 import ExportPayslipModal from "@/features/payslips/PayslipExport";
 import GeneratePayslipModal, { type GenerateInput } from "@/features/payslips/PayslipGenerate";
 import AttendanceConfigModal, { type AttendanceConfigState } from "@/features/shifts/AttendanceForm";
+import { configQuery, mapApiToConfig, mapConfigToApi } from "@/features/shifts/attendanceConfig";
 import { EditPayslipModal, ConfirmClosePayslipDialog, PrintPayslipModal } from "@/features/payslips/PayslipEdit";
 import { useCurrentUser } from "@/context/AuthContext";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
-
-// api.ts dùng chung chưa có apiPut (quy tắc phân công: chỉ đọc, không sửa)
-// nên đặt helper PUT cục bộ trong trang, giống tiền lệ trang employees của Agent 1.
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    let body: unknown = null;
-    try {
-      body = text ? JSON.parse(text) : null;
-    } catch {
-      body = null;
-    }
-    if (!res.ok) {
-      const err = (body as { error?: { code: string; message: string } } | null)?.error;
-      throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-    }
-    if (body !== null && typeof body === "object" && "data" in body) {
-      return (body as { data: T }).data;
-    }
-    return body as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { apiGet, apiPost, apiPut, GatewayError } from "@/lib/api";
 
 interface PayslipRow {
   id: string;
@@ -58,23 +26,41 @@ interface PayslipRow {
   totalPenalty: number;
   netSalary: number;
   status: string;
+  branchId: string | null;
+  salaryType: "monthly" | "hourly";
+  workedHours: number | string | null;
+  workedShifts: number | null;
+  penaltyOverride: number | string | null;
   issuedAt: string;
+  adjustmentReason?: string | null;
 }
 
 interface EmployeeRow {
   id: string;
   name: string;
-  branch: string;
-  baseSalary?: number;
+  // API /api/employees chỉ trả branchId (không có field branch)
+  branchId?: string;
   status?: string;
 }
 
+// Kỳ lương mặc định theo định dạng BE yêu cầu: YYYY-MM (payroll-validator.js).
+const currentPeriod = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+};
+
 export default function PayslipsPage() {
-  const { role, branchSlug, name: currentUserName } = useCurrentUser();
+  const { role, branchId, name: currentUserName } = useCurrentUser();
   const isManager = role === "manager";
+  // Ghi lương (tạo bảng công, chỉnh phiếu, chốt) là thao tác ngân hàng: gateway
+  // chặn WRITE /api/payroll cho admin. Cấu hình chấm công vẫn thuộc manager.
+  const isAdmin = role === "admin";
+  const canWritePayroll = isAdmin;
+  const canConfigureAttendance = role !== "staff";
 
   const [slips, setSlips] = useState<Payslip[]>([]);
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedMonth, setSelectedMonth] = useLocalStorageState<string>("hrm_payslips_selected_month", "all");
@@ -86,6 +72,9 @@ export default function PayslipsPage() {
   const [generateSaving, setGenerateSaving] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
+  // Admin chọn cấu hình mặc định hệ thống ("") hoặc từng chi nhánh; manager bị ghim chi nhánh mình.
+  const [attBranch, setAttBranch] = useState("");
+  const effectiveAttBranch = isManager ? branchId || "" : attBranch;
   const [editSlipTarget, setEditSlipTarget] = useState<Payslip | null>(null);
   const [editBonusStr, setEditBonusStr] = useState("");
   const [editPenaltyStr, setEditPenaltyStr] = useState("");
@@ -97,51 +86,25 @@ export default function PayslipsPage() {
   const [attConfigSaving, setAttConfigSaving] = useState(false);
   const [attConfig, setAttConfig] = useState<AttendanceConfigState>({
     gracePeriod: "5",
-    shiftSwapMode: "Nhân viên tự xác nhận",
+    shiftSwapMode: "manager_approval",
     requireReasonSwap: true,
     allowDoubleCheckin: true,
     latePenaltyPct: "10",
     earlyLeavePenaltyPct: "10",
     earlyCheckinMinutes: "15",
-    maxPenaltiesPerMonth: "10 lần",
-    deductOnCheckout: true,
-    maxCheckinsPerDay: "3 lần",
-    maxSwapsPerMonth: "3 lần",
+    checkoutWindowMinutes: "60",
+    doubleCheckinEarlyMinutes: "0",
+    doubleCheckinLateMinutes: "0",
   });
 
   const fetchConfig = useCallback(async () => {
     try {
-      const c = await apiGet<any>("/api/attendance/config");
-      if (c) {
-        const mapMode = (m?: string) => {
-          if (!m || m === "manual") return "Nhân viên tự xác nhận";
-          if (m === "manager") return "Quản lý chi nhánh duyệt trực tiếp";
-          return m;
-        };
-        const formatOption = (val: any, fallback: string) => {
-          if (val === 0) return "Không giới hạn";
-          if (val != null) return `${val} lần`;
-          return fallback;
-        };
-        setAttConfig((prev) => ({
-          ...prev,
-          gracePeriod: String(c.gracePeriodMinutes ?? c.gracePeriod ?? prev.gracePeriod),
-          shiftSwapMode: mapMode(c.shiftSwapMode) || prev.shiftSwapMode,
-          requireReasonSwap: c.requireReasonSwap ?? prev.requireReasonSwap,
-          allowDoubleCheckin: c.allowDoubleCheckin ?? prev.allowDoubleCheckin,
-          latePenaltyPct: String(c.latePenaltyPct ?? prev.latePenaltyPct),
-          earlyLeavePenaltyPct: String(c.earlyLeavePenaltyPct ?? prev.earlyLeavePenaltyPct),
-          earlyCheckinMinutes: String(c.earlyCheckinMinutes ?? prev.earlyCheckinMinutes),
-          maxPenaltiesPerMonth: formatOption(c.maxPenaltiesPerMonth, prev.maxPenaltiesPerMonth),
-          deductOnCheckout: c.deductOnCheckout ?? prev.deductOnCheckout,
-          maxCheckinsPerDay: formatOption(c.maxCheckinsPerDay, prev.maxCheckinsPerDay),
-          maxSwapsPerMonth: formatOption(c.maxSwapsPerMonth, prev.maxSwapsPerMonth),
-        }));
-      }
+      const c = await apiGet<any>(`/api/attendance/config${configQuery(effectiveAttBranch)}`);
+      if (c) setAttConfig((prev) => mapApiToConfig(c, prev));
     } catch {
       // giữ mặc định, hiện lỗi qua toast của fetchData nếu cần
     }
-  }, []);
+  }, [effectiveAttBranch]);
 
   const fetchData = useCallback(async (month: string) => {
     try {
@@ -160,14 +123,18 @@ export default function PayslipsPage() {
           return {
             id: r.id,
             employee: emp?.name || r.employeeId,
-            branch: emp?.branch,
+            branch: r.branchId || undefined,
             month: r.month,
-            days: 0,
+            days: r.workedShifts,
+            salaryType: r.salaryType,
+            workedHours: r.workedHours == null ? null : Number(r.workedHours),
+            penaltyOverride: r.penaltyOverride == null ? null : Number(r.penaltyOverride),
             salary: Number(r.baseSalary) || 0,
             bonus: Number(r.bonus) || 0,
             penalty: Number(r.totalPenalty) || 0,
             total: Number(r.netSalary) || 0,
-            status: (r.status === "đã chốt" ? "đã chốt" : "chưa chốt") as Payslip["status"],
+            reason: r.adjustmentReason || undefined,
+            status: (["confirmed", "paid"].includes(r.status) ? "đã chốt" : "chưa chốt") as Payslip["status"],
           };
         })
       );
@@ -179,19 +146,40 @@ export default function PayslipsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData(selectedMonth);
-  }, [fetchData, selectedMonth]);
+    void fetchData(selectedMonth);
+  }, [selectedMonth, fetchData]);
 
   useEffect(() => {
-    fetchConfig();
+    void fetchConfig();
   }, [fetchConfig]);
 
   // Manager chỉ thấy phiếu của chi nhánh mình (lọc theo branch của employee).
+  // Phiếu không xác định được chi nhánh thì không hiển thị cho manager.
   const visibleSlips = useMemo(() => {
     if (!isManager) return slips;
-    const norm = (s: string) => s.toLowerCase().replace("-", "");
-    return slips.filter((p) => !p.branch || norm(p.branch) === norm(branchSlug));
-  }, [slips, isManager, branchSlug]);
+    const norm = (s: string) => s;
+    return slips.filter((p) => p.branch && norm(p.branch) === norm(branchId));
+  }, [slips, isManager, branchId]);
+
+  // Danh sách chi nhánh để map branchId -> tên cho nhãn hiển thị (selector, Excel).
+  useEffect(() => {
+    let ignore = false;
+    apiGet<Branch[]>("/api/branches")
+      .then((d) => {
+        if (!ignore) setBranches(d || []);
+      })
+      .catch(() => {});
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const getBranchDisplayName = (branchId: string): string =>
+    branches.find(
+      (b) =>
+        (b.id || "") ===
+        branchId
+    )?.name || branchId;
 
   const monthOptions = useMemo(
     () => Array.from(new Set(slips.map((s) => s.month))).sort().reverse(),
@@ -203,8 +191,12 @@ export default function PayslipsPage() {
 
   const handleSavePayslipEdit = async () => {
     if (!editSlipTarget || savingEdit) return;
-    const bonusVal = Math.max(0, Number(editBonusStr) || 0);
-    const penaltyVal = Math.max(0, Number(editPenaltyStr) || 0);
+    if (![editBonusStr, editPenaltyStr].every(value => /^\d{1,15}$/.test(value.trim()))) {
+      alert("Thưởng và phạt phải là số nguyên VNĐ không âm, tối đa 15 chữ số.");
+      return;
+    }
+    const bonusVal = Number(editBonusStr);
+    const penaltyVal = Number(editPenaltyStr);
     if ((bonusVal > 0 || penaltyVal > 0) && !editReasonStr.trim()) {
       alert("Vui lòng nhập lý do điều chỉnh khi có tiền thưởng hoặc phạt!");
       return;
@@ -214,6 +206,7 @@ export default function PayslipsPage() {
       const updated = await apiPut<PayslipRow>(`/api/payroll/payslips/${editSlipTarget.id}`, {
         bonus: bonusVal,
         totalPenalty: penaltyVal,
+        adjustmentReason: editReasonStr.trim() || null,
       });
       setSlips((prev) =>
         prev.map((s) =>
@@ -221,9 +214,10 @@ export default function PayslipsPage() {
             ? {
                 ...s,
                 bonus: Number(updated.bonus) || 0,
+                salary: Number(updated.baseSalary) || 0,
                 penalty: Number(updated.totalPenalty) || 0,
                 total: Number(updated.netSalary) || 0,
-                reason: editReasonStr.trim() || undefined,
+                reason: updated.adjustmentReason || undefined,
               }
             : s
         )
@@ -240,7 +234,7 @@ export default function PayslipsPage() {
     if (!confirmCloseSlipTarget || closingOne) return;
     setClosingOne(true);
     try {
-      await apiPut(`/api/payroll/payslips/${confirmCloseSlipTarget.id}/status`, { status: "đã chốt" });
+      await apiPut(`/api/payroll/payslips/${confirmCloseSlipTarget.id}/status`, { status: "confirmed" });
       setSlips((prev) => prev.map((s) => (s.id === confirmCloseSlipTarget.id ? { ...s, status: "đã chốt" as const } : s)));
       setConfirmCloseSlipTarget(null);
     } catch (e) {
@@ -259,7 +253,7 @@ export default function PayslipsPage() {
     setBulkSaving(true);
     try {
       const results = await Promise.allSettled(
-        targets.map((t) => apiPut(`/api/payroll/payslips/${t.id}/status`, { status: "đã chốt" }))
+        targets.map((t) => apiPut(`/api/payroll/payslips/${t.id}/status`, { status: "confirmed" }))
       );
       const okCount = results.filter((r) => r.status === "fulfilled").length;
       await fetchData(selectedMonth);
@@ -275,15 +269,15 @@ export default function PayslipsPage() {
       setGenerateError("Vui lòng chọn nhân viên.");
       return;
     }
-    if (!/^\d{2}-\d{4}$/.test(input.month.trim())) {
-      setGenerateError("Kỳ lương phải đúng định dạng MM-YYYY (ví dụ 10-2026).");
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(input.month.trim())) {
+      setGenerateError("Kỳ lương phải đúng định dạng YYYY-MM (ví dụ 2026-10).");
       return;
     }
     setGenerateSaving(true);
     setGenerateError(null);
     try {
       if (input.employeeId === "all") {
-        const activeEmployees = employees.filter((e) => e.status !== "đã nghỉ");
+        const activeEmployees = employees.filter((e) => e.status === "đang làm");
         if (activeEmployees.length === 0) {
           setGenerateError("Không có nhân viên nào để tạo phiếu lương.");
           return;
@@ -294,9 +288,7 @@ export default function PayslipsPage() {
             apiPost("/api/payroll/payslips/generate", {
               employeeId: emp.id,
               month: input.month.trim(),
-              baseSalary: emp.baseSalary && emp.baseSalary > 0 ? emp.baseSalary : input.baseSalary,
               bonus: input.bonus,
-              sumPenalty: true,
             })
           )
         );
@@ -343,9 +335,7 @@ export default function PayslipsPage() {
         await apiPost("/api/payroll/payslips/generate", {
           employeeId: input.employeeId,
           month: input.month.trim(),
-          baseSalary: input.baseSalary,
           bonus: input.bonus,
-          sumPenalty: true,
         });
         setGenerateOpen(false);
         await fetchData(selectedMonth);
@@ -368,7 +358,7 @@ export default function PayslipsPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Phiếu lương" }]}
         actions={
           <div className="flex items-center gap-2 flex-wrap">
-            {!isManager && (
+            {canWritePayroll && (
               <>
                 <Button
                   variant="white"
@@ -391,7 +381,7 @@ export default function PayslipsPage() {
             >
               <FontAwesomeIcon icon={faFileExcel} className="text-emerald-600" fontSize={15} /> Xuất file
             </Button>
-            {!isManager && (
+            {canConfigureAttendance && (
               <Button variant="white" onClick={() => setAttendanceOpen(true)}>
                 <FontAwesomeIcon icon={faGear} fontSize={16} /> Cấu hình chấm công
               </Button>
@@ -419,73 +409,62 @@ export default function PayslipsPage() {
       ) : (
         <PayslipSection
           payslips={visibleSlips}
-          onEdit={(p) => {
-            setEditSlipTarget(p);
-            setEditBonusStr(p.bonus ? String(p.bonus) : "");
-            setEditPenaltyStr(p.penalty ? String(p.penalty) : "");
-            setEditReasonStr(p.reason ?? "");
-          }}
-          onCloseOne={setConfirmCloseSlipTarget}
+          onEdit={
+            canWritePayroll
+              ? (p) => {
+                  setEditSlipTarget(p);
+                  setEditBonusStr(p.bonus ? String(p.bonus) : "");
+                  setEditPenaltyStr(p.penalty ? String(p.penalty) : "");
+                  setEditReasonStr(p.reason ?? "");
+                }
+              : undefined
+          }
+          onView={setPrintSlipTarget}
           onPrint={setPrintSlipTarget}
-          onExport={() => setExportOpen(true)}
-          
-          
           selectedMonth={selectedMonth}
           onMonthChange={setSelectedMonth}
           monthOptions={monthOptions}
         />
       )}
 
-      <BulkClosePayslipModal
-        open={closeSlipOpen}
-        onClose={() => setCloseSlipOpen(false)}
-        defaultMonth={selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")}
-        months={monthOptions}
-        pendingCount={pendingOfMonth(selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")).length}
-        saving={bulkSaving}
-        onConfirm={handleBulkClose}
-      />
-      <GeneratePayslipModal
-        open={generateOpen}
-        onClose={() => {
-          setGenerateOpen(false);
-          setGenerateError(null);
-        }}
-        employees={employees.map((e) => ({
-          id: e.id,
-          name: e.name,
-          baseSalary: e.baseSalary,
-          status: e.status,
-        }))}
-        defaultMonth={selectedMonth !== "all" ? selectedMonth : "10-2026"}
-        saving={generateSaving}
-        error={generateError}
-        onConfirm={handleGenerate}
-      />
+      {closeSlipOpen && (
+        <BulkClosePayslipModal
+          key="bulk-close-modal"
+          open={closeSlipOpen}
+          onClose={() => setCloseSlipOpen(false)}
+          defaultMonth={selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")}
+          months={monthOptions}
+          pendingCount={pendingOfMonth(selectedMonth !== "all" ? selectedMonth : (monthOptions[0] ?? "")).length}
+          saving={bulkSaving}
+          onConfirm={handleBulkClose}
+        />
+      )}
+      {generateOpen && (
+        <GeneratePayslipModal
+          key="generate-modal"
+          open={generateOpen}
+          onClose={() => {
+            setGenerateOpen(false);
+            setGenerateError(null);
+          }}
+          employees={employees.map((e) => ({
+            id: e.id,
+            name: e.name,
+            status: e.status,
+          }))}
+          defaultMonth={selectedMonth !== "all" ? selectedMonth : currentPeriod()}
+          saving={generateSaving}
+          error={generateError}
+          onConfirm={handleGenerate}
+        />
+      )}
       <AttendanceConfigModal
         open={attendanceOpen}
         onClose={() => setAttendanceOpen(false)}
         onSave={async () => {
           try {
             setAttConfigSaving(true);
-            const parseLimit = (str: string) => {
-              if (!str || str.includes("Không giới hạn")) return 0;
-              const num = parseInt(str, 10);
-              return isNaN(num) ? 0 : num;
-            };
-            await apiPut("/api/attendance/config", {
-              gracePeriodMinutes: parseInt(attConfig.gracePeriod, 10) || 5,
-              shiftSwapMode: attConfig.shiftSwapMode,
-              requireReasonSwap: attConfig.requireReasonSwap,
-              allowDoubleCheckin: attConfig.allowDoubleCheckin,
-              latePenaltyPct: parseInt(attConfig.latePenaltyPct, 10) || 0,
-              earlyLeavePenaltyPct: parseInt(attConfig.earlyLeavePenaltyPct, 10) || 0,
-              earlyCheckinMinutes: parseInt(attConfig.earlyCheckinMinutes, 10) || 0,
-              maxPenaltiesPerMonth: parseLimit(attConfig.maxPenaltiesPerMonth),
-              deductOnCheckout: attConfig.deductOnCheckout,
-              maxCheckinsPerDay: parseLimit(attConfig.maxCheckinsPerDay),
-              maxSwapsPerMonth: parseLimit(attConfig.maxSwapsPerMonth),
-            });
+            await apiPut(`/api/attendance/config${configQuery(effectiveAttBranch)}`, mapConfigToApi(attConfig));
             setAttendanceOpen(false);
           } catch {
             // ignore
@@ -496,6 +475,10 @@ export default function PayslipsPage() {
         saving={attConfigSaving}
         config={attConfig}
         setConfig={setAttConfig}
+        configBranchId={effectiveAttBranch}
+        onConfigBranchChange={setAttBranch}
+        configBranchLocked={isManager}
+        branchOptions={isManager ? branches.filter((b) => b.id === branchId) : branches}
       />
 
       <EditPayslipModal
@@ -508,6 +491,20 @@ export default function PayslipsPage() {
         onReasonChange={setEditReasonStr}
         onClose={() => setEditSlipTarget(null)}
         onSave={handleSavePayslipEdit}
+        onPrint={() => {
+          const target = editSlipTarget;
+          setEditSlipTarget(null);
+          if (target) setPrintSlipTarget(target);
+        }}
+        onClosePayslip={
+          canWritePayroll
+            ? () => {
+                const target = editSlipTarget;
+                setEditSlipTarget(null);
+                if (target) setConfirmCloseSlipTarget(target);
+              }
+            : undefined
+        }
       />
       <ConfirmClosePayslipDialog
         payslip={confirmCloseSlipTarget}
@@ -522,6 +519,7 @@ export default function PayslipsPage() {
         months={monthOptions}
         defaultMonth={selectedMonth}
         userName={currentUserName || "Quản trị viên"}
+        branchLabel={getBranchDisplayName}
       />
     </div>
   );

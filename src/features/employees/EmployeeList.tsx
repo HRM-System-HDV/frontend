@@ -4,11 +4,9 @@ import { useState, useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faLock,
   faMagnifyingGlass,
   faSitemap,
   faStore,
-  faTrashCan,
 } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
@@ -22,8 +20,6 @@ interface Props {
   departments?: Department[];
   onOpenDetail?: (e: Employee) => void;
   onSelect?: (e: Employee) => void;
-  onLock?: (e: Employee) => void;
-  onDelete?: (e: Employee) => void;
   isManager?: boolean;
   managerBranch?: string;
   selectedBranchFilter?: string;
@@ -36,8 +32,6 @@ export default function EmployeeSection({
   departments = [],
   onOpenDetail,
   onSelect,
-  onLock,
-  onDelete,
   isManager = false,
   managerBranch,
   selectedBranchFilter,
@@ -65,29 +59,26 @@ export default function EmployeeSection({
         e.email.toLowerCase().includes(q) ||
         (e.department && e.department.toLowerCase().includes(q));
 
-      const matchesBranch = branchFilter === "all" || e.branch === branchFilter;
+      const matchesBranch = branchFilter === "all" || e.branchId === branchFilter;
       const matchesDepartment =
-        departmentFilter === "all" || e.department === departmentFilter;
+        departmentFilter === "all" || e.departmentId === departmentFilter;
 
       return matchesSearch && matchesBranch && matchesDepartment;
     });
   }, [employees, searchQuery, branchFilter, departmentFilter]);
 
-    const branchMap = useMemo(() => {
+  const branchMap = useMemo(() => {
     const map = new Map<string, string>();
     for (const b of branches) {
-      const slugKey = (b.slug || "").toLowerCase().replace(/-/g, "");
-      if (slugKey) map.set(slugKey, b.name);
-      if (b.id) map.set(b.id.toLowerCase().replace(/-/g, ""), b.name);
-      if (b.name) map.set(b.name.toLowerCase().replace(/-/g, ""), b.name);
+      if (b.id) map.set(b.id, b.name);
     }
     return map;
   }, [branches]);
 
-  const getBranchDisplayName = (slugOrName?: string) => {
-    if (!slugOrName) return "—";
-    const key = slugOrName.toLowerCase().replace(/-/g, "");
-    return branchMap.get(key) || slugOrName;
+  const getBranchDisplayName = (branchId?: string | null) => {
+    if (!branchId) return "—";
+    const key = branchId;
+    return branchMap.get(key) || branchId;
   };
 
   const columns: Column<Employee>[] = [
@@ -117,7 +108,7 @@ export default function EmployeeSection({
     {
       key: "branch",
       header: "Chi nhánh",
-      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branch)}</Badge>,
+      render: (e) => <Badge tone="gray">{getBranchDisplayName(e.branchId)}</Badge>,
     },
     {
       key: "department",
@@ -145,16 +136,18 @@ export default function EmployeeSection({
       key: "actions",
       header: "Thao tác",
       render: (e) => (
-        <button
-          type="button"
-          onClick={() => {
-            if (onOpenDetail) onOpenDetail(e);
-            else if (onSelect) onSelect(e);
-          }}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-        >
-          Chi tiết
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (onOpenDetail) onOpenDetail(e);
+              else if (onSelect) onSelect(e);
+            }}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+        </div>
       ),
     },
   ];
@@ -164,26 +157,14 @@ export default function EmployeeSection({
       <CardHeader>
         <CardTitle>
           Danh sách nhân sự
-          {branchFilter !== "all" ? ` • ${branchFilter}` : ""}
-          {departmentFilter !== "all" ? ` • ${departmentFilter}` : ""}
           {" "}
           {filteredEmployees.length !== employees.length
             ? `(${filteredEmployees.length}/${employees.length})`
             : `(${employees.length})`}
         </CardTitle>
         <div className="flex flex-wrap items-center gap-2">
-          {/* Lọc Chi nhánh */}
-          {isManager ? (
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-medium text-gray-700">
-              <FontAwesomeIcon icon={faStore} fontSize={14} className="text-primary" />
-              <span>
-                Chi nhánh: <strong className="text-gray-900">{managerBranch}</strong>
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                Cố định
-              </span>
-            </div>
-          ) : (
+          {/* Lọc Chi nhánh: chỉ admin; vai trò bị ghim xem tên chi nhánh ở footer sidebar */}
+          {!isManager && (
             <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs max-w-[180px]">
               <FontAwesomeIcon icon={faStore} fontSize={14} className="text-gray-500" />
               <select
@@ -193,8 +174,8 @@ export default function EmployeeSection({
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    {b.slug.toUpperCase()}
+                  <option key={b.id} value={b.id}>
+                    {getBranchDisplayName(b.id)}
                   </option>
                 ))}
               </select>
@@ -211,7 +192,7 @@ export default function EmployeeSection({
             >
               <option value="all">Tất cả phòng ban</option>
               {departments.map((d) => (
-                <option key={d.id} value={d.name}>
+                <option key={d.id} value={d.id}>
                   {d.name}
                 </option>
               ))}

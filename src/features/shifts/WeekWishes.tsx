@@ -13,24 +13,25 @@ import { formatDateTime } from "@/lib/utils";
 interface Props {
   registrations: WeeklyRegistration[];
   onAssignFromRegistration?: (registration: WeeklyRegistration) => void;
+  isManager?: boolean;
 }
 
-export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration }: Props) {
-  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter", "all");
+export default function WeeklyRegistrationSection({ registrations, onAssignFromRegistration, isManager = false }: Props) {
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_week_wishes_branch_filter_by_id", "all");
 
   const filteredRegistrations = useMemo(() => {
     if (branchFilter === "all") return registrations;
     return registrations.filter(
-      (r) => r.branch.toLowerCase().replace("-", "") === branchFilter.toLowerCase().replace("-", "")
+      (r) => r.branchId === branchFilter
     );
   }, [registrations, branchFilter]);
 
   const branches = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     for (const r of registrations) {
-      if (r.branch && r.branch !== "—") set.add(r.branch.toUpperCase());
+      if (r.branchId) map.set(r.branchId, r.branch);
     }
-    return Array.from(set);
+    return Array.from(map, ([id, name]) => ({ id, name }));
   }, [registrations]);
 
   const columns: Column<WeeklyRegistration>[] = [
@@ -41,7 +42,7 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
         <div>
           <span className="font-semibold text-gray-800">{r.employeeName}</span>
           <span className="block text-xs text-gray-400">
-            {r.role} • Chi nhánh {r.branch && r.branch.startsWith("c") && r.branch.length >= 20 ? "Quận 1" : r.branch}
+            {r.role} • Chi nhánh {r.branch || "—"}
           </span>
         </div>
       ),
@@ -92,19 +93,19 @@ export default function WeeklyRegistrationSection({ registrations, onAssignFromR
         <div>
           <CardTitle>Bảng tổng hợp đăng ký ca làm việc trong tuần</CardTitle>
         </div>
-        <div className="flex items-center gap-2">
-          {branches.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {!isManager && branches.length > 1 && (
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0 bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1 text-xs">
               <FontAwesomeIcon icon={faStore} fontSize={13} className="text-primary" />
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
-                className="bg-transparent border-none text-xs font-medium text-gray-800 focus:outline-hidden cursor-pointer"
+                className="min-w-0 max-w-full bg-transparent border-none text-xs font-medium text-gray-800 focus:outline-hidden cursor-pointer"
               >
                 <option value="all">Tất cả chi nhánh</option>
                 {branches.map((b) => (
-                  <option key={b} value={b}>
-                    Chi nhánh {b}
+                  <option key={b.id} value={b.id}>
+                    Chi nhánh {b.name}
                   </option>
                 ))}
               </select>

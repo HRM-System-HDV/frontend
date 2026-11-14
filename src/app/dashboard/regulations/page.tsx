@@ -9,66 +9,15 @@ import type { Regulation } from "@/types";
 import RegulationSection from "@/features/regulations/RegulationList";
 import RegulationDetailModal from "@/features/regulations/RegulationDetail";
 import RegulationFormModal, { type RegulationFormInput } from "@/features/regulations/RegulationForm";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
-import { formatDate, getTodayVN } from "@/lib/utils";
-
-// api.ts dùng chung chưa có apiPut/apiDelete (quy tắc phân công: chỉ đọc, không sửa)
-// nên đặt helper cục bộ trong trang, giống tiền lệ các trang employees/payslips/news.
-async function parseEnvelope<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: T }).data;
-  }
-  return body as T;
-}
-
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function todayStr(): string {
-  return getTodayVN();
-}
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
+import { canManageRegulation } from "@/features/regulations/helpers";
 
 export default function RegulationsManagementPage() {
+  const { role, branchId } = useCurrentUser();
+  // WRITE /api/regulations = manager + admin; nhân viên chỉ đọc văn bản.
+  const canWriteRegulations = role === "admin" || (role === "manager" && !!branchId);
+
   const [items, setItems] = useState<Regulation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +44,7 @@ export default function RegulationsManagementPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   // Mở modal tạo mới
@@ -106,6 +55,7 @@ export default function RegulationsManagementPage() {
 
   // Mở modal chỉnh sửa
   const handleOpenEditModal = (item: Regulation) => {
+    if (!canManageRegulation(role, branchId, item)) return;
     setEditingItem(item);
     setIsEditModalOpen(true);
   };
@@ -118,18 +68,20 @@ export default function RegulationsManagementPage() {
 
   // Lưu tạo mới hoặc cập nhật qua API thật
   const handleSaveItem = async (input: RegulationFormInput) => {
+    if (!canWriteRegulations || (editingItem && !canManageRegulation(role, branchId, editingItem))) return;
     setSaving(true);
     try {
       if (editingItem) {
         const updated = await apiPut<Regulation>(`/api/regulations/${editingItem.id}`, {
-          code: input.code?.trim() || editingItem.code,
+          regulationCode: input.regulationCode?.trim() || editingItem.regulationCode,
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
           content: input.content.trim(),
           status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || getTodayVN(),
+          scopeBranchId: input.scopeBranchId,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           version: input.version,
           pinned: input.pinned,
         });
@@ -137,18 +89,17 @@ export default function RegulationsManagementPage() {
         if (viewingItem?.id === editingItem.id) setViewingItem(updated);
       } else {
         const created = await apiPost<Regulation>("/api/regulations", {
-          ...(input.code?.trim() ? { code: input.code.trim() } : {}),
+          ...(input.regulationCode?.trim() ? { regulationCode: input.regulationCode.trim() } : {}),
           title: input.title.trim(),
           category: input.category,
           summary: input.summary.trim() || input.title.trim(),
           content: input.content.trim(),
           status: input.status,
-          scope: input.scope,
-          effectiveDate: formatDate(input.effectiveDate) || todayStr(),
+          scopeBranchId: input.scopeBranchId,
+          effectiveDate: input.effectiveDate,
+          expiryDate: input.expiryDate,
           version: input.version || "1.0",
-          pinned: input.pinned,
-          attachments: 0,
-        });
+          pinned: input.pinned,        });
         setItems((prev) => [created, ...prev]);
       }
       setIsEditModalOpen(false);
@@ -163,7 +114,7 @@ export default function RegulationsManagementPage() {
   // Bật/tắt ghim qua API thật
   const handleTogglePin = async (id: string) => {
     const target = items.find((i) => i.id === id);
-    if (!target) return;
+    if (!target || !canManageRegulation(role, branchId, target)) return;
     try {
       const updated = await apiPut<Regulation>(`/api/regulations/${id}`, { pinned: !target.pinned });
       setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
@@ -175,6 +126,8 @@ export default function RegulationsManagementPage() {
 
   // Xóa nội quy qua API thật
   const handleDeleteItem = async (id: string, title?: string) => {
+    const target = items.find(item => item.id === id);
+    if (!target || !canManageRegulation(role, branchId, target)) return;
     if (!confirm(`Bạn có chắc chắn muốn xóa văn bản nội quy "${title}" không?`)) return;
     try {
       await apiDelete(`/api/regulations/${id}`);
@@ -190,14 +143,16 @@ export default function RegulationsManagementPage() {
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={handleOpenCreateModal}
-              className="flex items-center gap-1.5"
-            >
-              <FontAwesomeIcon icon={faPlus} fontSize={18} />
-              Tạo văn bản nội quy mới
-            </Button>
+            {canWriteRegulations && (
+              <Button
+                variant="primary"
+                onClick={handleOpenCreateModal}
+                className="flex items-center gap-1.5"
+              >
+                <FontAwesomeIcon icon={faPlus} fontSize={18} />
+                Tạo văn bản nội quy mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -222,24 +177,24 @@ export default function RegulationsManagementPage() {
         <RegulationSection
           items={items}
           onView={setViewingItem}
-          onEdit={handleOpenEditModal}
-          onDelete={handleDeleteItem}
-          onTogglePin={handleTogglePin}
+          onEdit={canWriteRegulations ? handleOpenEditModal : undefined}
+          onTogglePin={canWriteRegulations ? handleTogglePin : undefined}
         />
       )}
 
-      {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH */}
+      {/* MODAL 1: XEM TOÀN VĂN QUY ĐỊNH — chỗ duy nhất có nút xóa */}
       <RegulationDetailModal
         item={viewingItem}
         onClose={() => setViewingItem(null)}
-        onEdit={handleEditFromView}
-        onDelete={handleDeleteItem}
-        onTogglePin={handleTogglePin}
+        onEdit={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleEditFromView : undefined}
+        onDelete={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleDeleteItem : undefined}
+        onTogglePin={viewingItem && canManageRegulation(role, branchId, viewingItem) ? handleTogglePin : undefined}
       />
 
       {/* MODAL 2: TẠO MỚI / CHỈNH SỬA VĂN BẢN */}
       {isEditModalOpen && (
         <RegulationFormModal
+          key={editingItem?.id ?? "new"}
           initial={editingItem}
           onClose={() => {
             setIsEditModalOpen(false);

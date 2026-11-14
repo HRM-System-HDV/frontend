@@ -7,6 +7,7 @@ import { faFileExcel, faDownload, faSpinner } from "@fortawesome/free-solid-svg-
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import { Field, Select } from "@/components/ui/Form";
+import { useCurrentUser } from "@/context/AuthContext";
 import { formatDateTime, formatVND } from "@/lib/utils";
 import type { Payslip } from "@/types";
 
@@ -135,10 +136,10 @@ export async function exportPayslipsToExcel(slips: Payslip[], options: ExportOpt
   let totalNet = 0;
 
   slips.forEach((p, idx) => {
-    const base = Number(p.salary) || 0;
+    const base = Number(p.salary ?? p.baseSalary) || 0;
     const bonus = Number(p.bonus) || 0;
-    const penalty = Number(p.penalty) || 0;
-    const net = Number(p.total) || 0;
+    const penalty = Number(p.penalty ?? p.totalPenalty) || 0;
+    const net = Number(p.total ?? p.netSalary) || 0;
 
     totalBase += base;
     totalBonus += bonus;
@@ -254,6 +255,8 @@ interface ExportModalProps {
   months: string[];
   defaultMonth?: string;
   userName?: string;
+  /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
+  branchLabel?: (branchId: string) => string;
 }
 
 export default function ExportPayslipModal({
@@ -263,7 +266,11 @@ export default function ExportPayslipModal({
   months,
   defaultMonth = "all",
   userName,
+  branchLabel,
 }: ExportModalProps) {
+  const { role } = useCurrentUser();
+  // Tài khoản bị ghim chi nhánh: tập dữ liệu đã chốt theo prop `payslips` nên để "all".
+  const isAdmin = role === "admin";
   const [selectedMonth, setSelectedMonth] = useState<string>(defaultMonth);
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
@@ -298,10 +305,10 @@ export default function ExportPayslipModal({
     let penalty = 0;
     let net = 0;
     targetSlips.forEach((p) => {
-      base += Number(p.salary) || 0;
+      base += Number(p.salary ?? p.baseSalary) || 0;
       bonus += Number(p.bonus) || 0;
-      penalty += Number(p.penalty) || 0;
-      net += Number(p.total) || 0;
+      penalty += Number(p.penalty ?? p.totalPenalty) || 0;
+      net += Number(p.total ?? p.netSalary) || 0;
     });
     return { base, bonus, penalty, net };
   }, [targetSlips]);
@@ -313,12 +320,17 @@ export default function ExportPayslipModal({
     }
     setExporting(true);
     try {
-      await exportPayslipsToExcel(targetSlips, {
-        month: selectedMonth,
-        branch: selectedBranch,
-        status: selectedStatus,
-        exportedBy: userName,
-      });
+      // Giá trị lọc vẫn là branchId; chỉ nhãn (header + cột Excel) đổi branchId -> tên.
+      const resolve = (branchId?: string) => (branchId ? (branchLabel ? branchLabel(branchId) : branchId) : branchId);
+      await exportPayslipsToExcel(
+        targetSlips.map((p) => ({ ...p, branch: resolve(p.branch) })),
+        {
+          month: selectedMonth,
+          branch: selectedBranch === "all" ? selectedBranch : resolve(selectedBranch),
+          status: selectedStatus,
+          exportedBy: userName,
+        }
+      );
       onClose();
     } catch (e: any) {
       alert(e?.message || "Lỗi khi xuất file Excel phiếu lương");
@@ -389,7 +401,7 @@ export default function ExportPayslipModal({
           </Field>
         </div>
 
-        {branchOptions.length > 0 && (
+        {isAdmin && branchOptions.length > 0 && (
           <Field label="Chi nhánh áp dụng" className="mb-0">
             <Select
               value={selectedBranch}
@@ -399,7 +411,7 @@ export default function ExportPayslipModal({
               <option value="all">Toàn bộ chi nhánh</option>
               {branchOptions.map((b) => (
                 <option key={b} value={b}>
-                  Chi nhánh {b}
+                  Chi nhánh {branchLabel ? branchLabel(b) : b}
                 </option>
               ))}
             </Select>

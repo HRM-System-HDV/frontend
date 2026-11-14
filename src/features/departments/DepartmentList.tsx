@@ -1,50 +1,27 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faLock,
-  faPencil,
-  faTrashCan,
   faMagnifyingGlass,
 } from "@fortawesome/free-solid-svg-icons";
 import Badge, { StatusBadge } from "@/components/ui/Badge";
 import Table, { Column } from "@/components/ui/Table";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Form";
-import type { Department, Employee } from "@/types";
+import type { Department } from "@/types";
 
 interface Props {
   departments: Department[];
-  employees: Employee[];
   onEdit: (d: Department) => void;
-  onLock?: (d: Department) => void;
-  onDelete?: (d: Department) => void;
-  isManager?: boolean;
 }
 
 export default function DepartmentList({
   departments,
-  employees,
   onEdit,
-  onLock,
-  onDelete,
-  isManager = false,
 }: Props) {
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_departments_search", "");
-
-  // Tính số nhân sự thực tế theo từng phòng ban
-  const staffCounts = useMemo(() => {
-    const map: Record<string, number> = {};
-    employees.forEach((e) => {
-      const key = (e.department || "").trim().toLowerCase();
-      if (key) {
-        map[key] = (map[key] || 0) + 1;
-      }
-    });
-    return map;
-  }, [employees]);
 
   const filteredDepartments = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -52,18 +29,15 @@ export default function DepartmentList({
     return departments.filter(
       (d) =>
         d.name.toLowerCase().includes(q) ||
-        d.code.toLowerCase().includes(q) ||
-        d.manager.toLowerCase().includes(q)
+        d.departmentCode.toLowerCase().includes(q) ||
+        // `manager` có thể null (phòng ban chưa bổ nhiệm người phụ trách) —
+        // bắt buộc chặn null trước khi toLowerCase, giống cột "Phụ trách" bên dưới.
+        Boolean(d.manager && d.manager.toLowerCase().includes(q))
     );
   }, [departments, searchQuery]);
 
 
   const columns: Column<Department>[] = [
-    {
-      key: "code",
-      header: "Mã phòng ban",
-      render: (d) => <span className="text-sm text-gray-700">{d.code}</span>,
-    },
     {
       key: "name",
       header: "Phòng ban",
@@ -82,7 +56,7 @@ export default function DepartmentList({
       key: "staff",
       header: "Nhân sự",
       render: (d) => {
-        const count = staffCounts[(d.name || "").trim().toLowerCase()] ?? d.staff ?? 0;
+        const count = d.staff ?? 0;
         return (
           <div className="flex items-center gap-1.5">
             <span className="font-bold text-sm text-gray-800">{count}</span>
@@ -98,23 +72,25 @@ export default function DepartmentList({
         <StatusBadge status={d.status === "hoạt động" ? "Hoạt động" : "Bị khóa"} />
       ),
     },
-    ...(!isManager
-      ? [
-          {
-            key: "actions" as keyof Department,
-            header: "Thao tác",
-            render: (d: Department) => (
-              <button
-                type="button"
-                onClick={() => onEdit(d)}
-                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
-              >
-                Chi tiết
-              </button>
-            ),
-          },
-        ]
-      : []),
+    // Quản lý cũng mở được "Chi tiết" phòng ban: backend cho quản lý ghi
+    // phòng ban (authorize.js: departments -> MANAGERS), ẩn nút ở đây khiến
+    // quản lý không sửa/khóa/xoá được phòng ban.
+    {
+      key: "actions" as keyof Department,
+      header: "Thao tác",
+      render: (d: Department) => (
+        <div className="flex items-center gap-2">
+          {/* Khóa/Xóa chỉ có trong modal chi tiết (DepartmentForm). */}
+          <button
+            type="button"
+            onClick={() => onEdit(d)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-700 hover:bg-primary hover:text-white transition-all cursor-pointer shadow-2xs"
+          >
+            Chi tiết
+          </button>
+        </div>
+      ),
+    },
   ];
 
   return (
@@ -131,7 +107,7 @@ export default function DepartmentList({
               className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
             />
             <Input
-              placeholder="Tìm theo tên, mã, người phụ trách..."
+              placeholder="Tìm theo tên, người phụ trách..."
               className="pl-8 py-1.5 text-xs"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

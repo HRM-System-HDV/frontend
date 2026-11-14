@@ -11,9 +11,9 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
 import type { Employee, Branch } from "@/types";
-import type { ShiftTemplate, WorkShift, WeeklyRegistration, ShiftRegistrationRecord } from "@/features/shifts/types";
+import type { ShiftTemplate, WorkShift, WeeklyRegistration, ShiftRegistrationRecord, BackendShift } from "@/features/shifts/types";
 import ShiftTemplateSection from "@/features/shifts/ShiftTemplates";
 import WorkShiftSection from "@/features/shifts/ShiftList";
 import GeneralScheduleSection from "@/features/shifts/ScheduleOverview";
@@ -21,123 +21,80 @@ import WeeklyRegistrationSection from "@/features/shifts/WeekWishes";
 import RegistrationHistorySection from "@/features/shifts/RegistrationHistory";
 import TemplateModal from "@/features/shifts/TemplateForm";
 import AssignShiftModal from "@/features/shifts/ShiftAssign";
-import ExportModal from "@/features/shifts/ShiftExport";
+import AttendanceTimeModal, { AttendanceTimePayload } from "@/features/shifts/AttendanceTimeModal";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { useCurrentUser } from "@/context/AuthContext";
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 import { useLocalStorageState } from "@/hooks/useLocalStorage";
-import { formatDate, formatDateTime, parseDate, getTodayVN } from "@/lib/utils";
+import { formatDate, formatDateTime, parseDate, getTodayVN, toHHmm } from "@/lib/utils";
 
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
+// Thông điệp lỗi cho người dùng: lỗi mạng/403 không được biến thành danh sách
+// rỗng (màn sẽ hiện "không có dữ liệu" như thật).
+function errorMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof GatewayError) return reason.message;
+  if (reason instanceof Error && reason.message) return reason.message;
+  return fallback;
 }
 
 function resolveBranchDisplay(
   branchRaw: string | undefined | null,
   branchesList: Branch[] = []
-): { branchName: string; branchSlug: string } {
-  if (!branchRaw || branchRaw === "—") return { branchName: "—", branchSlug: "—" };
+): { branchName: string; branchId: string } {
+  if (!branchRaw || branchRaw === "—") return { branchName: "—", branchId: "—" };
   const raw = branchRaw.trim();
-  const found = branchesList.find(
-    (b) =>
-      b.id === raw ||
-      b.slug.toLowerCase() === raw.toLowerCase() ||
-      b.name.toLowerCase() === raw.toLowerCase()
-  );
+  const found = branchesList.find((b) => b.id === raw);
   if (found) {
-    return { branchName: found.name, branchSlug: found.slug };
+    return { branchName: found.name, branchId: found.id };
   }
-  if (raw.startsWith("c") && raw.length >= 20) {
-    return { branchName: "Quận 1", branchSlug: "CN01" };
-  }
-  return { branchName: raw, branchSlug: raw };
+  // Không map được branchId vào /api/branches -> fallback giá trị gốc,
+  // bỏ heuristic giả "UUID dài => Quận 1/CN-0001".
+  return { branchName: raw, branchId: raw };
 }
 
 function mapBackendShiftToWorkShift(
-  s: any,
+  s: BackendShift,
   empMap?: Map<string, string>,
   empPhoneMap?: Map<string, string>,
-  branchesList: Branch[] = []
+  branchesList: Branch[] = [],
+  employees: Employee[] = [],
+  templates: ShiftTemplate[] = []
 ): WorkShift {
-  const empName =
-    (s.employeeId && empMap?.get(s.employeeId)) ||
-    s.employee ||
-    s.employeeName ||
-    s.employeeId ||
-    "Chưa phân công";
-  const phone = (s.employeeId && empPhoneMap?.get(s.employeeId)) || s.phone || "";
+  const empName = (s.employeeId && empMap?.get(s.employeeId)) || "Chưa phân công";
+  const phone = (s.employeeId && empPhoneMap?.get(s.employeeId)) || "";
 
+  const template = templates.find((t) => t.id === s.templateId);
   const scheduled =
-    s.scheduled ||
-    (s.scheduledStart && s.scheduledEnd ? `${s.scheduledStart}-${s.scheduledEnd}` : "07:00-14:00");
+    s.scheduledStart && s.scheduledEnd
+      ? `${s.scheduledStart}-${s.scheduledEnd}`
+      : `${template?.startTime ?? "07:00"}-${template?.endTime ?? "14:00"}`;
 
-  const rawBranch = s.branchSlug || s.branch || "—";
-  const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
+  const rawBranch = s.branchId || employees.find((e) => e.id === s.employeeId)?.branchId || "—";
+  const { branchName, branchId } = resolveBranchDisplay(rawBranch, branchesList);
 
   // Mobile ghi ngày ISO (yyyy-MM-dd), web ghi dd/MM/yyyy; chuẩn hóa về dd/MM/yyyy
   // để khối Lịch làm việc chung khớp đúng ngày và bảng không lẫn lộn định dạng.
-  const date = formatDate(s.date) || "—";
+  const date = formatDate(s.workDate) || "—";
 
+  const attendance = s.attendance ?? null;
+  const attendanceState: string = s.attendanceState || "";
+  const attendanceResult: string = String(attendance?.status ?? "");
+  // BE lưu checkIn/checkOut là mốc thời gian (DateTime) ở attendance -> FE cần "HH:mm".
+  const checkInTime = toHHmm(attendance?.checkIn);
+  const checkOutTime = toHHmm(attendance?.checkOut);
+  const isCheckedIn = !!checkInTime;
   let status: WorkShift["status"] = "Chưa chấm công";
-  if (s.status === "Đúng giờ" || s.status === "hoàn thành" || s.status === "completed") {
+  if (s.status === "đã hủy") {
+    status = "Quên chấm công";
+  } else if (attendanceState === "completed" || attendanceResult === "present") {
     status = "Đúng giờ";
-  } else if (s.status === "Trễ" || s.status === "late") {
+  } else if (attendanceResult === "late" || attendanceResult === "late_early_leave") {
     status = "Trễ";
-  } else if (s.status === "Về sớm" || s.status === "early_leave") {
+  } else if (attendanceResult === "early_leave") {
     status = "Về sớm";
-  } else if (s.status === "missed" || s.status === "Quên chấm công") {
+  } else if (attendanceState === "missed_checkin" || attendanceState === "missed_checkout") {
     status = "Quên chấm công";
   } else {
     // Nếu chưa check-in và đã quá giờ bắt đầu ca (hoặc ngày trong quá khứ) -> Quên chấm công
-    const isCheckedIn = !!s.checkIn && s.checkIn !== "—";
     if (!isCheckedIn && date !== "—") {
       const parsed = parseDate(date);
       if (parsed) {
@@ -177,15 +134,15 @@ function mapBackendShiftToWorkShift(
     employeeId: s.employeeId,
     phone,
     branch: branchName,
-    branchSlug,
+    branchId,
     date,
-    templateName: s.template || s.templateName || "Ca Sáng",
+    templateName: template?.name || "",
     scheduled,
-    checkIn: s.checkIn || "—",
-    checkOut: s.checkOut || "—",
+    checkIn: checkInTime || "—",
+    checkOut: checkOutTime || "—",
+    rawCheckIn: attendance?.checkIn ? new Date(attendance.checkIn).toISOString() : null,
+    rawCheckOut: attendance?.checkOut ? new Date(attendance.checkOut).toISOString() : null,
     status,
-    note: s.note || "",
-    isRecurring: s.isRecurring !== undefined ? Boolean(s.isRecurring) : true,
   };
 }
 
@@ -195,10 +152,6 @@ function resolveShiftName(shiftId: string, templates: ShiftTemplate[]): string {
     (t) => t.id.toLowerCase() === shiftId.toLowerCase() || t.name.toLowerCase() === shiftId.toLowerCase()
   );
   if (matched) return matched.name;
-  if (shiftId === "t1" || shiftId === "st-1") return "Ca Sáng";
-  if (shiftId === "t2" || shiftId === "st-2") return "Ca Chiều";
-  if (shiftId === "t3" || shiftId === "st-3") return "Ca Tối";
-  if (shiftId === "t4" || shiftId === "st-4") return "Ca Hành chính";
   return shiftId;
 }
 
@@ -252,14 +205,14 @@ function parseBackendRegistrations(
     if (item.days && typeof item.days === "object") {
       const empName = (item.employeeId && empMap.get(item.employeeId)) || item.employeeName || item.employee || "Nhân sự";
       const empObj = empList.find((e) => e.id === item.employeeId || e.name === empName);
-      const rawBranch = item.branchSlug || item.branch || empObj?.branch || "—";
-      const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
+      const rawBranch = item.branchId || empObj?.branchId || "—";
+      const { branchName, branchId } = resolveBranchDisplay(rawBranch, branchesList);
       directWeeklyList.push({
         id: item.id || `reg-${Date.now()}`,
         employeeName: empName,
         role: item.role || empObj?.role || "Nhân viên",
         branch: branchName,
-        branchSlug,
+        branchId,
         requestedCount: item.requestedCount || Object.values(item.days).filter((v) => v !== "Nghỉ").length,
         registeredAt: formatDateTime(item.registeredAt || item.createdAt) || "—",
         order: item.order || 1,
@@ -279,8 +232,8 @@ function parseBackendRegistrations(
   for (const [empId, items] of grouped.entries()) {
     const empObj = empList.find((e) => e.id === empId || e.name === empId);
     const empName = empMap.get(empId) || empObj?.name || items[0]?.employeeName || empId;
-    const rawBranch = items[0]?.branchSlug || items[0]?.branch || empObj?.branch || "—";
-    const { branchName, branchSlug } = resolveBranchDisplay(rawBranch, branchesList);
+    const rawBranch = items[0]?.branchId || empObj?.branchId || "—";
+    const { branchName, branchId } = resolveBranchDisplay(rawBranch, branchesList);
     const role = empObj?.role || items[0]?.role || "Nhân viên";
 
     const days: Record<string, string> = {
@@ -302,7 +255,7 @@ function parseBackendRegistrations(
         const t = parseDate(r.createdAt)?.getTime() ?? 0;
         if (t > latestTime) latestTime = t;
       }
-      const wishStr = r.wish || r.preference || r.week || "";
+      const wishStr = r.registerDate || "";
       if (r.shiftId === "preference_note") {
         note = wishStr;
         continue;
@@ -310,7 +263,7 @@ function parseBackendRegistrations(
 
       const dayKey = parseDayKey(wishStr);
       if (dayKey) {
-        const shiftName = resolveShiftName(r.shiftId, templates);
+        const shiftName = resolveShiftName(r.templateId, templates);
         if (shiftName && shiftName !== "Nghỉ") {
           if (!days[dayKey] || days[dayKey] === "Nghỉ") {
             days[dayKey] = shiftName;
@@ -332,7 +285,7 @@ function parseBackendRegistrations(
       employeeName: empName,
       role,
       branch: branchName,
-      branchSlug,
+      branchId,
       requestedCount,
       registeredAt,
       order: 1,
@@ -360,11 +313,11 @@ function mapToRegistrationRecords(
       const empId = r.employeeId || "";
       const empObj = empList.find((e) => e.id === empId || e.name === empId);
       const empName = empMap.get(empId) || empObj?.name || r.employeeName || empId || "Nhân sự";
-      const rawBranch = r.branchSlug || r.branch || empObj?.branch || "—";
-      const { branchName } = resolveBranchDisplay(rawBranch, branchesList);
+      const rawBranch = r.branchId || empObj?.branchId || "—";
+      const { branchName, branchId } = resolveBranchDisplay(rawBranch, branchesList);
       const role = empObj?.role || r.role || "Nhân viên";
 
-      const wishStr = r.wish || r.preference || r.week || "";
+      const wishStr = r.registerDate || "";
       let dateFormatted = wishStr;
       if (wishStr.length <= 5 && wishStr.includes("/")) {
         const currentYear = new Date().getFullYear();
@@ -373,7 +326,7 @@ function mapToRegistrationRecords(
       // Chuẩn hóa DD/MM/YYYY cho mọi giá trị ngày (idempotent, giữ nguyên chuỗi ngày trong tuần).
       dateFormatted = formatDate(dateFormatted);
 
-      const templateName = resolveShiftName(r.shiftId, templates);
+      const templateName = resolveShiftName(r.templateId, templates);
       const matchedTemplate = templates.find((t) => t.name.toLowerCase() === templateName.toLowerCase());
       const scheduled = matchedTemplate ? `${matchedTemplate.startTime} - ${matchedTemplate.endTime}` : (
         templateName === "Ca Sáng" ? "07:00 - 14:00" :
@@ -389,6 +342,7 @@ function mapToRegistrationRecords(
         employeeName: empName,
         role,
         branch: branchName,
+        branchId,
         date: dateFormatted,
         templateName,
         scheduled,
@@ -401,16 +355,16 @@ function mapToRegistrationRecords(
 }
 
 export default function ShiftsPage() {
-  const { role, branchSlug } = useCurrentUser();
+  const { role, branchId } = useCurrentUser();
   const isManager = role === "manager";
-  const managerBranch = branchSlug.toUpperCase();
+  const managerBranch = branchId;
   const [activeTab, setActiveTab] = useLocalStorageState<"scheduling" | "general_schedule" | "templates">(
     "hrm_shifts_active_tab",
     "scheduling"
   );
 
   const [templates, setTemplates] = useState<ShiftTemplate[]>([]);
-  // Khung ca mẫu chưa có API backend -> giữ local state (xử lý sau).
+  // Khung ca mẫu đã nối /api/shift-templates (fetch + CRUD ở các handler bên dưới).
   // Ca làm việc & nguyện vọng: khởi rỗng, chỉ nhận từ API; DB rỗng -> empty state.
   const [workShiftList, setWorkShiftList] = useState<WorkShift[]>([]);
   const [weeklyRegistrations, setWeeklyRegistrations] = useState<WeeklyRegistration[]>([]);
@@ -426,12 +380,14 @@ export default function ShiftsPage() {
   const todayStr = getTodayVN();
   const [schedulerDate, setSchedulerDate] = useState(todayStr);
   const [branches, setBranches] = useState<Branch[]>([]);
+  // Ca đang mở form "Cập nhật giờ chấm công" (PUT /api/attendance/:shiftId).
+  const [attendanceTarget, setAttendanceTarget] = useState<WorkShift | null>(null);
 
   // State dùng chung đồng bộ giữa Tab "Quản lý đăng ký ca" và Tab "Lịch làm việc chung"
   const [sharedWeekOffset, setSharedWeekOffset] = useLocalStorageState<number>("hrm_shifts_week_offset", 0);
   const defaultDayIndex = (new Date().getDay() + 6) % 7;
   const [sharedDayIndex, setSharedDayIndex] = useLocalStorageState<number>("hrm_shifts_day_index", defaultDayIndex);
-  const [savedBranch, setSavedBranch] = useLocalStorageState<string>("hrm_shifts_branch", "all");
+  const [savedBranch, setSavedBranch] = useLocalStorageState<string>("hrm_shifts_branch_by_id", "all");
   const sharedBranch = isManager ? managerBranch : savedBranch;
   const setSharedBranch = useCallback(
     (b: string) => {
@@ -444,8 +400,6 @@ export default function ShiftsPage() {
   const [assignBranch, setAssignBranch] = useState("");
   const [assignDate, setAssignDate] = useState(todayStr);
   const [assignTemplateId, setAssignTemplateId] = useState("");
-  const [assignNote, setAssignNote] = useState("");
-  const [assignIsRecurring, setAssignIsRecurring] = useState(true);
 
   const showToast = (text: string, tone: "success" | "danger" = "success") => {
     setToast({ text, tone });
@@ -470,7 +424,7 @@ export default function ShiftsPage() {
       // Admin/staff xem toàn chi nhánh (không lọc); manager chỉ xem chi nhánh phụ trách.
       const effectiveBranch = isManager ? managerBranch : "";
       const queryParams = new URLSearchParams();
-      if (effectiveBranch) queryParams.set("branchSlug", effectiveBranch);
+      if (effectiveBranch) queryParams.set("branchId", effectiveBranch);
 
       const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
@@ -508,7 +462,10 @@ export default function ShiftsPage() {
       }
 
       if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
-        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData)));
+        setWorkShiftList(shiftsRes.value.map((s) => mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData, employeesData, templatesData)));
+      } else if (shiftsRes.status === "rejected") {
+        // Lỗi mạng/403 không được hiển thị như "không có ca nào".
+        setError(errorMessage(shiftsRes.reason, "Không thể tải dữ liệu ca làm việc từ gateway"));
       }
 
       if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
@@ -528,52 +485,109 @@ export default function ShiftsPage() {
   }, [isManager, managerBranch]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    let ignore = false;
+    const effectiveBranch = isManager ? managerBranch : "";
+    const queryParams = new URLSearchParams();
+    if (effectiveBranch) queryParams.set("branchId", effectiveBranch);
+    const queryString = queryParams.toString() ? `?${queryParams.toString()}` : "";
 
-  // Tự chọn nhân viên đầu tiên khi danh sách API về
-  useEffect(() => {
-    if (!assignEmployee && empList.length > 0) {
-      setAssignEmployee(empList[0].name);
-    }
-  }, [empList, assignEmployee]);
+    Promise.allSettled([
+      apiGet<any[]>(`/api/shifts${queryString}`),
+      apiGet<any[]>(`/api/shifts/registrations${queryString}`),
+      apiGet<Employee[]>("/api/employees"),
+      apiGet<any[]>(`/api/shift-templates`),
+      apiGet<Branch[]>("/api/branches"),
+    ])
+      .then(([shiftsRes, regRes, employeesRes, templatesRes, branchesRes]) => {
+        if (ignore) return;
+        let branchesData: Branch[] = [];
+        if (branchesRes.status === "fulfilled" && Array.isArray(branchesRes.value)) {
+          branchesData = branchesRes.value;
+          setBranches(branchesData);
+        }
 
-  // Reset assignBranch nếu bị giữ lệnh chi nhánh không còn tồn tại trong DB.
-  // assignBranch rỗng = "chọn chi nhánh khi phân công", không tự gán.
-  const validBranchSlugs = useMemo(
-    () => new Set(branches.map((b) => b.slug.toUpperCase())),
+        let employeesData: Employee[] = [];
+        if (employeesRes.status === "fulfilled" && Array.isArray(employeesRes.value)) {
+          employeesData = employeesRes.value;
+        }
+        setEmpList(employeesData);
+
+        const currentEmpMap = new Map<string, string>();
+        const currentEmpPhoneMap = new Map<string, string>();
+        for (const e of employeesData) {
+          currentEmpMap.set(e.id, e.name);
+          if (e.phone) currentEmpPhoneMap.set(e.id, e.phone);
+        }
+
+        let templatesData: ShiftTemplate[] = [];
+        if (templatesRes.status === "fulfilled" && Array.isArray(templatesRes.value)) {
+          templatesData = templatesRes.value;
+          setTemplates(templatesData);
+        }
+
+        if (shiftsRes.status === "fulfilled" && Array.isArray(shiftsRes.value)) {
+          setWorkShiftList(
+            shiftsRes.value.map((s) =>
+              mapBackendShiftToWorkShift(s, currentEmpMap, currentEmpPhoneMap, branchesData, employeesData, templatesData)
+            )
+          );
+        } else if (shiftsRes.status === "rejected") {
+          setError(errorMessage(shiftsRes.reason, "Không thể tải dữ liệu ca làm việc từ gateway"));
+        }
+
+        if (regRes.status === "fulfilled" && Array.isArray(regRes.value)) {
+          setWeeklyRegistrations(
+            parseBackendRegistrations(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
+          );
+          setRegistrationRecords(
+            mapToRegistrationRecords(regRes.value, currentEmpMap, employeesData, templatesData, branchesData)
+          );
+        }
+        setLoading(false);
+      })
+      .catch((e: unknown) => {
+        if (!ignore) {
+          const msg = e instanceof GatewayError ? e.message : "Không thể tải dữ liệu ca làm việc từ gateway";
+          setError(msg);
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [isManager, managerBranch]);
+
+  const validBranchIds = useMemo(
+    () => new Set(branches.map((b) => b.id)),
     [branches]
   );
-  useEffect(() => {
-    if (branches.length === 0) return;
-    const firstSlug = branches[0].slug.toUpperCase();
-    if (!isManager && assignBranch && !validBranchSlugs.has(assignBranch.toUpperCase())) {
-      setAssignBranch(firstSlug);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [branches, isManager, validBranchSlugs]);
 
-  // Mặc định khung ca đầu tiên cho modal phân ca
-  useEffect(() => {
-    if (!assignTemplateId && templates.length > 0) {
-      setAssignTemplateId(templates[0].id);
-    }
-  }, [templates, assignTemplateId]);
+  const currentAssignEmployee = assignEmployee || empList[0]?.name || "";
+  const currentAssignBranch =
+    !isManager && assignBranch && !validBranchIds.has(assignBranch)
+      ? branches[0]?.id || ""
+      : assignBranch;
+  const currentAssignTemplateId = assignTemplateId || templates[0]?.id || "";
 
-  // Manager chỉ thấy dữ liệu chi nhánh mình
+  // Manager chỉ thấy dữ liệu chi nhánh mình: so bằng ID (định danh),
+  // tên chi nhánh chỉ để hiển thị.
+  const sameBranch = (a?: string | null, b?: string | null) =>
+    (a || "") === (b || "");
   const displayedWorkShifts = isManager
-    ? workShiftList.filter((s) => s.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? workShiftList.filter((s) => sameBranch(s.branchId, branchId))
     : workShiftList;
   const displayedRegistrations = isManager
-    ? weeklyRegistrations.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? weeklyRegistrations.filter((r) => sameBranch(r.branchId, branchId))
     : weeklyRegistrations;
   const displayedRegistrationRecords = isManager
-    ? registrationRecords.filter((r) => r.branch.toLowerCase().replace("-", "") === branchSlug.replace("-", ""))
+    ? registrationRecords.filter((r) => sameBranch(r.branchId, branchId))
     : registrationRecords;
 
-  const [exportOpen, setExportOpen] = useState(false);
   const [addTemplateOpen, setAddTemplateOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<ShiftTemplate | null>(null);
+  // Khung ca đang chờ xác nhận xoá (xoá khung ca là thao tác không hoàn tác được).
+  const [pendingTemplateDelete, setPendingTemplateDelete] = useState<ShiftTemplate | null>(null);
   const [assignShiftOpen, setAssignShiftOpen] = useState(false);
 
   const [newTemplateName, setNewTemplateName] = useState("");
@@ -668,74 +682,75 @@ export default function ShiftsPage() {
     }
   };
 
-  // Cập nhật phân công ca (PUT /api/shifts/:id)
-  const handleUpdateShift = async (shiftId: string, payload: Partial<WorkShift>) => {
-    try {
-      setActionInProgress(true);
-      await apiPut(`/api/shifts/${encodeURIComponent(shiftId)}`, payload);
-      setWorkShiftList((prev) =>
-        prev.map((s) => (s.id === shiftId ? { ...s, ...payload } : s))
-      );
-      showToast("Đã cập nhật ca làm việc", "success");
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi cập nhật ca";
-      showToast(msg, "danger");
-    } finally {
-      setActionInProgress(false);
+  // Luồng chấm công của QUẢN TRỊ trên web: PUT /api/attendance/:shiftId
+  // (WorkService.saveAttendance) — nhập giờ vào/ra cho một ca đã phân, không đòi
+  // Wi-Fi, tự tính công và ghi Backlog. POST /attendance/checkin|checkout dành cho
+  // chính nhân viên (mobile đọc SSID/BSSID thật từ thiết bị); web từng gọi hai endpoint
+  // đó bằng cách mượn BSSID của chi nhánh, vừa sai nghiệp vụ định vị vừa 403 với manager
+  // vì GET /api/wifi-configs chỉ mở cho admin.
+  const openAttendanceDialog = (employeeId: string, shiftId: string) => {
+    if (!employeeId) {
+      showToast("Không xác định được nhân sự để cập nhật chấm công (thiếu employeeId)", "danger");
+      return;
     }
+    const target = workShiftList.find((s) => s.id === shiftId);
+    if (!target) {
+      showToast("Không tìm thấy ca để cập nhật giờ chấm công", "danger");
+      return;
+    }
+    setAttendanceTarget(target);
   };
 
-  // Phân công ca trực tiếp cho nhân sự (POST /api/shifts/:id/assign)
-  const handleAssignEmployeeToShift = async (shiftId: string, employeeId: string) => {
+  const handleSaveAttendance = async (payload: AttendanceTimePayload) => {
+    if (!attendanceTarget) return;
     try {
       setActionInProgress(true);
-      await apiPost(`/api/shifts/${encodeURIComponent(shiftId)}/assign`, { employeeId });
+      await apiPut(`/api/attendance/${encodeURIComponent(attendanceTarget.id)}`, payload);
+      setAttendanceTarget(null);
       await fetchData();
-      showToast("Đã phân công nhân sự vào ca thành công", "success");
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi phân công nhân sự";
-      showToast(msg, "danger");
+      showToast("Đã lưu giờ chấm công cho ca", "success");
+    } catch (e: unknown) {
+      showToast(errorMessage(e, "Lỗi khi lưu giờ chấm công"), "danger");
     } finally {
       setActionInProgress(false);
     }
   };
-
 
   // Tạo & phân ca mới (POST /api/shifts)
   const handleAssignShift = async () => {
-    if (!assignBranch) {
+    const targetBranch = currentAssignBranch;
+    if (!targetBranch) {
       showToast("Vui lòng chọn chi nhánh cho ca làm việc", "danger");
       return;
     }
-    const template = templates.find((t) => t.id === assignTemplateId) || templates[0];
-    const matchedEmp = empList.find((e) => e.name === assignEmployee);
+    const template = templates.find((t) => t.id === currentAssignTemplateId) || templates[0];
+    const matchedEmp = empList.find((e) => e.name === currentAssignEmployee);
     const payload = {
-      employeeId: matchedEmp?.id || assignEmployee,
-      branchSlug: assignBranch,
-      date: formatDate(assignDate),
-      template: template.name,
-      scheduledStart: template.startTime,
-      scheduledEnd: template.endTime,
-      status: "Chưa chấm công",
-      note: assignNote,
-      isRecurring: assignIsRecurring,
+      employeeId: matchedEmp?.id || currentAssignEmployee,
+      branchId: targetBranch,
+      workDate: formatDate(assignDate),
+      templateId: template?.id,
     };
 
     try {
       setActionInProgress(true);
-      const res = await apiPost<any>("/api/shifts", payload);
+      await apiPost("/api/shifts", payload);
       await fetchData();
-      showToast(`Đã phân công thành công cho "${assignEmployee}" (${template.name})`, "success");
+      showToast(`Đã phân công thành công cho "${currentAssignEmployee}" (${template?.name || "Ca trực"})`, "success");
       setAssignShiftOpen(false);
-      setAssignNote("");
-      setAssignIsRecurring(true);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi phân công ca làm việc";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Lỗi khi phân công ca làm việc";
       showToast(msg, "danger");
     } finally {
       setActionInProgress(false);
     }
   };
+
+  // Phân ca là tính năng quản lý (WRITE /api/shifts* = manager + admin) nên
+  // nhân viên không vào trang này; luồng đăng ký ca của họ dành cho app.
+  if (!canAccessPath(role, "/dashboard/shifts")) {
+    return <NoAccessNotice description="Phân ca làm việc chỉ dành cho Quản trị viên và Quản lý Chi nhánh." />;
+  }
 
   return (
     <div className="space-y-4">
@@ -766,10 +781,9 @@ export default function ShiftsPage() {
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Lịch ca" }]}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="white" size="sm" onClick={() => setExportOpen(true)}>
-              Xuất báo cáo
-            </Button>
-            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl border border-gray-200">
+            {/* Bỏ border ngoài: p-1 (8px) + pill 28px đã đúng 36px, thêm border
+                1px mỗi bên sẽ đẩy khối tab lên 38px, lệch với các nút header. */}
+            <div className="flex items-center gap-1.5 bg-gray-100 p-1 rounded-xl">
               <button
                 type="button"
                 onClick={() => setActiveTab("scheduling")}
@@ -859,14 +873,15 @@ export default function ShiftsPage() {
                 selectedBranch={sharedBranch}
                 onBranchChange={setSharedBranch}
                 onDeleteShift={handleRemoveShift}
+                onCheckIn={openAttendanceDialog}
+                onCheckOut={openAttendanceDialog}
                 onOpenAssignModal={(templateId, date, branch) => {
                   const effectiveBranch = isManager
                     ? managerBranch
-                    : (branch && branch !== "all" ? branch.toUpperCase() : (sharedBranch !== "all" ? sharedBranch.toUpperCase() : ""));
+                    : (branch && branch !== "all" ? branch : (sharedBranch !== "all" ? sharedBranch : ""));
                   setAssignTemplateId(templateId);
                   setAssignDate(date);
                   setAssignBranch(effectiveBranch);
-                  setAssignIsRecurring(true);
                   setAssignShiftOpen(true);
                 }}
               />
@@ -874,12 +889,12 @@ export default function ShiftsPage() {
               {/* Bảng danh sách chi tiết phân công */}
               <WorkShiftSection
                 workShifts={displayedWorkShifts}
+                isManager={isManager}
                 onDelete={handleRemoveShift}
                 onAddShift={() => {
                   const effectiveBranch = isManager ? managerBranch : "";
                   setAssignDate(todayStr);
                   setAssignBranch(effectiveBranch);
-                  setAssignIsRecurring(true);
                   setAssignShiftOpen(true);
                 }}
               />
@@ -911,11 +926,10 @@ export default function ShiftsPage() {
                 registrationRecords={displayedRegistrationRecords}
                 weeklyRegistrations={displayedRegistrations}
                 branches={branches}
-                onDelete={handleDeleteRegistration}
                 onAssignFromRegistration={(rec) => {
                   const matchedEmp = empList.find((e) => e.name === rec.employeeName || e.id === rec.employeeId);
                   if (matchedEmp) setAssignEmployee(matchedEmp.name);
-                  if (rec.branch && rec.branch !== "—") setAssignBranch(rec.branch.toUpperCase());
+                  if (rec.branchId && rec.branchId !== "—") setAssignBranch(rec.branchId);
                   setAssignDate(formatDate(rec.date));
                   const matchedT = templates.find((t) => t.name.toLowerCase() === rec.templateName.toLowerCase());
                   if (matchedT) setAssignTemplateId(matchedT.id);
@@ -933,20 +947,36 @@ export default function ShiftsPage() {
                 onAdd={openAddTemplate}
                 onEdit={openEditTemplate}
                 onDelete={async (id) => {
-                  try {
-                    await apiDelete(`/api/shift-templates/${encodeURIComponent(id)}`);
-                    setTemplates((prev) => prev.filter((t) => t.id !== id));
-                    showToast("Đã xóa khung ca mẫu", "success");
-                  } catch (e: any) {
-                    const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa khung ca mẫu";
-                    showToast(msg, "danger");
-                  }
+                  const target = templates.find((t) => t.id === id);
+                  setPendingTemplateDelete(target || null);
                 }}
               />
             </div>
           )}
         </>
       )}
+
+      <ConfirmDialog
+        open={!!pendingTemplateDelete}
+        title="Xóa khung ca mẫu"
+        message={`Xóa khung ca "${pendingTemplateDelete?.name || ""}"? Các ca đã phân công theo khung này không bị xóa.`}
+        confirmLabel="Xóa"
+        tone="danger"
+        onCancel={() => setPendingTemplateDelete(null)}
+        onConfirm={async () => {
+          const target = pendingTemplateDelete;
+          setPendingTemplateDelete(null);
+          if (!target) return;
+          try {
+            await apiDelete(`/api/shift-templates/${encodeURIComponent(target.id)}`);
+            setTemplates((prev) => prev.filter((t) => t.id !== target.id));
+            showToast("Đã xóa khung ca mẫu", "success");
+          } catch (e: any) {
+            const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa khung ca mẫu";
+            showToast(msg, "danger");
+          }
+        }}
+      />
 
       <TemplateModal
         open={addTemplateOpen}
@@ -965,24 +995,31 @@ export default function ShiftsPage() {
         open={assignShiftOpen}
         onClose={() => setAssignShiftOpen(false)}
         templates={templates}
-        employee={assignEmployee}
-        branch={assignBranch}
+        employee={currentAssignEmployee}
+        branch={currentAssignBranch}
         date={assignDate}
-        templateId={assignTemplateId}
-        note={assignNote}
-        isRecurring={assignIsRecurring}
+        templateId={currentAssignTemplateId}
         isManager={isManager}
         managerBranch={managerBranch}
         isFilterLocked={!isManager && sharedBranch !== "all"}
         employees={empList}
         onEmployeeChange={setAssignEmployee}
         onBranchChange={setAssignBranch}
-        onNoteChange={setAssignNote}
-        onRecurringChange={setAssignIsRecurring}
         onSave={handleAssignShift}
       />
 
-      <ExportModal open={exportOpen} onClose={() => setExportOpen(false)} workShifts={displayedWorkShifts} />
+      {attendanceTarget && (
+        <AttendanceTimeModal
+          key={attendanceTarget.id}
+          open
+          shiftLabel={`${attendanceTarget.employee} · ${attendanceTarget.date} · ${attendanceTarget.scheduled}`}
+          initialCheckIn={attendanceTarget.rawCheckIn}
+          initialCheckOut={attendanceTarget.rawCheckOut}
+          saving={actionInProgress}
+          onClose={() => setAttendanceTarget(null)}
+          onSubmit={handleSaveAttendance}
+        />
+      )}
     </div>
   );
 }

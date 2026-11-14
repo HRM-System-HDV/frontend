@@ -10,72 +10,23 @@ import {
 import PageHeader from "@/components/ui/PageHeader";
 import Button from "@/components/ui/Button";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
-import { apiGet, apiPost, GatewayError, GATEWAY_URL } from "@/lib/api";
-import type { Branch, Employee } from "@/types";
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import type { Branch, BranchManagerCandidate } from "@/types";
 import BranchSection from "@/features/branches/BranchList";
-import BranchModal from "@/features/branches/BranchForm";
+import BranchModal, { type BranchFormPayload } from "@/features/branches/BranchForm";
 import { useCurrentUser } from "@/context/AuthContext";
-
-async function parseEnvelope(res: Response) {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(
-      err?.code || `HTTP_${res.status}`,
-      err?.message || `Lỗi hệ thống (${res.status})`,
-      res.status
-    );
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: unknown }).data;
-  }
-  return body;
-}
-
-async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: payload !== undefined ? JSON.stringify(payload) : undefined,
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return (await parseEnvelope(res)) as T;
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { canAccessPath, NoAccessNotice } from "@/lib/permissions";
 
 export default function BranchesPage() {
-  const { role } = useCurrentUser();
-  const isManager = role === "manager";
+  const { role, branchId } = useCurrentUser();
+  // BE kiểm tra phạm vi chi nhánh khi Manager sửa hoặc xóa.
+  const isAdmin = role === "admin";
+  const canWriteBranches = isAdmin || role === "manager";
 
   const [list, setList] = useState<Branch[]>([]);
-  const [empList, setEmpList] = useState<Employee[]>([]);
+  const [managerCandidates, setManagerCandidates] = useState<BranchManagerCandidate[]>([]);
+  const [candidatesLoading, setCandidatesLoading] = useState(false);
+  const [candidatesError, setCandidatesError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "success" | "danger" } | null>(null);
@@ -94,59 +45,66 @@ export default function BranchesPage() {
   };
 
   const fetchBranches = useCallback(async () => {
+    if (!canAccessPath(role, "/dashboard/branches")) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
-      const [data, empData] = await Promise.all([
-        apiGet<Branch[]>("/api/branches"),
-        apiGet<Employee[]>("/api/employees").catch(() => []),
-      ]);
-      const normalized = (data || []).map((b: any) => ({
+      const data = await apiGet<Branch[]>("/api/branches");
+      const normalized = (data || []).map((b) => ({
         ...b,
         status: b.status || "hoạt động",
         staff: b.staff ?? 0,
       }));
       setList(normalized);
-      setEmpList(empData || []);
-    } catch (e: any) {
-      const msg = e instanceof GatewayError ? e.message : e?.message || "Không thể tải danh sách chi nhánh";
+    } catch (e: unknown) {
+      const msg = e instanceof GatewayError ? e.message : "Không thể tải danh sách chi nhánh";
       setError(msg);
       showToast(msg, "danger");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [role]);
 
   useEffect(() => {
-    fetchBranches();
+    void fetchBranches();
   }, [fetchBranches]);
 
-  const handleSave = async (data: Omit<Branch, "id"> & { id?: string }) => {
+  useEffect(() => {
+    if (!modalOpen || !editing || (!isAdmin && editing.id !== branchId)) { setManagerCandidates([]); setCandidatesLoading(false); setCandidatesError(""); return; }
+    let active = true;
+    setCandidatesLoading(true); setCandidatesError(""); setManagerCandidates([]);
+    apiGet<BranchManagerCandidate[]>(`/api/branches/${encodeURIComponent(editing.id)}/manager-candidates`)
+      .then(rows => { if (active) setManagerCandidates(rows); })
+      .catch(error => { if (active) setCandidatesError(error instanceof Error ? error.message : "Không tải được danh sách quản lý"); })
+      .finally(() => { if (active) setCandidatesLoading(false); });
+    return () => { active = false; };
+  }, [modalOpen, editing?.id, isAdmin, branchId]);
+
+  const handleSave = async (data: BranchFormPayload) => {
     try {
       setActionInProgress(true);
-      if (editing && editing.slug) {
-        // Cập nhật chi nhánh hiện có qua PUT /api/branches/:slug
-        const updated = await apiPut<Branch>(`/api/branches/${encodeURIComponent(editing.slug)}`, {
+      if (editing && editing.id) {
+        // Cập nhật chi nhánh hiện có qua PUT /api/branches/:branchId
+        const updated = await apiPut<Branch>(`/api/branches/${encodeURIComponent(editing.id)}`, {
           name: data.name,
           address: data.address,
-          manager: data.manager,
+          managerId: data.managerId,
           status: data.status,
-          staff: data.staff,
         });
-        setList((prev) =>
-          prev.map((b) => (b.slug === editing.slug ? (updated || { ...b, ...data }) : b))
-        );
+        if (!updated?.id) throw new Error("Phản hồi chi nhánh không hợp lệ");
         showToast("Cập nhật chi nhánh thành công!", "success");
       } else {
         // Tạo chi nhánh mới qua POST /api/branches
         const created = await apiPost<Branch>("/api/branches", {
           name: data.name,
           address: data.address,
-          manager: data.manager,
+          managerId: data.managerId,
           status: data.status || "hoạt động",
-          staff: data.staff ?? 0,
         });
-        setList((prev) => [...prev, created || { id: `br-${Date.now()}`, ...data, staff: data.staff ?? 0 }]);
+        if (!created?.id) throw new Error("Phản hồi chi nhánh không hợp lệ");
         showToast("Thêm chi nhánh mới thành công!", "success");
       }
       setModalOpen(false);
@@ -164,12 +122,10 @@ export default function BranchesPage() {
     if (!lockTarget) return;
     try {
       setActionInProgress(true);
-      await apiPut(`/api/branches/${encodeURIComponent(lockTarget.slug)}`, {
+      await apiPut(`/api/branches/${encodeURIComponent(lockTarget.id)}`, {
         status: "vô hiệu hóa",
       });
-      setList((prev) =>
-        prev.map((b) => (b.id === lockTarget.id ? { ...b, status: "vô hiệu hóa" as const } : b))
-      );
+      await fetchBranches();
       showToast(`Đã vô hiệu hóa chi nhánh "${lockTarget.name}"`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi vô hiệu hóa chi nhánh";
@@ -184,8 +140,8 @@ export default function BranchesPage() {
     if (!deleteTarget) return;
     try {
       setActionInProgress(true);
-      await apiDelete(`/api/branches/${encodeURIComponent(deleteTarget.slug)}`);
-      setList((prev) => prev.filter((e) => e.slug !== deleteTarget.slug));
+      await apiDelete(`/api/branches/${encodeURIComponent(deleteTarget.id)}`);
+      await fetchBranches();
       showToast(`Đã xóa vĩnh viễn chi nhánh "${deleteTarget.name}"`, "success");
     } catch (e: any) {
       const msg = e instanceof GatewayError ? e.message : e?.message || "Lỗi khi xóa chi nhánh";
@@ -195,6 +151,10 @@ export default function BranchesPage() {
       setDeleteTarget(null);
     }
   };
+
+  if (!canAccessPath(role, "/dashboard/branches")) {
+    return <NoAccessNotice />;
+  }
 
   return (
     <div className="space-y-4">
@@ -224,7 +184,7 @@ export default function BranchesPage() {
       <PageHeader
         breadcrumb={[{ label: "HRM", href: "#" }, { label: "Chi nhánh" }]}
         actions={
-          !isManager ? (
+          canWriteBranches ? (
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => {
@@ -273,31 +233,41 @@ export default function BranchesPage() {
         <BranchSection
           branches={list}
           onEdit={(b) => {
-            if (!isManager) {
+            if (canWriteBranches) {
               setEditing(b);
               setModalOpen(true);
             }
           }}
-          onLock={!isManager ? setLockTarget : undefined}
-          onDelete={!isManager ? setDeleteTarget : undefined}
         />
       )}
 
-      <BranchModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditing(null);
-        }}
-        branch={editing}
-        employees={empList}
-        onSave={handleSave}
-        onDelete={!isManager ? (b) => {
-          setModalOpen(false);
-          setEditing(null);
-          setDeleteTarget(b);
-        } : undefined}
-      />
+      {modalOpen && (
+        <BranchModal
+          key={editing?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditing(null);
+          }}
+          branch={editing}
+          employees={managerCandidates}
+          candidatesLoading={candidatesLoading}
+          candidatesError={candidatesError}
+          readOnly={Boolean(editing) && !isAdmin && editing?.id !== branchId}
+          saving={actionInProgress}
+          onSave={handleSave}
+          onLock={(isAdmin || editing?.id === branchId) ? (b) => {
+            setModalOpen(false);
+            setEditing(null);
+            setLockTarget(b);
+          } : undefined}
+          onDelete={(isAdmin || editing?.id === branchId) ? (b) => {
+            setModalOpen(false);
+            setEditing(null);
+            setDeleteTarget(b);
+          } : undefined}
+        />
+      )}
 
       <ConfirmDialog
         open={!!lockTarget}

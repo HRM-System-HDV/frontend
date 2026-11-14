@@ -9,60 +9,16 @@ import type { NewsItem } from "@/features/news/types";
 import NewsSection from "@/features/news/NewsList";
 import NewsDetailModal from "@/features/news/NewsDetail";
 import CreateNewsModal, { type NewsFormPayload } from "@/features/news/NewsForm";
-import { apiGet, apiPost, GATEWAY_URL, GatewayError } from "@/lib/api";
-import { getTodayVN } from "@/lib/utils";
-
-async function parseEnvelope<T>(res: Response): Promise<T> {
-  const text = await res.text();
-  let body: unknown = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = null;
-  }
-  if (!res.ok) {
-    const err = (body as { error?: { code: string; message: string } } | null)?.error;
-    throw new GatewayError(err?.code || `HTTP_${res.status}`, err?.message || `Lỗi hệ thống (${res.status})`, res.status);
-  }
-  if (body !== null && typeof body === "object" && "data" in body) {
-    return (body as { data: T }).data;
-  }
-  return body as T;
-}
-
-async function apiPut<T>(path: string, payload: unknown): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "PUT",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function apiDelete<T>(path: string): Promise<T> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 5000);
-  try {
-    const res = await fetch(`${GATEWAY_URL}${path}`, {
-      method: "DELETE",
-      credentials: "include",
-      signal: controller.signal,
-    });
-    return await parseEnvelope<T>(res);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+import { apiGet, apiPost, apiPut, apiDelete, GatewayError } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
+import { toInputDate } from "@/lib/utils";
+import { canManageNews } from "@/features/news/helpers";
 
 export default function NewsPage() {
+  const { role, branchId } = useCurrentUser();
+  // Đăng/ghim/xóa tin là WRITE /api/news = manager + admin; nhân viên chỉ đọc.
+  const canWriteNews = role === "admin" || (role === "manager" && !!branchId);
+
   const [newsList, setNewsList] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,21 +41,24 @@ export default function NewsPage() {
   }, []);
 
   useEffect(() => {
-    fetchData();
+    void fetchData();
   }, [fetchData]);
 
   const handleOpenCreate = () => {
+    if (!canWriteNews) return;
     setEditingItem(null);
     setModalOpen(true);
   };
 
   const handleOpenEdit = (item: NewsItem) => {
+    if (!canManageNews(role, branchId, item)) return;
     setSelectedNews(null);
     setEditingItem(item);
     setModalOpen(true);
   };
 
   const handleSubmit = async (payload: NewsFormPayload) => {
+    if (!canWriteNews || (editingItem && !canManageNews(role, branchId, editingItem))) return;
     setSaving(true);
     try {
       if (editingItem) {
@@ -109,7 +68,7 @@ export default function NewsPage() {
       } else {
         const created = await apiPost<NewsItem>("/api/news", {
           ...payload,
-          date: getTodayVN(),
+          publishDate: toInputDate(new Date()),
         });
         setNewsList((prev) => [created, ...prev]);
       }
@@ -124,7 +83,7 @@ export default function NewsPage() {
 
   const handleTogglePin = async (id: string) => {
     const target = newsList.find((n) => n.id === id);
-    if (!target) return;
+    if (!target || !canManageNews(role, branchId, target)) return;
     try {
       const updated = await apiPut<NewsItem>(`/api/news/${id}`, { pinned: !target.pinned });
       setNewsList((prev) => prev.map((n) => (n.id === id ? updated : n)));
@@ -136,6 +95,7 @@ export default function NewsPage() {
 
   const handleDeleteNews = async (id: string, title?: string) => {
     const target = newsList.find((n) => n.id === id);
+    if (!target || !canManageNews(role, branchId, target)) return;
     const displayTitle = title || target?.title || "";
     if (!confirm(`Bạn có chắc chắn muốn xóa thông báo "${displayTitle}" không?`)) return;
     try {
@@ -152,14 +112,16 @@ export default function NewsPage() {
       <PageHeader
         actions={
           <div className="flex items-center gap-2">
-            <Button
-              variant="primary"
-              onClick={handleOpenCreate}
-              className="flex items-center gap-1.5"
-            >
-              <FontAwesomeIcon icon={faPlus} fontSize={18} />
-              Đăng thông báo mới
-            </Button>
+            {canWriteNews && (
+              <Button
+                variant="primary"
+                onClick={handleOpenCreate}
+                className="flex items-center gap-1.5"
+              >
+                <FontAwesomeIcon icon={faPlus} fontSize={18} />
+                Đăng thông báo mới
+              </Button>
+            )}
           </div>
         }
       />
@@ -184,32 +146,34 @@ export default function NewsPage() {
         <NewsSection
           items={newsList}
           onSelect={setSelectedNews}
-          onEdit={handleOpenEdit}
-          onDelete={handleDeleteNews}
-          onTogglePin={handleTogglePin}
+          onEdit={canWriteNews ? handleOpenEdit : undefined}
+          onTogglePin={canWriteNews ? handleTogglePin : undefined}
         />
       )}
 
-      {/* Modal xem chi tiết thông báo */}
+      {/* Modal xem chi tiết thông báo — chỗ duy nhất có nút xóa */}
       <NewsDetailModal
         item={selectedNews}
         onClose={() => setSelectedNews(null)}
-        onEdit={handleOpenEdit}
-        onDelete={handleDeleteNews}
-        onTogglePin={handleTogglePin}
+        onEdit={selectedNews && canManageNews(role, branchId, selectedNews) ? handleOpenEdit : undefined}
+        onDelete={selectedNews && canManageNews(role, branchId, selectedNews) ? handleDeleteNews : undefined}
+        onTogglePin={selectedNews && canManageNews(role, branchId, selectedNews) ? handleTogglePin : undefined}
       />
 
       {/* Modal tạo/sửa thông báo */}
-      <CreateNewsModal
-        open={modalOpen}
-        onClose={() => {
-          setModalOpen(false);
-          setEditingItem(null);
-        }}
-        initial={editingItem}
-        saving={saving}
-        onSubmit={handleSubmit}
-      />
+      {modalOpen && (
+        <CreateNewsModal
+          key={editingItem?.id ?? "new"}
+          open={modalOpen}
+          onClose={() => {
+            setModalOpen(false);
+            setEditingItem(null);
+          }}
+          initial={editingItem}
+          saving={saving}
+          onSubmit={handleSubmit}
+        />
+      )}
     </div>
   );
 }

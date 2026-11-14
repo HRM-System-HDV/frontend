@@ -123,11 +123,12 @@ h4, .text-h4 {
   color: var(--color-gray-800);
 }
 
+/* Không đặt color ở đây: quy tắc không nằm trong @layer sẽ thắng mọi utility,
+   nên mọi <p class="text-red-600"> (thông báo lỗi) bị ép về xám. */
 p, .text-body {
   font-size: 0.875rem; /* 14px */
   font-weight: 500;
   line-height: 1.5;
-  color: var(--color-gray-800);
 }
 
 .text-body-sm {

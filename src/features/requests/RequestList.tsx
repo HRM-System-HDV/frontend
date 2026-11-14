@@ -11,11 +11,23 @@ import RequestDetailModal from "./RequestDetail";
 
 interface Props {
   requests: ShiftRequest[];
-  onApprove: (id: string) => void;
-  onReject: (id: string) => void;
+  onApprove?: (id: string) => void;
+  onReject?: (id: string) => void;
+  /** Cho phép thao tác trên đơn đổi ca ở chế độ tự chấp nhận (chỉ admin). */
+  canReviewPeerAcceptedSwap?: boolean;
+  emptyMessage?: string;
+  /** Đổi branchId chi nhánh thành tên hiển thị; thiếu thì hiện branchId gốc. */
+  branchLabel?: (branchId: string) => string;
 }
 
-export default function ShiftRequestSection({ requests, onApprove, onReject }: Props) {
+export default function ShiftRequestSection({
+  requests,
+  onApprove,
+  onReject,
+  canReviewPeerAcceptedSwap,
+  emptyMessage,
+  branchLabel,
+}: Props) {
   const [selectedRequest, setSelectedRequest] = useState<ShiftRequest | null>(null);
   const pendingCount = requests.filter((r) => r.status === "chờ duyệt").length;
 
@@ -68,7 +80,7 @@ export default function ShiftRequestSection({ requests, onApprove, onReject }: P
     {
       key: "branch",
       header: "Chi nhánh",
-      render: (r) => <Badge tone="gray">{r.branch}</Badge>,
+      render: (r) => <Badge tone="gray">{branchLabel ? branchLabel(r.branch) : r.branch}</Badge>,
     },
     {
       key: "period",
@@ -120,7 +132,7 @@ export default function ShiftRequestSection({ requests, onApprove, onReject }: P
             data={requests}
             rowKey={(r) => r.id}
             onRowClick={(r) => setSelectedRequest(r)}
-            emptyMessage="Không có yêu cầu nào"
+            emptyMessage={emptyMessage ?? "Không có yêu cầu nào"}
           />
         </CardBody>
       </Card>
@@ -132,6 +144,8 @@ export default function ShiftRequestSection({ requests, onApprove, onReject }: P
         request={currentSelectedRequest}
         onApprove={onApprove}
         onReject={onReject}
+        canReviewPeerAcceptedSwap={canReviewPeerAcceptedSwap}
+        branchLabel={branchLabel}
       />
     </>
   );

@@ -16,16 +16,12 @@ interface Props {
   branch: string;
   date: string;
   templateId: string;
-  note: string;
-  isRecurring: boolean;
   isManager?: boolean;
   managerBranch?: string;
   isFilterLocked?: boolean;
   employees?: Employee[];
   onEmployeeChange: (v: string) => void;
   onBranchChange: (v: string) => void;
-  onNoteChange: (v: string) => void;
-  onRecurringChange: (v: boolean) => void;
   onSave: () => void;
 }
 
@@ -59,8 +55,8 @@ export default function AssignShiftModal({
   const isLocked = isManager || (isFilterLocked && Boolean(branch));
   const branchDisplay = isManager ? (managerBranch ?? branch) : branch;
   const branchName = (() => {
-    const target = (branchDisplay || "").toLowerCase().replace(/-/g, "");
-    const matched = branches.find((b) => (b.slug || "").toLowerCase().replace(/-/g, "") === target);
+    const target = (branchDisplay || "");
+    const matched = branches.find((b) => (b.id || "") === target);
     return matched ? matched.name : branchDisplay;
   })();
 
@@ -85,28 +81,30 @@ export default function AssignShiftModal({
             ))}
           </Select>
         </Field>
-        <Field label="Chi nhánh" required>
-          {isLocked ? (
-            <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
-              <span>{branchName || (branchDisplay ? `Chi nhánh ${branchDisplay}` : "—")}</span>
-              <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
-                {isManager ? "Cố định" : "Đã khóa"}
-              </span>
-            </div>
-          ) : (
-            <Select value={branch} onChange={(e) => onBranchChange(e.target.value)}>
-              <option value="" disabled>
-                — Chọn chi nhánh —
-              </option>
-              {branches.map((b) => (
-                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  {b.name} ({b.slug.toUpperCase()})
-                </option>
-              ))}
-            </Select>
+          {/* Manager ghim chi nhánh: branchId được trang cha lấy từ session khi mở modal, nên ẩn hẳn control */}
+          {!isManager && (
+            <Field label="Chi nhánh" required>
+              {isLocked ? (
+                <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800 flex items-center justify-between">
+                  <span>{branchName || (branchDisplay ? `Chi nhánh ${branchDisplay}` : "—")}</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded bg-primary-50 text-primary border border-primary-200">
+                    Đã khóa
+                  </span>
+                </div>
+              ) : (
+                <Select value={branch} onChange={(e) => onBranchChange(e.target.value)}>
+                  <option value="" disabled>
+                    — Chọn chi nhánh —
+                  </option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.branchCode || b.id})
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           )}
-          {isManager && <p className="text-[11px] text-gray-400 mt-1">Manager chỉ phân ca cho chi nhánh phụ trách</p>}
-        </Field>
         <Field label="Ngày làm việc" required>
           <div className="px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-sm font-bold text-gray-800">
             {date}

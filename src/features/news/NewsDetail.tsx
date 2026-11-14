@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faPen,
@@ -8,6 +9,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
+import { apiGet } from "@/lib/api";
+import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 import { getTagColor } from "./helpers";
 import { formatDate } from "@/lib/utils";
@@ -27,6 +30,19 @@ export default function NewsDetailModal({
   onDelete,
   onTogglePin,
 }: Props) {
+  // Component không nhận branches từ page cha (page không fetch) -> tự tải
+  // bảng chi nhánh để map branchId -> tên, giống NewsList.
+  const [branches, setBranches] = useState<Branch[]>([]);
+
+  useEffect(() => {
+    apiGet<Branch[]>("/api/branches")
+      .then((d) => setBranches(d || []))
+      .catch(() => {});
+  }, []);
+
+  const getBranchDisplayName = (branchId?: string | null) =>
+    branches.find((b) => b.id === branchId)?.name || branchId;
+
   return (
     <Modal
       open={!!item}
@@ -50,11 +66,16 @@ export default function NewsDetailModal({
               </span>
             )}
             <span className="text-xs text-slate-500 font-medium">
-              Phạm vi: <strong className="text-slate-700">{item.branch || "Toàn công ty"}</strong>
+              Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.branchId) || "Toàn công ty"}</strong>
             </span>
             <span className="text-xs text-slate-500 font-medium">
-              Ngày đăng: <strong className="text-slate-700">{formatDate(item.date)}</strong>
+              Ngày đăng: <strong className="text-slate-700">{formatDate(item.publishDate)}</strong>
             </span>
+            {item.authorName && (
+              <span className="text-xs text-slate-500 font-medium">
+                Người đăng: <strong className="text-slate-700">{item.authorName}</strong>
+              </span>
+            )}
           </div>
         ) : (
           "Chi tiết thông báo"

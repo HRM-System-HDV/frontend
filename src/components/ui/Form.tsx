@@ -2,8 +2,10 @@
 
 import { cn } from "@/lib/utils";
 
+// min-w-0 + max-w-full: control không được ép width nội tại (tuỳ chọn dài trong
+// <select>, size mặc định của <input>) lên trang khi nằm trong hàng flex/grid hẹp.
 const baseControlClass =
-  "rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-100 transition";
+  "min-w-0 max-w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary-100 transition";
 
 function getControlClass(className?: string) {
   const hasWidth = className && /\b(w-|max-w-|min-w-)/.test(className);

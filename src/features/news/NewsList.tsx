@@ -12,6 +12,7 @@ import {
 import { Card, CardBody } from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { apiGet } from "@/lib/api";
+import { useCurrentUser } from "@/context/AuthContext";
 import type { Branch } from "@/types";
 import type { NewsItem } from "./types";
 import { getTagColor } from "./helpers";
@@ -29,10 +30,12 @@ export default function NewsSection({
   items,
   onSelect,
 }: Props) {
+  const { role, branchId } = useCurrentUser();
+  const isAdmin = role === "admin";
   const [searchQuery, setSearchQuery] = useLocalStorageState<string>("hrm_news_search", "");
   const [tagFilter, setTagFilter] = useLocalStorageState<string>("hrm_news_tag_filter", "all");
   const [pinnedFilter, setPinnedFilter] = useLocalStorageState<string>("hrm_news_pinned_filter", "all");
-  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_news_branch_filter", "all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_news_branch_filter_by_id", "all");
   const [branches, setBranches] = useState<Branch[]>([]);
 
   useEffect(() => {
@@ -40,6 +43,14 @@ export default function NewsSection({
       .then((d) => setBranches(d || []))
       .catch(() => {});
   }, []);
+
+  // Đổi branchId chi nhánh thành tên hiển thị; không map được thì hiện giá trị gốc.
+  const getBranchDisplayName = (branchId?: string | null) =>
+    branches.find((b) => b.id === branchId)?.name || branchId;
+
+  // Tài khoản bị ghim không còn control: phạm vi chốt theo session, vẫn kèm tin toàn công ty.
+  const sameBranchId = (a?: string, b?: string) =>
+    a === b;
 
   const filteredNews = items.filter((item) => {
     const matchSearch =
@@ -53,16 +64,25 @@ export default function NewsSection({
       pinnedFilter === "all" ||
       (pinnedFilter === "pinned" ? item.pinned : !item.pinned);
 
-    const itemBranch = item.branch || "Toàn công ty";
-    const matchBranch = branchFilter === "all" || itemBranch === branchFilter;
+    const itemBranch = item.branchId || "Toàn công ty";
+    const matchBranch = isAdmin
+      ? branchFilter === "all" || itemBranch === branchFilter
+      : itemBranch === "Toàn công ty" || sameBranchId(itemBranch, branchId);
 
     return matchSearch && matchTag && matchPinned && matchBranch;
   });
 
+  // BE findMany không có orderBy → thứ tự ổn định phải do FE dựng:
+  // ghim trước, rồi publishDate giảm dần (ISO nên so chuỗi trực tiếp),
+  // tie-break createdAt giảm dần rồi id để hai tin cùng ngày không đổi chỗ.
   const sortedNews = [...filteredNews].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
-    return 0;
+    if (a.publishDate !== b.publishDate) return a.publishDate < b.publishDate ? 1 : -1;
+    const createdA = a.createdAt ? Date.parse(a.createdAt) : 0;
+    const createdB = b.createdAt ? Date.parse(b.createdAt) : 0;
+    if (createdA !== createdB) return createdB - createdA;
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 
   return (
@@ -113,21 +133,23 @@ export default function NewsSection({
               </select>
             </div>
 
-            <div>
-              <select
-                value={branchFilter}
-                onChange={(e) => setBranchFilter(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
-              >
-                <option value="all">Tất cả chi nhánh</option>
-                <option value="Toàn công ty">Toàn công ty</option>
-                {branches.map((b) => (
-                  <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                    Chi nhánh {b.name} ({b.slug.toUpperCase()})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {isAdmin && (
+              <div>
+                <select
+                  value={branchFilter}
+                  onChange={(e) => setBranchFilter(e.target.value)}
+                  className="w-full px-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-hidden focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 transition-all"
+                >
+                  <option value="all">Tất cả chi nhánh</option>
+                  <option value="Toàn công ty">Toàn công ty</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      Chi nhánh {b.name} ({b.branchCode || b.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </CardBody>
       </Card>
@@ -178,7 +200,7 @@ export default function NewsSection({
                         </span>
                       )}
                       <span className="text-xs text-slate-500 font-medium">
-                        Phạm vi: <strong className="text-slate-700">{item.branch || "Toàn công ty"}</strong>
+                        Phạm vi: <strong className="text-slate-700">{getBranchDisplayName(item.branchId) || "Toàn công ty"}</strong>
                       </span>
                     </div>
 
@@ -202,8 +224,14 @@ export default function NewsSection({
                           className="text-slate-400"
                         />
                         Ngày đăng:{" "}
-                        <strong className="text-slate-700">{formatDate(item.date)}</strong>
+                        <strong className="text-slate-700">{formatDate(item.publishDate)}</strong>
                       </span>
+                      {item.authorName && (
+                        <span className="flex items-center gap-1">
+                          Người đăng:{" "}
+                          <strong className="text-slate-700">{item.authorName}</strong>
+                        </span>
+                      )}
                     </div>
                   </div>
 

@@ -19,11 +19,12 @@ interface Props {
   workShifts: WorkShift[];
   onDelete: (id: string) => void;
   onAddShift?: () => void;
+  isManager?: boolean;
 }
 
-export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: Props) {
+export default function WorkShiftSection({ workShifts, onDelete, onAddShift, isManager = false }: Props) {
   const [selectedShift, setSelectedShift] = useState<WorkShift | null>(null);
-  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_shift_list_branch_filter", "all");
+  const [branchFilter, setBranchFilter] = useLocalStorageState<string>("hrm_shift_list_branch_filter_by_id", "all");
   const [dateFilter, setDateFilter] = useLocalStorageState<string>("hrm_shift_list_date_filter", "");
   const [branches, setBranches] = useState<Branch[]>([]);
 
@@ -35,7 +36,7 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
     return workShifts.filter((s) => {
       if (
         branchFilter !== "all" &&
-        s.branch.toLowerCase().replace("-", "") !== branchFilter.toLowerCase().replace("-", "")
+        s.branchId !== branchFilter
       ) {
         return false;
       }
@@ -83,18 +84,20 @@ export default function WorkShiftSection({ workShifts, onDelete, onAddShift }: P
         <CardHeader>
           <CardTitle>Lịch phân công nhân viên (Xếp ca)</CardTitle>
           <div className="flex items-center gap-2">
-            <Select
-              className="w-auto py-1.5 text-sm"
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-            >
-              <option value="all">Tất cả chi nhánh</option>
-              {branches.map((b) => (
-                <option key={b.id || b.slug} value={b.slug.toUpperCase()}>
-                  {b.slug.toUpperCase()}
-                </option>
-              ))}
-            </Select>
+            {!isManager && (
+              <Select
+                className="w-auto py-1.5 text-sm"
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+              >
+                <option value="all">Tất cả chi nhánh</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.branchCode || b.id}
+                  </option>
+                ))}
+              </Select>
+            )}
             <Input
               type="date"
               className="w-auto py-1.5 text-sm"

@@ -32,6 +32,7 @@ const SAMPLE_XML = `<?xml version="1.0" encoding="UTF-8"?>
       <content>Chi lương tháng 10/2026</content>
       <totalAmount>50000000</totalAmount>
       <beneficiaryCount>10</beneficiaryCount>
+      <payslipId>00000000-0000-0000-0000-000000000000</payslipId>
     </PayoutRequest>
   </soap:Body>
 </soap:Envelope>`;
@@ -101,9 +102,11 @@ export default function SoapTestModal({ open, onClose, config }: Props) {
               Kịch bản demo SOAP
             </h4>
             <p className="text-xs text-emerald-800 mt-1 leading-relaxed">
-              Nhập đúng thông tin → trả <span className="font-mono font-bold">transactionId</span> +{" "}
-              <span className="font-mono font-bold">bankReference</span>. Nhập số tiền vượt số dư →
-              backend trả <span className="font-mono font-bold">soap:Fault faultstring=&quot;Số dư không đủ&quot;</span>.
+              Thay <span className="font-mono font-bold">payslipId</span> bằng id phiếu THẬT ở trạng thái
+              đã xác nhận → trả <span className="font-mono font-bold">transactionId</span> +{" "}
+              <span className="font-mono font-bold">bankReference</span>. Thiếu payslipId, phiếu chưa
+              chốt, tiền vượt số dư → backend trả <span className="font-mono font-bold">soap:Fault</span>{" "}
+              kèm mô tả nguyên nhân.
             </p>
             {lastMs !== null && (
               <div className="mt-2 text-[11px] text-emerald-700">

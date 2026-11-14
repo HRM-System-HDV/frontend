@@ -14,10 +14,10 @@ export interface AttendanceConfigState {
   latePenaltyPct: string;
   earlyLeavePenaltyPct: string;
   earlyCheckinMinutes: string;
-  maxPenaltiesPerMonth: string;
-  deductOnCheckout: boolean;
-  maxCheckinsPerDay: string;
-  maxSwapsPerMonth: string;
+  // Các trường bắt buộc của BE (AttendanceConfig) mà FE trước đây chưa gửi/lưu.
+  checkoutWindowMinutes: string;
+  doubleCheckinEarlyMinutes: string;
+  doubleCheckinLateMinutes: string;
 }
 
 interface Props {
@@ -27,9 +27,26 @@ interface Props {
   saving?: boolean;
   config: AttendanceConfigState;
   setConfig: React.Dispatch<React.SetStateAction<AttendanceConfigState>>;
+  /** Chọn cấu hình theo chi nhánh: "" = mặc định toàn hệ thống (chỉ admin chọn được). */
+  configBranchId?: string;
+  onConfigBranchChange?: (branchId: string) => void;
+  branchOptions?: { id: string; name: string }[];
+  /** Manager bị ghim cấu hình chi nhánh của mình. */
+  configBranchLocked?: boolean;
 }
 
-export default function AttendanceConfigModal({ open, onClose, onSave, saving, config, setConfig }: Props) {
+export default function AttendanceConfigModal({
+  open,
+  onClose,
+  onSave,
+  saving,
+  config,
+  setConfig,
+  configBranchId,
+  onConfigBranchChange,
+  branchOptions,
+  configBranchLocked,
+}: Props) {
   const setFlag = (key: keyof AttendanceConfigState) => (v: boolean) =>
     setConfig((prev) => ({ ...prev, [key]: v }));
 
@@ -59,6 +76,20 @@ export default function AttendanceConfigModal({ open, onClose, onSave, saving, c
       }
     >
       <div className="flex flex-col gap-4">
+        {onConfigBranchChange && (
+          <Field label="Cấu hình áp dụng cho">
+            <Select
+              value={configBranchId ?? ""}
+              onChange={(e) => onConfigBranchChange(e.target.value)}
+              disabled={saving || configBranchLocked}
+            >
+              {!configBranchLocked && <option value="">Mặc định toàn hệ thống</option>}
+              {(branchOptions ?? []).map((b) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <div className="rounded-xl border border-gray-200 p-4">
           <div className="flex items-center gap-2 mb-4">
             <span className="w-7 h-7 rounded-lg bg-danger-50 text-danger-700 flex items-center justify-center shrink-0">
@@ -119,51 +150,50 @@ export default function AttendanceConfigModal({ open, onClose, onSave, saving, c
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
               </div>
             </Field>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <Field label="Giới hạn phạt tối đa / tháng" required>
-              <Select
-                value={config.maxPenaltiesPerMonth}
-                onChange={(e) => setConfig((p) => ({ ...p, maxPenaltiesPerMonth: e.target.value }))}
-              >
-                <option value="5 lần">5 lần</option>
-                <option value="10 lần">10 lần</option>
-                <option value="20 lần">20 lần</option>
-                <option value="Không giới hạn">Không giới hạn</option>
-              </Select>
-            </Field>
-            <Field label="Thời điểm khấu trừ">
-              <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
-                <div>
-                  <span className="text-sm font-medium text-gray-800 block">Khấu trừ ngay khi kết thúc ca (Check-out)</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={config.deductOnCheckout}
-                  onChange={(e) => setConfig((p) => ({ ...p, deductOnCheckout: e.target.checked }))}
-                  className="w-4 h-4 accent-primary shrink-0 ml-2"
+            <Field label="Cửa sổ cho phép checkout (phút)">
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.checkoutWindowMinutes}
+                  onChange={(e) => setConfig((p) => ({ ...p, checkoutWindowMinutes: e.target.value }))}
+                  className="pr-14"
                 />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
+              </div>
+            </Field>
+            <Field label="Chấm công kép: sớm nhất (phút sau giờ kết thúc ca trước)">
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.doubleCheckinEarlyMinutes}
+                  onChange={(e) => setConfig((p) => ({ ...p, doubleCheckinEarlyMinutes: e.target.value }))}
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
+              </div>
+            </Field>
+            <Field label="Chấm công kép: muộn nhất (phút sau giờ kết thúc ca trước)">
+              <div className="relative">
+                <Input
+                  type="number"
+                  min={0}
+                  value={config.doubleCheckinLateMinutes}
+                  onChange={(e) => setConfig((p) => ({ ...p, doubleCheckinLateMinutes: e.target.value }))}
+                  className="pr-14"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">phút</span>
               </div>
             </Field>
           </div>
+
           <div className="rounded-lg border border-gray-200 px-4 py-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-700">Cho phép chấm công kép</span>
               <Toggle checked={config.allowDoubleCheckin} onChange={setFlag("allowDoubleCheckin")} />
             </div>
-            {config.allowDoubleCheckin && (
-              <Field label="Số lần chấm công tối đa / ngày" required className="mt-3">
-                <Select
-                  value={config.maxCheckinsPerDay}
-                  onChange={(e) => setConfig((p) => ({ ...p, maxCheckinsPerDay: e.target.value }))}
-                >
-                  <option value="2 lần">2 lần</option>
-                  <option value="3 lần">3 lần</option>
-                  <option value="4 lần">4 lần</option>
-                  <option value="Không giới hạn">Không giới hạn</option>
-                </Select>
-              </Field>
-            )}
+
           </div>
         </div>
 
@@ -180,21 +210,11 @@ export default function AttendanceConfigModal({ open, onClose, onSave, saving, c
                 value={config.shiftSwapMode}
                 onChange={(e) => setConfig((p) => ({ ...p, shiftSwapMode: e.target.value }))}
               >
-                <option value="Nhân viên tự xác nhận">Nhân viên tự xác nhận</option>
-                <option value="Quản lý chi nhánh duyệt trực tiếp">Quản lý chi nhánh duyệt trực tiếp</option>
+                <option value="mutual_acceptance">Nhân viên tự xác nhận</option>
+                <option value="manager_approval">Quản lý chi nhánh duyệt trực tiếp</option>
               </Select>
             </Field>
-            <Field label="Số lần đổi ca tối đa / tháng" required>
-              <Select
-                value={config.maxSwapsPerMonth}
-                onChange={(e) => setConfig((p) => ({ ...p, maxSwapsPerMonth: e.target.value }))}
-              >
-                <option value="1 lần">1 lần</option>
-                <option value="3 lần">3 lần</option>
-                <option value="5 lần">5 lần</option>
-                <option value="Không giới hạn">Không giới hạn</option>
-              </Select>
-            </Field>
+
           </div>
           <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3">
             <span className="text-sm text-gray-700">Bắt buộc nhập lý do khi đổi ca</span>
